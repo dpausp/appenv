@@ -25,7 +25,6 @@ import subprocess
 import sys
 import tempfile
 import venv
-import re
 
 
 class TColors:
@@ -38,9 +37,6 @@ class TColors:
 
 
 def cmd(c, merge_stderr=True, quiet=False):
-    # TODO revisit the cmd() architecture w/ python 3
-    # XXX better IO management for interactive output and seeing original
-    # errors and output at appropriate places ...
     try:
         kwargs = {}
         if isinstance(c, str):
@@ -53,6 +49,19 @@ def cmd(c, merge_stderr=True, quiet=False):
         print("{} returned with exit code {}".format(c, e.returncode))
         print(e.output.decode("utf-8", "replace"))
         raise ValueError(e.output.decode("utf-8", "replace"))
+
+
+def has_uv():
+    """Check if uv is available."""
+    return shutil.which("uv") is not None
+
+
+def uv_cmd(args, **kwargs):
+    """Execute uv command."""
+    uv_bin = shutil.which("uv")
+    if not uv_bin:
+        raise RuntimeError("uv not found.")
+    return cmd([uv_bin] + [str(arg) for arg in args], **kwargs)
 
 
 def python(path, c, **kwargs):
@@ -251,69 +260,6 @@ def ensure_best_python(base):
         print("Could not find a preferred Python version.")
         print("Preferences: {}".format(", ".join(preferences)))
         sys.exit(65)
-
-
-class ParsedRequirement:
-    """A parsed requirement from a requirement string.
-
-    Has a similiar interface to the real Requirement class from
-    packaging.requirements, but is reduced to the parts we need.
-    """
-
-    def __init__(self, name, url, requirement_string):
-        self.name = name
-        self.url = url
-        self.requirement_string = requirement_string
-
-    def __str__(self):
-        return self.requirement_string
-
-
-def parse_requirement_string(requirement_string):
-    """Parse a requirement from a requirement string.
-
-    This function is a simplified version of the Requirement class from
-    packaging.requirements.
-    Previously, this was done using pkg_resources.parse_requirements,
-    but pkg_resources is deprecated and errors out on import.
-    And the replacement packaging is apparently not packaged in python
-    virtualenvs where we need it.
-
-    See packaging / _parser.py for the requirements grammar.
-    As well as packaging / _tokenizer.py for the tokenization rules/regexes.
-    """
-    # packaging / _tokenizer.py
-    identifier_regex = r"\b[a-zA-Z0-9][a-zA-Z0-9._-]*\b"
-    url_regex = r"[^ \t]+"
-    whitespace_regex = r"[ \t]+"
-    # comments copied from packaging / _parser.py
-    # requirement = WS? IDENTIFIER WS? extras WS? requirement_details
-    # extras = (LEFT_BRACKET wsp* extras_list? wsp* RIGHT_BRACKET)?
-    # requirement_details = AT URL (WS requirement_marker?)?
-    #                     | specifier WS? (requirement_marker)?
-    # requirement_marker = SEMICOLON marker WS?
-    # consider these comments for illustrative purporses only, since according
-    # to the source code, the actual grammar is subtly different from this :)
-
-    # We will make some simplifications here:
-    # - We only care about the name, and URL if present.
-    # - We assume that the requirement string is well-formed. If not,
-    #   pip operations will fail later on.
-    # - We will not parse extras, specifiers, or markers.
-
-    # check for name
-    name_match = re.search(
-        f"^(?:{whitespace_regex})?{identifier_regex}", requirement_string
-    )
-    name = name_match.group() if name_match else None
-    # check for URL
-    url_match = re.search(
-        f"@(?:{whitespace_regex})?(?P<url>{url_regex})(?:{whitespace_regex})?;?",
-        requirement_string,
-    )
-    url = url_match.group("url") if url_match else None
-
-    return ParsedRequirement(name, url, requirement_string)
 
 
 class AppEnv(object):
@@ -536,65 +482,65 @@ class AppEnv(object):
         cmd(["rm", "-rf", self.appenv_dir])
 
     def update_lockfile(self, args=None, remaining=None):
+        """Update requirements.lock using uv pip compile.
+
+        Editable installs (-e) are preserved exactly as written in
+        requirements.txt to maintain portability across machines.
+        """
+        if not has_uv():
+            print("ERROR: uv is required for update-lockfile.")
+            print("Install uv: curl -LsSf https://astral.sh/uv/install.sh | sh")
+            sys.exit(1)
+
         ensure_minimal_python()
         os.chdir(self.base)
-        print("Updating lockfile")
-        tmpdir = os.path.join(self.appenv_dir, "updatelock")
-        if os.path.exists(tmpdir):
-            cmd(["rm", "-rf", tmpdir])
-        ensure_venv(tmpdir)
-        print("Installing packages ...")
-        pip(tmpdir, ["install", "-r", "requirements.txt"])
+        print("Updating lockfile with uv ...")
 
-        extra_specs = []
-        result = pip(
-            tmpdir, ["freeze", "--all", "--exclude", "pip"], merge_stderr=False
-        ).decode("ascii")
-        # They changed this behaviour in https://github.com/pypa/pip/pull/12032
-        pinned_versions = {}
-        for line in result.splitlines():
-            if line.strip().startswith("-e "):
-                # We'd like to pick up the original -e statement here.
-                continue
-            parsed_requirement = parse_requirement_string(line)
-            pinned_versions[parsed_requirement.name] = parsed_requirement
-        requested_versions = {}
+        # Separate editable installs from regular requirements
+        editable_specs = []
+        regular_lines = []
         with open("requirements.txt") as f:
-            for line in f.readlines():
-                if line.strip().startswith("-e "):
-                    extra_specs.append(line.strip())
-                    continue
-                if line.strip().startswith("--"):
-                    extra_specs.append(line.strip())
-                    continue
+            for line in f:
+                stripped = line.strip()
+                if stripped.startswith("-e "):
+                    editable_specs.append(stripped)
+                elif stripped and not stripped.startswith("#"):
+                    regular_lines.append(stripped)
 
-                # filter comments, in particular # appenv-python-preferences
-                if line.strip().startswith("#"):
-                    continue
-                parsed_requirement = parse_requirement_string(line)
-                requested_versions[parsed_requirement.name] = parsed_requirement
+        # Create temp requirements without editables for uv
+        tmp_fd, tmp_requirements = tempfile.mkstemp(suffix=".txt", text=True)
+        try:
+            with os.fdopen(tmp_fd, "w") as tmp:
+                tmp.write("\n".join(regular_lines) + "\n")
 
-        final_versions = {}
-        for spec in requested_versions.values():
-            # Pick versions with URLs to ensure we don't get the screwed up
-            # results from pip freeze.
-            if spec.url:
-                final_versions[spec.name] = spec
-        for spec in pinned_versions.values():
-            # Ignore versions we already picked
-            if spec.name in final_versions:
-                continue
-            final_versions[spec.name] = spec
-        lines = [str(spec) for spec in final_versions.values()]
-        lines.extend(extra_specs)
-        lines.sort()
-        with open(os.path.join(self.base, "requirements.lock"), "w") as f:
-            f.write(
-                "# appenv-requirements-hash: {}\n".format(self._hash_requirements())
+            # Compile with uv
+            uv_cmd(
+                [
+                    "pip",
+                    "compile",
+                    tmp_requirements,
+                    "--output-file",
+                    "requirements.lock",
+                ]
             )
-            f.write("\n".join(lines))
-            f.write("\n")
-        cmd(["rm", "-rf", tmpdir])
+
+            # Prepend hash header and editable installs
+            with open("requirements.lock") as f:
+                compiled = f.read()
+            with open("requirements.lock", "w") as f:
+                f.write(
+                    "# appenv-requirements-hash: {}\n".format(self._hash_requirements())
+                )
+                if editable_specs:
+                    f.write("\n# Editable installs\n")
+                    for spec in editable_specs:
+                        f.write(spec + "\n")
+                f.write(compiled)
+        finally:
+            if os.path.exists(tmp_requirements):
+                os.unlink(tmp_requirements)
+
+        print("Done.")
 
 
 def main():

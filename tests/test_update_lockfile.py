@@ -21,12 +21,9 @@ def test_init_and_create_lockfile(workdir, monkeypatch):
     assert os.path.exists(lockfile)
     with open(lockfile) as f:
         lockfile_content = f.read()
-    assert (
-        """\
-# appenv-requirements-hash: ffa75c00de4879b41008d0e9f6b9953cf7d65bb5f5b85d1d049e783b2486614d
-ducker==2.0.1"""
-        in lockfile_content
-    )  # noqa
+    # UV generates lockfile with header and via-comments
+    assert "ducker==2.0.1" in lockfile_content
+    assert "# appenv-requirements-hash:" in lockfile_content
 
 
 @pytest.mark.skipif(sys.version_info[0:2] != (3, 6), reason="Isolated CI builds")
@@ -88,25 +85,3 @@ def test_update_lockfile_missing_minimal_python(workdir, monkeypatch):
         with pytest.raises(SystemExit) as e:
             env.update_lockfile()
     assert e.value.code == 66
-
-
-def test_parse_requirement_name():
-    req_strings_without_url = [
-        "foo",
-        "foo[bar]",
-        "foo[bar,baz]~=1.0",
-        "foo==1.0",
-        "foo[bar,baz]!=1.0",
-        "foo<1.0",
-    ]
-    req_strings_with_url = [
-        "foo[bar,baz] @ https://example.com",
-        "foo[bar,baz] @ https://example.com ; python_version < '3.6'",
-    ]
-    for req_string in req_strings_without_url:
-        req = appenv.parse_requirement_string(req_string)
-        assert req.name == "foo"
-    for req_string in req_strings_with_url:
-        req = appenv.parse_requirement_string(req_string)
-        assert req.name == "foo"
-        assert req.url == "https://example.com"
