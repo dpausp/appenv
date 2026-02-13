@@ -1,0 +1,87 @@
+[project]
+name = "appenv"
+version = "0.2.dev0"
+description = "Self-contained bootstrapping/updating of Python applications deployed through shared repositories."
+readme = "README.md"
+license = "BSD-3-Clause"
+authors = [
+    {name = "Christian Theune", email = "ct@flyingcircus.io"},
+]
+keywords = ["deployment"]
+classifiers = [
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3 :: Only",
+]
+requires-python = ">=3.9"
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/flyingcircusio/appenv/"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.hatch.build]
+sources = ["src"]
+
+[dependency-groups]
+test = [
+    "pytest",
+    "pytest-cov",
+]
+lint = [
+    "ruff",
+]
+dev = [
+    {include-group = "test"},
+    {include-group = "lint"},
+    "tox",
+    "tox-uv",
+]
+
+[tool.tox]
+env_list = ["py39", "py310", "py311", "py312", "py313", "py314", "lint"]
+skip_missing_interpreters = true
+
+[tool.tox.env_run_base]
+package = "wheel"
+setenv = {APPENV_BEST_PYTHON = "{envpython}"}
+dependency_groups = ["test"]
+commands = [["pytest"]]
+
+[tool.tox.env.lint]
+description = "Run linters"
+package = "skip"
+dependency_groups = ["lint"]
+commands = [
+    ["ruff", "check", "."],
+    ["ruff", "format", "--check", "."],
+]
+
+[tool.ruff]
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B"]
+
+[tool.pytest.ini_options]
+addopts = [
+    "-W", "error",
+    "--tb=native",
+    "--cov=appenv",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "-v",
+]
+testpaths = ["tests"]
