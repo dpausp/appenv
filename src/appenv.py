@@ -268,7 +268,6 @@ def ensure_best_python(base):
 
 class AppEnv:
     base: str
-    env_dir: str | None
     appenv_dir: str
     original_cwd: str
 
@@ -321,9 +320,8 @@ class AppEnv:
             args.func(args, remaining)
 
     def run(self, command, argv):
-        self.prepare()
-        assert self.env_dir is not None
-        cmd = os.path.join(self.env_dir, "bin", command)
+        env_dir = self.prepare()
+        cmd = os.path.join(env_dir, "bin", command)
         argv = [cmd] + argv
         os.environ["APPENV_BASEDIR"] = self.base
         os.chdir(self.original_cwd)
@@ -427,7 +425,7 @@ class AppEnv:
                 pass
             os.symlink(env_hash, current_path)
 
-        self.env_dir = env_dir
+        return env_dir
 
     def init(self, args=None, remaining=None):
         print("Let's create a new appenv project.\n")
