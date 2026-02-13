@@ -46,9 +46,9 @@ def cmd(c, merge_stderr=True, quiet=False):
             kwargs["stderr"] = subprocess.STDOUT
         return subprocess.check_output(c, **kwargs)
     except subprocess.CalledProcessError as e:
-        print("{} returned with exit code {}".format(c, e.returncode))
+        print(f"{c} returned with exit code {e.returncode}")
         print(e.output.decode("utf-8", "replace"))
-        raise ValueError(e.output.decode("utf-8", "replace"))
+        raise ValueError(e.output.decode("utf-8", "replace")) from None
 
 
 def has_uv():
@@ -108,17 +108,17 @@ def _repair_ensurepip_debian(target):
         with open(download, mode="wb") as f:
             get(
                 "www.python.org",
-                "/ftp/python/{v}/Python-{v}.tgz".format(v=version),
+                f"/ftp/python/{version}/Python-{version}.tgz",
                 f,
             )
 
         cmd(["tar", "xf", download, "-C", tmp_base])
 
-        assert os.path.exists(os.path.join(tmp_base, "Python-{}".format(version)))
+        assert os.path.exists(os.path.join(tmp_base, f"Python-{version}"))
         for module in ["ensurepip"]:
             print(module)
             shutil.copytree(
-                os.path.join(tmp_base, "Python-{}".format(version), "Lib", module),
+                os.path.join(tmp_base, f"Python-{version}", "Lib", module),
                 os.path.join(
                     target,
                     "lib",
@@ -134,7 +134,7 @@ def _repair_ensurepip_debian(target):
             os.path.join(target, "lib", "python" + python_maj_min, "site-packages")
         )
         with open(os.path.join(site_packages, "batou.pth"), "w") as f:
-            f.write("import sys; sys.path.insert(0, '{}')\n".format(site_packages))
+            f.write(f"import sys; sys.path.insert(0, '{site_packages}')\n")
 
     finally:
         shutil.rmtree(tmp_base)
@@ -187,7 +187,7 @@ def ensure_minimal_python():
     preferences = parse_preferences()
     if not preferences:
         # We have no preferences defined, use the current python.
-        print("Updating lockfile with with {}.".format(current_python))
+        print(f"Updating lockfile with with {current_python}.")
         print("If you want to use a different version, set it via")
         print(" `# appenv-python-preference:` in requirements.txt.")
         return
@@ -195,7 +195,7 @@ def ensure_minimal_python():
     preferences.sort(key=lambda s: [int(u) for u in s.split(".")])
 
     for version in preferences[0:1]:
-        python = shutil.which("python{}".format(version))
+        python = shutil.which(f"python{version}")
         if not python:
             # not a usable python
             continue
@@ -219,7 +219,7 @@ def ensure_minimal_python():
     else:
         print("Could not find the minimal preferred Python version.")
         print("To ensure a working requirements.lock on all Python versions")
-        print("make Python {} available on this system.".format(preferences[0]))
+        print(f"make Python {preferences[0]} available on this system.")
         sys.exit(66)
 
 
@@ -236,11 +236,11 @@ def ensure_best_python(base):
 
     if preferences is None:
         # use newest Python available if nothing else is requested
-        preferences = ["3.{}".format(x) for x in reversed(range(4, 20))]
+        preferences = [f"3.{x}" for x in reversed(range(4, 20))]
 
     current_python = os.path.realpath(sys.executable)
     for version in preferences:
-        python = shutil.which("python{}".format(version))
+        python = shutil.which(f"python{version}")
         if not python:
             # not a usable python
             continue
@@ -379,9 +379,9 @@ class AppEnv:
                 os.path.join(self.appenv_dir, "current"),
             ]
         )
-        for path in glob.glob("{appenv_dir}/*".format(appenv_dir=self.appenv_dir)):
+        for path in glob.glob(f"{self.appenv_dir}/*"):
             if path not in whitelist:
-                print("Removing expired path: {path} ...".format(path=path))
+                print(f"Removing expired path: {path} ...")
                 if not os.path.isdir(path):
                     os.unlink(path)
                 else:
@@ -392,7 +392,7 @@ class AppEnv:
             # interruptions to running services, but that isn't what we're
             # using it for at the  moment
             try:
-                if not os.path.exists("{env_dir}/appenv.ready".format(env_dir=env_dir)):
+                if not os.path.exists(f"{env_dir}/appenv.ready"):
                     raise Exception()
             except Exception:
                 print("Existing envdir not consistent, deleting")
@@ -411,7 +411,7 @@ class AppEnv:
                     "install",
                     "--no-deps",
                     "-r",
-                    "{env_dir}/requirements.lock".format(env_dir=env_dir),
+                    f"{env_dir}/requirements.lock",
                 ],
             )
             pip(env_dir, ["check"])
@@ -433,14 +433,12 @@ class AppEnv:
         while not command:
             command = input("What should the command be named? ").strip()
         dependency = input(
-            "What is the main dependency as found on PyPI? [{}] ".format(command)
+            f"What is the main dependency as found on PyPI? [{command}] "
         ).strip()
         if not dependency:
             dependency = command
         default_target = os.path.abspath(os.path.join(self.original_cwd, command))
-        target = input(
-            "Where should we create this? [{}] ".format(default_target)
-        ).strip()
+        target = input(f"Where should we create this? [{default_target}] ").strip()
         if target:
             target = os.path.join(self.original_cwd, target)
         else:
@@ -449,7 +447,7 @@ class AppEnv:
         if not os.path.exists(target):
             os.makedirs(target)
         print()
-        print("Creating appenv setup in {} ...".format(target))
+        print(f"Creating appenv setup in {target} ...")
         with open(__file__, "rb") as bootstrap_file:
             bootstrap_data = bootstrap_file.read()
         os.chdir(target)
@@ -462,11 +460,9 @@ class AppEnv:
         with open("requirements.txt", "w") as requirements_txt:
             requirements_txt.write(dependency + "\n")
         print()
-        print(
-            "Done. You can now `cd {}` and call `./{}` to bootstrap and run it.".format(
-                os.path.relpath(target, self.original_cwd), command
-            )
-        )
+        rel_path = os.path.relpath(target, self.original_cwd)
+        print(f"Done. You can now `cd {rel_path}` and call `./{command}`")
+        print("to bootstrap and run it.")
 
     def python(self, args, remaining):
         self.run("python", remaining)
@@ -475,11 +471,7 @@ class AppEnv:
         self.run(args.script, remaining)
 
     def reset(self, args=None, remaining=None):
-        print(
-            "Resetting ALL application environments in {appenvdir} ...".format(
-                appenvdir=self.appenv_dir
-            )
-        )
+        print(f"Resetting ALL application environments in {self.appenv_dir} ...")
         cmd(["rm", "-rf", self.appenv_dir])
 
     def update_lockfile(self, args=None, remaining=None):
@@ -529,9 +521,7 @@ class AppEnv:
             with open("requirements.lock") as f:
                 compiled = f.read()
             with open("requirements.lock", "w") as f:
-                f.write(
-                    "# appenv-requirements-hash: {}\n".format(self._hash_requirements())
-                )
+                f.write(f"# appenv-requirements-hash: {self._hash_requirements()}\n")
                 if editable_specs:
                     f.write("\n# Editable installs\n")
                     for spec in editable_specs:
