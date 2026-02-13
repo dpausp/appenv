@@ -1,8 +1,9 @@
-import pytest
 import io
 import os.path
 import subprocess
 import sys
+
+import pytest
 
 import appenv
 
@@ -24,9 +25,9 @@ def test_bootstrap_and_run_with_lockfile(workdir, monkeypatch):
     env.update_lockfile()
 
     os.chdir(os.path.join(workdir, "ducker"))
-    with open("ducker", "r") as f:
+    with open("ducker") as f:
         # Ensure we're called with the Python-interpreter-under-test.
-        script = "#!{}\n{}".format(sys.executable, f.read())
+        script = f"#!{sys.executable}\n{f.read()}"
     with open("ducker", "w") as f:
         f.write(script)
 
@@ -42,9 +43,9 @@ def test_bootstrap_and_run_python_with_lockfile(workdir, monkeypatch):
     env.init()
     env.update_lockfile()
     os.chdir(os.path.join(workdir, "ducker"))
-    with open("ducker", "r") as f:
+    with open("ducker") as f:
         # Ensure we're called with the Python-interpreter-under-test.
-        script = "#!{}\n{}".format(sys.executable, f.read())
+        script = f"#!{sys.executable}\n{f.read()}"
     with open("ducker", "w") as f:
         f.write(script)
 
@@ -61,9 +62,9 @@ def test_bootstrap_and_run_without_lockfile(workdir, monkeypatch):
     env.init()
 
     os.chdir(os.path.join(workdir, "ducker"))
-    with open("ducker", "r") as f:
+    with open("ducker") as f:
         # Ensure we're called with the Python-interpreter-under-test.
-        script = "#!{}\n{}".format(sys.executable, f.read())
+        script = f"#!{sys.executable}\n{f.read()}"
     with open("ducker", "w") as f:
         f.write(script)
 
@@ -81,9 +82,9 @@ def test_bootstrap_and_run_with_outdated_lockfile(workdir, monkeypatch):
     env.init()
     env.update_lockfile()
     os.chdir(os.path.join(workdir, "ducker"))
-    with open("ducker", "r") as f:
+    with open("ducker") as f:
         # Ensure we're called with the Python-interpreter-under-test.
-        script = "#!{}\n{}".format(sys.executable, f.read())
+        script = f"#!{sys.executable}\n{f.read()}"
     with open("ducker", "w") as f:
         f.write(script)
 

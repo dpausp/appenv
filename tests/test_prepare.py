@@ -1,6 +1,7 @@
-import os
-import appenv
 import io
+import os
+
+import appenv
 
 
 def test_prepare_creates_envdir(workdir, monkeypatch):

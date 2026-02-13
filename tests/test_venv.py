@@ -1,5 +1,6 @@
-import appenv
 import os.path
+
+import appenv
 
 
 def test_new_venv(tmpdir):

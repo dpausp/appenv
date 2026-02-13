@@ -1,10 +1,12 @@
-import appenv
 import io
-import unittest.mock
 import os
-import pytest
 import shutil
 import sys
+import unittest.mock
+
+import pytest
+
+import appenv
 
 
 def test_init_and_create_lockfile(workdir, monkeypatch):
