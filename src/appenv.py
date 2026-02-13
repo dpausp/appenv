@@ -235,11 +235,6 @@ def ensure_best_python(base):
     preferences = parse_preferences()
 
     if preferences is None:
-        if sys.version_info >= (3, 12):
-            print("You are using a Python version >= 3.12.")
-            print("Please specify a Python version in the requirements.txt file.")
-            print("Lockfiles created with a Python version lower than 3.12")
-            print("may create a broken venv with a Python version >= 3.12.")
         # use newest Python available if nothing else is requested
         preferences = ["3.{}".format(x) for x in reversed(range(4, 20))]
 
@@ -271,14 +266,11 @@ def ensure_best_python(base):
         sys.exit(65)
 
 
-class AppEnv(object):
-    base = None  # The directory where we add the environments. Co-located
-    # with the application script - not necessarily the appenv
-    # script so we can link to an appenv script from multiple
-    # locations.
-
-    env_dir = None  # The current specific venv that we're working with.
-    appenv_dir = None  # The directory where to place specific venvs.
+class AppEnv:
+    base: str
+    env_dir: str | None
+    appenv_dir: str
+    original_cwd: str
 
     def __init__(self, base, original_cwd):
         self.base = base
@@ -330,6 +322,7 @@ class AppEnv(object):
 
     def run(self, command, argv):
         self.prepare()
+        assert self.env_dir is not None
         cmd = os.path.join(self.env_dir, "bin", command)
         argv = [cmd] + argv
         os.environ["APPENV_BASEDIR"] = self.base
