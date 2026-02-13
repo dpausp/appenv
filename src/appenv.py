@@ -84,6 +84,62 @@ def get(host, path, f):
     conn.close()
 
 
+def _repair_ensurepip_debian(target):
+    """Repair broken ensurepip on Debian-based systems.
+
+    Debian/Ubuntu may ship Python without the ensurepip module included
+    (it's in the python3-venv package). This downloads the Python source
+    tarball from python.org and extracts the ensurepip module into the venv.
+
+    We could do: apt-get -y -q install python3-venv
+    on some systems but it requires root and is specific to Debian.
+    I decided to go a more sledge hammer route.
+
+    XXX we can speed this up by storing this in ~/.appenv/overlay instead
+    of doing the download for every venv we manage.
+    """
+    version = sys.version.split()[0]
+    python_maj_min = ".".join(str(x) for x in sys.version_info[:2])
+    print("Activating broken ensurepip stdlib workaround ...")
+
+    tmp_base = tempfile.mkdtemp()
+    try:
+        download = os.path.join(tmp_base, "download.tar.gz")
+        with open(download, mode="wb") as f:
+            get(
+                "www.python.org",
+                "/ftp/python/{v}/Python-{v}.tgz".format(v=version),
+                f,
+            )
+
+        cmd(["tar", "xf", download, "-C", tmp_base])
+
+        assert os.path.exists(os.path.join(tmp_base, "Python-{}".format(version)))
+        for module in ["ensurepip"]:
+            print(module)
+            shutil.copytree(
+                os.path.join(tmp_base, "Python-{}".format(version), "Lib", module),
+                os.path.join(
+                    target,
+                    "lib",
+                    "python{}.{}".format(*sys.version_info[:2]),
+                    "site-packages",
+                    module,
+                ),
+            )
+
+        # (always) prepend the site packages so we can actually have a
+        # fixed installation.
+        site_packages = os.path.abspath(
+            os.path.join(target, "lib", "python" + python_maj_min, "site-packages")
+        )
+        with open(os.path.join(site_packages, "batou.pth"), "w") as f:
+            f.write("import sys; sys.path.insert(0, '{}')\n".format(site_packages))
+
+    finally:
+        shutil.rmtree(tmp_base)
+
+
 def ensure_venv(target):
     if os.path.exists(os.path.join(target, "bin", "pip3")):
         # XXX Support probing the target whether it works properly and rebuild
@@ -94,8 +150,6 @@ def ensure_venv(target):
         print("Deleting unclean target)")
         cmd(["rm", "-rf", target])
 
-    version = sys.version.split()[0]
-    python_maj_min = ".".join(str(x) for x in sys.version_info[:2])
     print("Creating venv ...")
     venv.create(target, with_pip=False, symlinks=True)
 
@@ -105,52 +159,7 @@ def ensure_venv(target):
         # this.
         import ensurepip  # noqa: F401 imported but unused
     except ImportError:
-        # Okay, lets repair this, if we can. May need privilege escalation
-        # at some point.
-        # We could do: apt-get -y -q install python3-venv
-        # on some systems but it requires root and is specific to Debian.
-        # I decided to go a more sledge hammer route.
-
-        # XXX we can speed this up by storing this in ~/.appenv/overlay instead
-        # of doing the download for every venv we manage
-        print("Activating broken ensurepip stdlib workaround ...")
-
-        tmp_base = tempfile.mkdtemp()
-        try:
-            download = os.path.join(tmp_base, "download.tar.gz")
-            with open(download, mode="wb") as f:
-                get(
-                    "www.python.org",
-                    "/ftp/python/{v}/Python-{v}.tgz".format(v=version),
-                    f,
-                )
-
-            cmd(["tar", "xf", download, "-C", tmp_base])
-
-            assert os.path.exists(os.path.join(tmp_base, "Python-{}".format(version)))
-            for module in ["ensurepip"]:
-                print(module)
-                shutil.copytree(
-                    os.path.join(tmp_base, "Python-{}".format(version), "Lib", module),
-                    os.path.join(
-                        target,
-                        "lib",
-                        "python{}.{}".format(*sys.version_info[:2]),
-                        "site-packages",
-                        module,
-                    ),
-                )
-
-            # (always) prepend the site packages so we can actually have a
-            # fixed installation.
-            site_packages = os.path.abspath(
-                os.path.join(target, "lib", "python" + python_maj_min, "site-packages")
-            )
-            with open(os.path.join(site_packages, "batou.pth"), "w") as f:
-                f.write("import sys; sys.path.insert(0, '{}')\n".format(site_packages))
-
-        finally:
-            shutil.rmtree(tmp_base)
+        _repair_ensurepip_debian(target)
 
     print("Ensuring pip ...")
     python(target, ["-m", "ensurepip", "--default-pip"])
@@ -306,7 +315,8 @@ class AppEnv(object):
         p.set_defaults(func=self.python)
 
         p = subparsers.add_parser(
-            "run", help="Run a script from the bin/ directory of the virtual env."
+            "run",
+            help="Run a script from the bin/ directory of the virtual env.",
         )
         p.add_argument("script", help="Name of the script to run.")
         p.set_defaults(func=self.run_script)
