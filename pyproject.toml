@@ -1,0 +1,182 @@
+[build-system]
+build-backend = "hatchling.build"
+requires = [ "hatchling>=1.27" ]
+
+[project]
+name = "appenv"
+description = "Self-contained bootstrapping/updating of Python applications deployed through shared repositories."
+readme = "README.md"
+keywords = [ "deployment" ]
+license = "BSD-3-Clause"
+license-files = [ "LICENSE" ]
+requires-python = ">=3.9"
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "License :: OSI Approved :: BSD License",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+]
+dynamic = [ "version" ]
+dependencies = []
+[[project.authors]]
+name = "Christian Theune"
+email = "ct@flyingcircus.io"
+[project.scripts]
+appenv = "appenv:main"
+[project.urls]
+Homepage = "https://github.com/flyingcircusio/appenv/"
+Issues = "https://github.com/flyingcircusio/appenv/issues"
+Repository = "https://github.com/flyingcircusio/appenv.git"
+
+[dependency-groups]
+dev = [
+  "tox",
+  "tox-uv",
+  { include-group = "docs" },
+  { include-group = "lint" },
+  { include-group = "test" },
+]
+test = [
+  "pexpect",
+  "pytest",
+  "pytest-cov",
+  "pytest-instafail>=0.5",
+  "pytest-patterns",
+  "pytest-ruff",
+  "pytest-timeout",
+  "pytest-ty",
+  "pytest-xdist",
+]
+docs = [
+  "furo",
+  "myst-parser",
+  "sphinx",
+  "sphinx-autoapi",
+  "sphinx-autodoc-typehints",
+  "sphinx-copybutton",
+]
+lint = [
+  "pre-commit",
+  "pre-commit-uv",
+  "pyproject-fmt",
+  "ruff",
+  "ty",
+  "vulture",
+]
+
+[tool.hatch.build]
+sources = [ "src" ]
+targets.wheel.packages = [ "src" ]
+[tool.hatch.version]
+path = "src/appenv.py"
+
+[tool.uv.sources]
+pytest-patterns = { git = "https://github.com/dpausp/pytest-patterns", branch = "ts-ai" }
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+[tool.ruff.lint]
+select = [
+  "B",
+  "C4",
+  "E",
+  "EM",
+  "F",
+  "FLY",
+  "I",
+  "N",
+  "PERF",
+  "RET",
+  "RUF",
+  "SIM",
+  "SLF",
+  "TRY",
+  "UP",
+  "W",
+]
+per-file-ignores."*.pyi" = [ "E501" ]
+per-file-ignores."tests/*" = [ "SLF001" ]
+
+[tool.pytest.ini_options]
+addopts = [
+  "--junitxml=report.xml",
+  "--instafail",
+  "--import-mode=importlib",
+  "--timeout=120",
+  "-W",
+  "error",
+  "-m",
+  "not slow",
+]
+junit_family = "xunit2"
+markers = [
+  "slow: tests that install packages and take longer (run with: pytest -m slow)",
+  "no_mock_uv_version: disable auto-mock of get_uv_version",
+]
+testpaths = [ "tests" ]
+
+[tool.coverage.report]
+precision = 2
+
+[tool.coverage.run]
+branch = true
+source = [ "src" ]
+
+[tool.tox]
+env_list = [ "fix", "cov", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14" ]
+skip_missing_interpreters = true
+
+[tool.tox.env_run_base]
+package = "wheel"
+runner = "uv-venv-lock-runner"
+setenv = { APPENV_BEST_PYTHON = "{envpython}" }
+dependency_groups = [ "test" ]
+depends = [ "fix" ]
+commands = [ [ "pytest", { replace = "posargs", extend = true } ] ]
+
+[tool.tox.env.cov]
+base_python = [ "3.14" ]
+package = "wheel"
+runner = "uv-venv-lock-runner"
+setenv = { APPENV_BEST_PYTHON = "{envpython}" }
+dependency_groups = [ "test" ]
+depends = [ "fix" ]
+description = "Tests with coverage and test deduplication check"
+commands = [
+  [ "pytest", "--cov=appenv", "--cov-report=term-missing", "--cov-report=html" ],
+]
+
+[tool.tox.env.pre-commit]
+description = "Run all linters configured in .pre-commit-config.yaml"
+skip_install = true
+dependency_groups = ["lint"]
+commands = [
+  ["pre-commit", "run", "--all-files", "--show-diff-on-failure"],
+]
+
+[tool.tox.env.fix]
+skip_install = true
+depends = []
+description = "Lint, type-check, dead code detection"
+dependency_groups = [ "test", "lint" ]
+commands = [
+  [ "ruff", "check", "--fix", "--unsafe-fixes" ],
+  [ "ty", "check" ],
+  [ "vulture", "src/", ".vulture_exclude", "--min-confidence=80" ],
+]
+
+[tool.scriv]
+format = "md"
+fragment_directory = "CHANGES.d"
+output_file = "CHANGES.md"
+version = "unreleased"
+entry_title_template = ""
+new_fragment_template = "- New changelog entry."
+insert_marker = "- Nothing changed yet."
+categories = ""
