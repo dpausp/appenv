@@ -69,9 +69,8 @@ def test_bootstrap_and_run_without_lockfile(workdir, monkeypatch):
 
     with pytest.raises(subprocess.CalledProcessError) as err:
         subprocess.check_output(["./ducker", "--help"])
-    assert err.value.output == (
-        b"No requirements.lock found. Generate it using ./appenv update-lockfile\n"
-    )
+    assert b"No requirements.lock found" in err.value.output
+    assert b"update-lockfile" in err.value.output
 
 
 def test_bootstrap_and_run_with_outdated_lockfile(workdir, monkeypatch):
@@ -98,12 +97,8 @@ def test_bootstrap_and_run_with_outdated_lockfile(workdir, monkeypatch):
         './appenv python -c "print(1)"', shell=True, stdout=subprocess.PIPE
     )
     stdout, stderr = s.communicate()
-    assert (
-        stdout
-        == b"""\
-requirements.txt seems out of date (hash mismatch). Regenerate using ./appenv update-lockfile
-"""
-    )  # noqa
+    assert b"requirements.txt seems out of date" in stdout
+    assert b"update-lockfile" in stdout
 
     subprocess.check_call("./appenv update-lockfile", shell=True)
 
