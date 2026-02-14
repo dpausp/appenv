@@ -41,11 +41,9 @@ test = [
     "pytest-cov",
 ]
 lint = [
-    "ruff",
 ]
 dev = [
     {include-group = "test"},
-    {include-group = "lint"},
     "tox",
     "tox-uv",
 ]
@@ -61,12 +59,14 @@ dependency_groups = ["test"]
 commands = [["pytest"]]
 
 [tool.tox.env.lint]
+allowlist_externals = ["ty", "ruff"]
 description = "Run linters"
 package = "skip"
-dependency_groups = ["lint"]
+dependency_groups = ["dev", "lint"]
 commands = [
-    ["ruff", "check", "."],
-    ["ruff", "format", "--check", "."],
+    ["ruff", "check", "--fix", "."],
+    ["ty", "check", "."],
+    ["ruff", "format", "."],
 ]
 
 [tool.ruff]
