@@ -6,7 +6,6 @@ import pytest
 
 import appenv
 
-
 # main() tests
 
 

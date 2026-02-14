@@ -267,10 +267,6 @@ def ensure_best_python(base):
 
 
 class AppEnv:
-    base: str
-    appenv_dir: str
-    original_cwd: str
-
     def __init__(self, base, original_cwd):
         self.base = base
 
