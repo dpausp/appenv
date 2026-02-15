@@ -1,5 +1,6 @@
 """Tests for main() entry point and related functions."""
 
+import argparse
 import os
 
 import pytest
@@ -312,6 +313,6 @@ def test_python_method_calls_run(monkeypatch, tmpdir):
     run_called = []
     monkeypatch.setattr(env, "run", lambda cmd, argv: run_called.append((cmd, argv)))
 
-    env.python(type("Args", (), {}), ["-c", "print(1)"])
+    env.python(argparse.Namespace(), ["-c", "print(1)"])
 
     assert run_called == [("python", ["-c", "print(1)"])]
