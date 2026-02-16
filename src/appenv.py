@@ -6,7 +6,7 @@
 #
 #   - the appenv file is placed in a repo with the name of the application
 #   - the name of the application/file is an entrypoint XXX
-#   - python3.X+ with ensurepip
+#   - uv is available in PATH
 #   - a requirements.txt file next to the appenv file
 
 # TODO
@@ -17,14 +17,12 @@
 import argparse
 import glob
 import hashlib
-import http.client
 import os
 import os.path
 import shutil
 import subprocess
 import sys
 import tempfile
-import venv
 
 
 class TColors:
@@ -68,102 +66,14 @@ def python(path, c, **kwargs):
     return cmd([os.path.join(path, "bin/python")] + c, **kwargs)
 
 
-def pip(path, c, **kwargs):
-    return python(path, ["-m", "pip"] + c, **kwargs)
-
-
-def get(host, path, f):
-    conn = http.client.HTTPSConnection(host)
-    conn.request("GET", path)
-    r1 = conn.getresponse()
-    assert r1.status == 200, (r1.status, host, path, r1.read()[:100])
-    chunk = r1.read(16 * 1024)
-    while chunk:
-        f.write(chunk)
-        chunk = r1.read(16 * 1024)
-    conn.close()
-
-
-def _repair_ensurepip_debian(target):
-    """Repair broken ensurepip on Debian-based systems.
-
-    Debian/Ubuntu may ship Python without the ensurepip module included
-    (it's in the python3-venv package). This downloads the Python source
-    tarball from python.org and extracts the ensurepip module into the venv.
-
-    We could do: apt-get -y -q install python3-venv
-    on some systems but it requires root and is specific to Debian.
-    I decided to go a more sledge hammer route.
-
-    XXX we can speed this up by storing this in ~/.appenv/overlay instead
-    of doing the download for every venv we manage.
-    """
-    version = sys.version.split()[0]
-    python_maj_min = ".".join(str(x) for x in sys.version_info[:2])
-    print("Activating broken ensurepip stdlib workaround ...")
-
-    tmp_base = tempfile.mkdtemp()
-    try:
-        download = os.path.join(tmp_base, "download.tar.gz")
-        with open(download, mode="wb") as f:
-            get(
-                "www.python.org",
-                f"/ftp/python/{version}/Python-{version}.tgz",
-                f,
-            )
-
-        cmd(["tar", "xf", download, "-C", tmp_base])
-
-        assert os.path.exists(os.path.join(tmp_base, f"Python-{version}"))
-        for module in ["ensurepip"]:
-            print(module)
-            shutil.copytree(
-                os.path.join(tmp_base, f"Python-{version}", "Lib", module),
-                os.path.join(
-                    target,
-                    "lib",
-                    "python{}.{}".format(*sys.version_info[:2]),
-                    "site-packages",
-                    module,
-                ),
-            )
-
-        # (always) prepend the site packages so we can actually have a
-        # fixed installation.
-        site_packages = os.path.abspath(
-            os.path.join(target, "lib", "python" + python_maj_min, "site-packages")
-        )
-        with open(os.path.join(site_packages, "batou.pth"), "w") as f:
-            f.write(f"import sys; sys.path.insert(0, '{site_packages}')\n")
-
-    finally:
-        shutil.rmtree(tmp_base)
-
-
 def ensure_venv(target):
-    if os.path.exists(os.path.join(target, "bin", "pip3")):
-        # XXX Support probing the target whether it works properly and rebuild
-        # if necessary
+    if os.path.exists(os.path.join(target, "bin", "python")):
         return
-
     if os.path.exists(target):
-        print("Deleting unclean target)")
+        print("Deleting unclean target")
         cmd(["rm", "-rf", target])
-
-    print("Creating venv ...")
-    venv.create(target, with_pip=False, symlinks=True)
-
-    try:
-        # This is trying to detect whether we're on a proper Python stdlib
-        # or on a broken Debian. See various StackOverflow questions about
-        # this.
-        import ensurepip  # noqa: F401 imported but unused
-    except ImportError:
-        _repair_ensurepip_debian(target)
-
-    print("Ensuring pip ...")
-    python(target, ["-m", "ensurepip", "--default-pip"])
-    pip(target, ["install", "--upgrade", "pip"])
+    print("Creating venv with uv ...")
+    uv_cmd(["venv", "--python", sys.executable, target])
 
 
 def parse_preferences():
@@ -401,16 +311,15 @@ class AppEnv:
                 f.write(requirements)
 
             print("Installing ...")
-            pip(
-                env_dir,
+            uv_cmd(
                 [
-                    "install",
-                    "--no-deps",
-                    "-r",
+                    "pip",
+                    "sync",
+                    "--python",
+                    f"{env_dir}/bin/python",
                     f"{env_dir}/requirements.lock",
-                ],
+                ]
             )
-            pip(env_dir, ["check"])
 
             with open(os.path.join(env_dir, "appenv.ready"), "w") as f:
                 f.write("Ready or not, here I come, you can't hide\n")

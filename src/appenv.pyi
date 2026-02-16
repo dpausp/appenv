@@ -1,7 +1,6 @@
 """Type stubs for appenv."""
 
 import argparse
-from typing import BinaryIO
 
 class TColors:
     """Terminal colors for pretty output."""
@@ -14,12 +13,8 @@ class TColors:
 def cmd(
     c: str | list[str], *, merge_stderr: bool = True, quiet: bool = False
 ) -> bytes: ...
-def get(host: str, path: str, f: BinaryIO) -> None: ...
 def has_uv() -> bool: ...
 def python(
-    path: str, c: list[str], *, merge_stderr: bool = True, quiet: bool = False
-) -> bytes: ...
-def pip(
     path: str, c: list[str], *, merge_stderr: bool = True, quiet: bool = False
 ) -> bytes: ...
 def uv_cmd(
