@@ -405,7 +405,10 @@ class AppEnv:
                     if (stripped := line.strip()) and not stripped.startswith("#")
                 )
 
-        print("Updating lockfile with uv ...")
+        if args and args.diff:
+            print("Checking lockfile changes ...")
+        else:
+            print("Updating lockfile with uv ...")
 
         # Separate editable installs from regular requirements
         editable_specs = []
@@ -459,7 +462,7 @@ class AppEnv:
             )
 
             if args and args.diff:
-                # Show full diff
+                # Show full diff with colors
                 import difflib
 
                 old_content = ""
@@ -467,13 +470,29 @@ class AppEnv:
                     with open("requirements.lock") as f:
                         old_content = f.read()
 
+                # ANSI colors for diff
+                red = "\033[31m"
+                green = "\033[32m"
+                cyan = "\033[36m"
+                reset = "\033[0m"
+
                 diff = difflib.unified_diff(
                     old_content.splitlines(keepends=True),
                     new_content.splitlines(keepends=True),
                     fromfile="requirements.lock",
                     tofile="requirements.lock (new)",
                 )
-                print("".join(diff), end="")
+                for line in diff:
+                    if line.startswith("---") or line.startswith("+++"):
+                        print(cyan + line + reset, end="")
+                    elif line.startswith("@@"):
+                        print(cyan + line + reset, end="")
+                    elif line.startswith("-"):
+                        print(red + line + reset, end="")
+                    elif line.startswith("+"):
+                        print(green + line + reset, end="")
+                    else:
+                        print(line, end="")
             else:
                 # Write lockfile
                 with open("requirements.lock", "w") as f:
@@ -492,11 +511,11 @@ class AppEnv:
                 check = green + "✓" + reset
 
                 if n_added == 0 and n_removed == 0:
-                    print(f"{check} No changes")
+                    print("No changes")
                 else:
                     added_str = f"{green}+{n_added}{reset}"
                     removed_str = f"{red}-{n_removed}{reset}"
-                    print(f"{check} Updated ({added_str} / {removed_str})")
+                    print(f"{check} Updated ({added_str} / {removed_str} lines)")
         finally:
             if os.path.exists(tmp_requirements):
                 os.unlink(tmp_requirements)
