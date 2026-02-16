@@ -92,45 +92,42 @@ def parse_preferences():
     return preferences
 
 
-def ensure_minimal_python():
-    current_python = os.path.realpath(sys.executable)
+def find_minimal_python():
+    """Find the minimal preferred Python version for lockfile generation.
+
+    Returns the path to the minimal Python, or None if no preference is set.
+    Exits with code 66 if a preference is set but the minimal version is not found.
+    """
     preferences = parse_preferences()
     if not preferences:
-        # We have no preferences defined, use the current python.
-        print(f"Updating lockfile with with {current_python}.")
-        print("If you want to use a different version, set it via")
-        print(" `# appenv-python-preference:` in requirements.txt.")
-        return
+        return None
 
+    # Sort to get minimal version first
     preferences.sort(key=lambda s: [int(u) for u in s.split(".")])
+    minimal_version = preferences[0]
 
-    for version in preferences[0:1]:
-        python = shutil.which(f"python{version}")
-        if not python:
-            # not a usable python
-            continue
-        python = os.path.realpath(python)
-        if python == current_python:
-            # found a preferred python and we're already running as it
-            break
-        # Try whether this Python works
-        try:
-            subprocess.check_call(
-                [python, "-c", "print(1)"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-        except subprocess.CalledProcessError:
-            continue
-
-        argv = [os.path.basename(python)] + sys.argv
-        os.environ["APPENV_BEST_PYTHON"] = python
-        os.execv(python, argv)
-    else:
+    python_path = shutil.which(f"python{minimal_version}")
+    if not python_path:
         print("Could not find the minimal preferred Python version.")
         print("To ensure a working requirements.lock on all Python versions")
-        print(f"make Python {preferences[0]} available on this system.")
+        print(f"make Python {minimal_version} available on this system.")
         sys.exit(66)
+
+    assert python_path is not None  # for type checker
+    python_path = os.path.realpath(python_path)
+
+    # Verify it works
+    try:
+        subprocess.check_call(
+            [python_path, "-c", "print(1)"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except subprocess.CalledProcessError:
+        print(f"Python {minimal_version} found but not functional.")
+        sys.exit(66)
+
+    return python_path
 
 
 def ensure_best_python(base):
@@ -390,7 +387,7 @@ class AppEnv:
             print("Install uv: curl -LsSf https://astral.sh/uv/install.sh | sh")
             sys.exit(1)
 
-        ensure_minimal_python()
+        minimal_python = find_minimal_python()
         os.chdir(self.base)
         print("Updating lockfile with uv ...")
 
@@ -412,15 +409,16 @@ class AppEnv:
                 tmp.write("\n".join(regular_lines) + "\n")
 
             # Compile with uv
-            uv_cmd(
-                [
-                    "pip",
-                    "compile",
-                    tmp_requirements,
-                    "--output-file",
-                    "requirements.lock",
-                ]
-            )
+            compile_args = [
+                "pip",
+                "compile",
+                tmp_requirements,
+                "--output-file",
+                "requirements.lock",
+            ]
+            if minimal_python:
+                compile_args.extend(["--python", minimal_python])
+            uv_cmd(compile_args)
 
             # Prepend hash header and editable installs
             with open("requirements.lock") as f:

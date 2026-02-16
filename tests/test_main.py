@@ -131,25 +131,22 @@ def test_ensure_best_python_exits_when_no_python_found(monkeypatch, tmpdir, caps
 # ensure_minimal_python() tests
 
 
-def test_ensure_minimal_python_prints_message_when_no_preferences(
-    monkeypatch, capsys, tmpdir
-):
+def test_find_minimal_python_returns_none_when_no_preferences(monkeypatch, tmpdir):
     monkeypatch.chdir(tmpdir)
     (tmpdir / "requirements.txt").write("requests\n")
 
-    appenv.ensure_minimal_python()
+    result = appenv.find_minimal_python()
 
-    captured = capsys.readouterr()
-    assert "Updating lockfile" in captured.out
+    assert result is None
 
 
-def test_ensure_minimal_python_exits_when_not_found(monkeypatch, capsys, tmpdir):
+def test_find_minimal_python_exits_when_not_found(monkeypatch, capsys, tmpdir):
     monkeypatch.chdir(tmpdir)
     (tmpdir / "requirements.txt").write("# appenv-python-preference: 3.99\nrequests\n")
     monkeypatch.setattr("shutil.which", lambda name: None)
 
     with pytest.raises(SystemExit) as err:
-        appenv.ensure_minimal_python()
+        appenv.find_minimal_python()
 
     assert err.value.code == 66
 
@@ -286,7 +283,7 @@ def test_update_lockfile_without_uv_exits(monkeypatch, tmpdir, capsys):
 def test_update_lockfile_preserves_editable_installs(monkeypatch, tmpdir):
     monkeypatch.chdir(tmpdir)
     monkeypatch.setattr(appenv, "has_uv", lambda: True)
-    monkeypatch.setattr(appenv, "ensure_minimal_python", lambda: None)
+    monkeypatch.setattr(appenv, "find_minimal_python", lambda: None)
 
     (tmpdir / "requirements.txt").write("-e /path/to/local/pkg\nrequests\n")
 
