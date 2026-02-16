@@ -15,14 +15,17 @@
 #   maybe use an entry point to allow further initialisation of the clone.
 
 import argparse
-import glob
 import hashlib
 import os
-import os.path
 import shutil
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
+
+# Constants
+REQUIREMENTS_TXT = "requirements.txt"
+REQUIREMENTS_LOCK = "requirements.lock"
 
 
 class TColors:
@@ -62,33 +65,34 @@ def uv_cmd(args, **kwargs):
     return cmd([uv_bin] + [str(arg) for arg in args], **kwargs)
 
 
-def python(path, c, **kwargs):
-    return cmd([os.path.join(path, "bin/python")] + c, **kwargs)
+def python(path: str | Path, c, **kwargs):
+    return cmd([str(Path(path) / "bin" / "python")] + c, **kwargs)
 
 
-def ensure_venv(target):
-    if os.path.exists(os.path.join(target, "bin", "python")):
+def ensure_venv(target: str | Path):
+    target = Path(target)
+    if (target / "bin" / "python").exists():
         return
-    if os.path.exists(target):
+    if target.exists():
         print("Deleting unclean target")
-        cmd(["rm", "-rf", target])
+        cmd(["rm", "-rf", str(target)])
     print("Creating venv with uv ...")
-    uv_cmd(["venv", "--python", sys.executable, target])
+    uv_cmd(["venv", "--python", sys.executable, str(target)])
 
 
 def parse_preferences():
     preferences = None
-    if os.path.exists("requirements.txt"):
-        with open("requirements.txt") as f:
-            for line in f:
-                # Expected format:
-                # # appenv-python-preference: 3.1,3.9,3.4
-                if not line.startswith("# appenv-python-preference: "):
-                    continue
-                preferences = line.split(":")[1]
-                preferences = [x.strip() for x in preferences.split(",")]
-                preferences = list(filter(None, preferences))
-                break
+    req_file = Path(REQUIREMENTS_TXT)
+    if req_file.exists():
+        for line in req_file.read_text().splitlines():
+            # Expected format:
+            # # appenv-python-preference: 3.1,3.9,3.4
+            if not line.startswith("# appenv-python-preference: "):
+                continue
+            preferences = line.split(":")[1]
+            preferences = [x.strip() for x in preferences.split(",")]
+            preferences = list(filter(None, preferences))
+            break
     return preferences
 
 
@@ -109,12 +113,12 @@ def find_minimal_python():
     python_path = shutil.which(f"python{minimal_version}")
     if not python_path:
         print("Could not find the minimal preferred Python version.")
-        print("To ensure a working requirements.lock on all Python versions")
+        print(f"To ensure a working {REQUIREMENTS_LOCK} on all Python versions")
         print(f"make Python {minimal_version} available on this system.")
         sys.exit(66)
 
     assert python_path is not None  # for type checker
-    python_path = os.path.realpath(python_path)
+    python_path = str(Path(python_path).resolve())
 
     # Verify it works
     try:
@@ -130,14 +134,13 @@ def find_minimal_python():
     return python_path
 
 
-def ensure_best_python(base):
+def ensure_best_python(base: str | Path):
     os.chdir(base)
 
     if "APPENV_BEST_PYTHON" in os.environ:
         # Don't do this twice to avoid being surprised with
         # accidental infinite loops.
         return
-    import shutil
 
     preferences = parse_preferences()
 
@@ -145,13 +148,13 @@ def ensure_best_python(base):
         # use newest Python available if nothing else is requested
         preferences = [f"3.{x}" for x in reversed(range(4, 20))]
 
-    current_python = os.path.realpath(sys.executable)
+    current_python = str(Path(sys.executable).resolve())
     for version in preferences:
         python = shutil.which(f"python{version}")
         if not python:
             # not a usable python
             continue
-        python = os.path.realpath(python)
+        python = str(Path(python).resolve())
         if python == current_python:
             # found a preferred python and we're already running as it
             break
@@ -164,7 +167,7 @@ def ensure_best_python(base):
             )
         except subprocess.CalledProcessError:
             continue
-        argv = [os.path.basename(python)] + sys.argv
+        argv = [Path(python).name] + sys.argv
         os.environ["APPENV_BEST_PYTHON"] = python
         os.execv(python, argv)
     else:
@@ -174,18 +177,10 @@ def ensure_best_python(base):
 
 
 class AppEnv:
-    def __init__(self, base, original_cwd):
-        self.base = base
-
-        # This used to be computed based on the application name but
-        # as we can have multiple application names now, we always put the
-        # environments into '.appenv'. They're hashed anyway.
-        self.appenv_dir = os.path.join(self.base, ".appenv")
-
-        # Allow simplifying a lot of code by assuming that all the
-        # meta-operations happen in the base directory. Store the original
-        # working directory here so we switch back at the appropriate time.
-        self.original_cwd = original_cwd
+    def __init__(self, base: str | Path, original_cwd: str | Path):
+        self.base = Path(base)
+        self.appenv_dir = self.base / ".appenv"
+        self.original_cwd = Path(original_cwd)
 
     def meta(self):
         # Parse the appenv arguments
@@ -228,37 +223,36 @@ class AppEnv:
             args.func(args, remaining)
 
     def run(self, command, argv):
-        env_dir = self.prepare()
-        cmd = os.path.join(env_dir, "bin", command)
-        argv = [cmd] + argv
-        os.environ["APPENV_BASEDIR"] = self.base
+        env_dir = Path(self.prepare())
+        cmd_path = env_dir / "bin" / command
+        argv = [str(cmd_path)] + argv
+        os.environ["APPENV_BASEDIR"] = str(self.base)
         os.chdir(self.original_cwd)
-        os.execv(cmd, argv)
+        os.execv(str(cmd_path), argv)
 
     def _assert_requirements_lock(self):
-        if not os.path.exists("requirements.lock"):
+        lock_file = Path(REQUIREMENTS_LOCK)
+        if not lock_file.exists():
             print(
-                "No requirements.lock found. Generate it using ./appenv update-lockfile"
+                f"No {REQUIREMENTS_LOCK} found. "
+                "Generate it using ./appenv update-lockfile"
             )
             sys.exit(67)
 
-        with open("requirements.lock") as f:
-            locked_hash = None
-            for line in f:
-                if line.startswith("# appenv-requirements-hash: "):
-                    locked_hash = line.split(":")[1].strip()
-                    break
-            if locked_hash != self._hash_requirements():
-                print(
-                    "requirements.txt seems out of date (hash mismatch). "
-                    "Regenerate using ./appenv update-lockfile"
-                )
-                sys.exit(67)
+        locked_hash = None
+        for line in lock_file.read_text().splitlines():
+            if line.startswith("# appenv-requirements-hash: "):
+                locked_hash = line.split(":")[1].strip()
+                break
+        if locked_hash != self._hash_requirements():
+            print(
+                f"{REQUIREMENTS_TXT} seems out of date (hash mismatch). "
+                "Regenerate using ./appenv update-lockfile"
+            )
+            sys.exit(67)
 
     def _hash_requirements(self):
-        with open("requirements.txt", "rb") as f:
-            hash_content = f.read()
-        return hashlib.new("sha256", hash_content).hexdigest()
+        return hashlib.new("sha256", Path(REQUIREMENTS_TXT).read_bytes()).hexdigest()
 
     def prepare(self, args=None, remaining=None):
         # copy used requirements.txt into the target directory so we can use
@@ -270,47 +264,41 @@ class AppEnv:
 
         self._assert_requirements_lock()
 
-        hash_content = []
-        with open("requirements.lock", "rb") as f:
-            requirements = f.read()
-        hash_content.append(os.fsencode(os.path.realpath(sys.executable)))
-        hash_content.append(requirements)
-        with open(__file__, "rb") as f:
-            hash_content.append(f.read())
+        requirements = Path(REQUIREMENTS_LOCK).read_bytes()
+        hash_content = [
+            os.fsencode(Path(sys.executable).resolve()),
+            requirements,
+            Path(__file__).read_bytes(),
+        ]
         env_hash = hashlib.new("sha256", b"".join(hash_content)).hexdigest()[:8]
-        env_dir = os.path.join(self.appenv_dir, env_hash)
+        env_dir = self.appenv_dir / env_hash
 
-        whitelist = set(
-            [
-                env_dir,
-                os.path.join(self.appenv_dir, "unclean"),
-                os.path.join(self.appenv_dir, "current"),
-            ]
-        )
-        for path in glob.glob(f"{self.appenv_dir}/*"):
-            if path not in whitelist:
-                print(f"Removing expired path: {path} ...")
-                if not os.path.isdir(path):
-                    os.unlink(path)
-                else:
-                    shutil.rmtree(path)
-        if os.path.exists(env_dir):
+        whitelist = {
+            str(env_dir),
+            str(self.appenv_dir / "unclean"),
+            str(self.appenv_dir / "current"),
+        }
+        if self.appenv_dir.exists():
+            for path in self.appenv_dir.iterdir():
+                if str(path) not in whitelist:
+                    print(f"Removing expired path: {path} ...")
+                    if path.is_dir():
+                        shutil.rmtree(path)
+                    else:
+                        path.unlink()
+        if env_dir.exists():
             # check whether the existing environment is OK, it might be
             # nice to rebuild in a separate place if necessary to avoid
             # interruptions to running services, but that isn't what we're
             # using it for at the  moment
-            try:
-                if not os.path.exists(f"{env_dir}/appenv.ready"):
-                    raise Exception()
-            except Exception:
+            if not (env_dir / "appenv.ready").exists():
                 print("Existing envdir not consistent, deleting")
-                cmd(["rm", "-rf", env_dir])
+                cmd(["rm", "-rf", str(env_dir)])
 
-        if not os.path.exists(env_dir):
+        if not env_dir.exists():
             ensure_venv(env_dir)
 
-            with open(os.path.join(env_dir, "requirements.lock"), "wb") as f:
-                f.write(requirements)
+            (env_dir / REQUIREMENTS_LOCK).write_bytes(requirements)
 
             print("Installing ...")
             uv_cmd(
@@ -318,21 +306,19 @@ class AppEnv:
                     "pip",
                     "sync",
                     "--python",
-                    f"{env_dir}/bin/python",
-                    f"{env_dir}/requirements.lock",
+                    str(env_dir / "bin" / "python"),
+                    str(env_dir / REQUIREMENTS_LOCK),
                 ]
             )
 
-            with open(os.path.join(env_dir, "appenv.ready"), "w") as f:
-                f.write("Ready or not, here I come, you can't hide\n")
-            current_path = os.path.join(self.appenv_dir, "current")
-            try:
-                os.unlink(current_path)
-            except FileNotFoundError:
-                pass
-            os.symlink(env_hash, current_path)
+            (env_dir / "appenv.ready").write_text(
+                "Ready or not, here I come, you can't hide\n"
+            )
+            current_path = self.appenv_dir / "current"
+            current_path.unlink(missing_ok=True)
+            current_path.symlink_to(env_hash)
 
-        return env_dir
+        return str(env_dir)
 
     def init(self, args=None, remaining=None):
         print("Let's create a new appenv project.\n")
@@ -344,30 +330,31 @@ class AppEnv:
         ).strip()
         if not dependency:
             dependency = command
-        default_target = os.path.abspath(os.path.join(self.original_cwd, command))
-        target = input(f"Where should we create this? [{default_target}] ").strip()
-        if target:
-            target = os.path.join(self.original_cwd, target)
+        default_target = (self.original_cwd / command).resolve()
+        target_input = input(
+            f"Where should we create this? [{default_target}] "
+        ).strip()
+        if target_input:
+            target = (self.original_cwd / target_input).resolve()
         else:
             target = default_target
-        target = os.path.abspath(target)
-        if not os.path.exists(target):
-            os.makedirs(target)
+        if not target.exists():
+            target.mkdir(parents=True)
         print()
         print(f"Creating appenv setup in {target} ...")
-        with open(__file__, "rb") as bootstrap_file:
-            bootstrap_data = bootstrap_file.read()
+        bootstrap_data = Path(__file__).read_bytes()
         os.chdir(target)
-        with open("appenv", "wb") as new_appenv:
-            new_appenv.write(bootstrap_data)
-        os.chmod("appenv", 0o755)
-        if os.path.exists(command):
-            os.unlink(command)
-        os.symlink("appenv", command)
-        with open("requirements.txt", "w") as requirements_txt:
-            requirements_txt.write(dependency + "\n")
+        (target / "appenv").write_bytes(bootstrap_data)
+        (target / "appenv").chmod(0o755)
+        link = target / command
+        link.unlink(missing_ok=True)
+        link.symlink_to("appenv")
+        (target / REQUIREMENTS_TXT).write_text(dependency + "\n")
         print()
-        rel_path = os.path.relpath(target, self.original_cwd)
+        try:
+            rel_path = target.relative_to(self.original_cwd)
+        except ValueError:
+            rel_path = target
         print(f"Done. You can now `cd {rel_path}` and call `./{command}`")
         print("to bootstrap and run it.")
 
@@ -379,7 +366,7 @@ class AppEnv:
 
     def reset(self, args=None, remaining=None):
         print(f"Resetting ALL application environments in {self.appenv_dir} ...")
-        cmd(["rm", "-rf", self.appenv_dir])
+        cmd(["rm", "-rf", str(self.appenv_dir)])
 
     def update_lockfile(self, args=None, remaining=None):
         """Update requirements.lock using uv pip compile.
@@ -396,14 +383,14 @@ class AppEnv:
         os.chdir(self.base)
 
         # Read existing lockfile for comparison
+        lock_file = Path(REQUIREMENTS_LOCK)
         old_lines: set[str] = set()
-        if os.path.exists("requirements.lock"):
-            with open("requirements.lock") as f:
-                old_lines = set(
-                    stripped
-                    for line in f
-                    if (stripped := line.strip()) and not stripped.startswith("#")
-                )
+        if lock_file.exists():
+            old_lines = set(
+                stripped
+                for line in lock_file.read_text().splitlines()
+                if (stripped := line.strip()) and not stripped.startswith("#")
+            )
 
         if args and args.diff:
             print("Checking lockfile changes ...")
@@ -413,13 +400,12 @@ class AppEnv:
         # Separate editable installs from regular requirements
         editable_specs = []
         regular_lines = []
-        with open("requirements.txt") as f:
-            for line in f:
-                stripped = line.strip()
-                if stripped.startswith("-e "):
-                    editable_specs.append(stripped)
-                elif stripped and not stripped.startswith("#"):
-                    regular_lines.append(stripped)
+        for line in Path(REQUIREMENTS_TXT).read_text().splitlines():
+            stripped = line.strip()
+            if stripped.startswith("-e "):
+                editable_specs.append(stripped)
+            elif stripped and not stripped.startswith("#"):
+                regular_lines.append(stripped)
 
         # Create temp requirements without editables for uv
         tmp_fd, tmp_requirements = tempfile.mkstemp(suffix=".txt", text=True)
@@ -443,8 +429,7 @@ class AppEnv:
             uv_cmd(compile_args)
 
             # Read compiled content
-            with open(tmp_lock) as f:
-                compiled = f.read()
+            compiled = Path(tmp_lock).read_text()
 
             # Build new lockfile content
             new_content = f"# appenv-requirements-hash: {self._hash_requirements()}\n"
@@ -465,10 +450,7 @@ class AppEnv:
                 # Show full diff with colors
                 import difflib
 
-                old_content = ""
-                if os.path.exists("requirements.lock"):
-                    with open("requirements.lock") as f:
-                        old_content = f.read()
+                old_content = lock_file.read_text() if lock_file.exists() else ""
 
                 # ANSI colors for diff
                 red = "\033[31m"
@@ -479,8 +461,8 @@ class AppEnv:
                 diff = difflib.unified_diff(
                     old_content.splitlines(keepends=True),
                     new_content.splitlines(keepends=True),
-                    fromfile="requirements.lock",
-                    tofile="requirements.lock (new)",
+                    fromfile=REQUIREMENTS_LOCK,
+                    tofile=f"{REQUIREMENTS_LOCK} (new)",
                 )
                 for line in diff:
                     if line.startswith("---") or line.startswith("+++"):
@@ -495,8 +477,7 @@ class AppEnv:
                         print(line, end="")
             else:
                 # Write lockfile
-                with open("requirements.lock", "w") as f:
-                    f.write(new_content)
+                lock_file.write_text(new_content)
 
                 # Show summary with colors
                 added = new_lines - old_lines
@@ -517,25 +498,22 @@ class AppEnv:
                     removed_str = f"{red}-{n_removed}{reset}"
                     print(f"{check} Updated ({added_str} / {removed_str} lines)")
         finally:
-            if os.path.exists(tmp_requirements):
-                os.unlink(tmp_requirements)
-            if os.path.exists(tmp_lock):
-                os.unlink(tmp_lock)
+            Path(tmp_requirements).unlink(missing_ok=True)
+            Path(tmp_lock).unlink(missing_ok=True)
 
 
 def main():
-    base = os.path.dirname(__file__)
-    original_cwd = os.getcwd()
+    base = Path(__file__).parent
+    original_cwd = Path.cwd()
 
     ensure_best_python(base)
     # clear PYTHONPATH variable to get a defined environment
     # XXX this is a bit of history. not sure whether its still needed. keeping
     # it for good measure
-    if "PYTHONPATH" in os.environ:
-        del os.environ["PYTHONPATH"]
+    os.environ.pop("PYTHONPATH", None)
 
     # Determine whether we're being called as appenv or as an application name
-    application_name = os.path.splitext(os.path.basename(__file__))[0]
+    application_name = Path(__file__).stem
 
     appenv = AppEnv(base, original_cwd)
     if application_name == "appenv":
