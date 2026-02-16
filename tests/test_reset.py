@@ -1,10 +1,11 @@
 import os.path
+from pathlib import Path
 
 import appenv
 
 
 def test_reset_nonexisting_envdir_silent(tmpdir):
-    env = appenv.AppEnv(os.path.join(tmpdir, "ducker"), os.getcwd())
+    env = appenv.AppEnv(Path(tmpdir) / "ducker", Path.cwd())
     assert not os.path.exists(env.appenv_dir)
     env.reset()
     assert not os.path.exists(env.appenv_dir)
@@ -12,7 +13,7 @@ def test_reset_nonexisting_envdir_silent(tmpdir):
 
 
 def test_reset_removes_envdir_with_subdirs(tmpdir):
-    env = appenv.AppEnv(os.path.join(tmpdir, "ducker"), os.getcwd())
+    env = appenv.AppEnv(Path(tmpdir) / "ducker", Path.cwd())
     os.makedirs(env.appenv_dir)
     assert os.path.exists(env.appenv_dir)
     env.reset()

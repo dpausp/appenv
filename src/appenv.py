@@ -65,12 +65,11 @@ def uv_cmd(args, **kwargs):
     return cmd([uv_bin] + [str(arg) for arg in args], **kwargs)
 
 
-def python(path: str | Path, c, **kwargs):
-    return cmd([str(Path(path) / "bin" / "python")] + c, **kwargs)
+def python(path: Path, c, **kwargs):
+    return cmd([str(path / "bin" / "python")] + c, **kwargs)
 
 
-def ensure_venv(target: str | Path):
-    target = Path(target)
+def ensure_venv(target: Path):
     if (target / "bin" / "python").exists():
         return
     if target.exists():
@@ -134,7 +133,7 @@ def find_minimal_python():
     return python_path
 
 
-def ensure_best_python(base: str | Path):
+def ensure_best_python(base: Path):
     os.chdir(base)
 
     if "APPENV_BEST_PYTHON" in os.environ:
@@ -177,7 +176,7 @@ def ensure_best_python(base: str | Path):
 
 
 class AppEnv:
-    def __init__(self, base: str | Path, original_cwd: str | Path):
+    def __init__(self, base: Path, original_cwd: Path):
         self.base = Path(base)
         self.appenv_dir = self.base / ".appenv"
         self.original_cwd = Path(original_cwd)

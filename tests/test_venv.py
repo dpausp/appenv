@@ -1,23 +1,24 @@
 import os.path
+from pathlib import Path
 
 import appenv
 
 
 def test_new_venv(tmpdir):
     tmpdir = str(tmpdir)
-    appenv.ensure_venv(os.path.join(tmpdir, "venv"))
+    appenv.ensure_venv(Path(tmpdir) / "venv")
     assert os.path.exists(os.path.join(tmpdir, "venv", "bin", "python"))
     assert os.path.exists(os.path.join(tmpdir, "venv", "lib"))
 
     # doesn't break things
-    appenv.ensure_venv(os.path.join(tmpdir, "venv"))
+    appenv.ensure_venv(Path(tmpdir) / "venv")
     assert os.path.exists(os.path.join(tmpdir, "venv", "bin", "python"))
     assert os.path.exists(os.path.join(tmpdir, "venv", "lib"))
 
 
 def test_new_broken_venv_recreated(tmpdir):
     tmpdir = str(tmpdir)
-    appenv.ensure_venv(os.path.join(tmpdir, "venv"))
+    appenv.ensure_venv(Path(tmpdir) / "venv")
     assert os.path.exists(os.path.join(tmpdir, "venv", "bin", "python"))
     assert os.path.exists(os.path.join(tmpdir, "venv", "lib"))
 
@@ -27,7 +28,7 @@ def test_new_broken_venv_recreated(tmpdir):
     assert os.path.exists(os.path.join(tmpdir, "venv", "asdf"))
 
     # re-creates the venv
-    appenv.ensure_venv(os.path.join(tmpdir, "venv"))
+    appenv.ensure_venv(Path(tmpdir) / "venv")
     assert os.path.exists(os.path.join(tmpdir, "venv", "bin", "python"))
     assert os.path.exists(os.path.join(tmpdir, "venv", "lib"))
     assert not os.path.exists(os.path.join(tmpdir, "venv", "asdf"))

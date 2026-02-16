@@ -3,6 +3,7 @@ import os
 import shutil
 import sys
 import unittest.mock
+from pathlib import Path
 
 import pytest
 
@@ -12,7 +13,7 @@ import appenv
 def test_init_and_create_lockfile(workdir, monkeypatch):
     monkeypatch.setattr("sys.stdin", io.StringIO("ducker\nducker<2.0.2\n\n"))
 
-    env = appenv.AppEnv(os.path.join(workdir, "ducker"), os.getcwd())
+    env = appenv.AppEnv(Path(workdir) / "ducker", Path.cwd())
     env.init()
 
     lockfile = os.path.join(workdir, "ducker", "requirements.lock")
@@ -33,7 +34,7 @@ def test_update_lockfile_minimal_python(workdir, monkeypatch):
     """It uses the minimal python version even if it is not best python."""
     monkeypatch.setattr("sys.stdin", io.StringIO("pytest\npytest==6.1.2\nppytest\n"))
 
-    env = appenv.AppEnv(os.path.join(workdir, "ppytest"), os.getcwd())
+    env = appenv.AppEnv(Path(workdir) / "ppytest", Path.cwd())
     env.init()
 
     lockfile = os.path.join(workdir, "ppytest", "requirements.lock")
@@ -63,7 +64,7 @@ def test_update_lockfile_missing_minimal_python(workdir, monkeypatch):
     """It raises an error if the minimal python is not available."""
     monkeypatch.setattr("sys.stdin", io.StringIO("pytest\npytest==6.1.2\nppytest\n"))
 
-    env = appenv.AppEnv(os.path.join(workdir, "ppytest"), os.getcwd())
+    env = appenv.AppEnv(Path(workdir) / "ppytest", Path.cwd())
     env.init()
 
     requirements_file = os.path.join(workdir, "ppytest", "requirements.txt")

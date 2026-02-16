@@ -2,6 +2,7 @@ import io
 import os.path
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -19,7 +20,7 @@ def test_bootstrap_lockfile_missing_dependency():
 def test_bootstrap_and_run_with_lockfile(workdir, monkeypatch):
     monkeypatch.setattr("sys.stdin", io.StringIO("ducker\nducker==2.0.1\n\n"))
 
-    env = appenv.AppEnv(os.path.join(workdir, "ducker"), os.getcwd())
+    env = appenv.AppEnv(Path(workdir) / "ducker", Path.cwd())
 
     env.init()
     env.update_lockfile()
@@ -38,7 +39,7 @@ def test_bootstrap_and_run_with_lockfile(workdir, monkeypatch):
 def test_bootstrap_and_run_python_with_lockfile(workdir, monkeypatch):
     monkeypatch.setattr("sys.stdin", io.StringIO("ducker\nducker==2.0.1\n\n"))
 
-    env = appenv.AppEnv(os.path.join(workdir, "ducker"), os.getcwd())
+    env = appenv.AppEnv(Path(workdir) / "ducker", Path.cwd())
 
     env.init()
     env.update_lockfile()
@@ -57,7 +58,7 @@ def test_bootstrap_and_run_without_lockfile(workdir, monkeypatch):
     """It raises as error if no requirements.lock is present."""
     monkeypatch.setattr("sys.stdin", io.StringIO("ducker\nducker==2.0.1\n\n"))
 
-    env = appenv.AppEnv(os.path.join(workdir, "ducker"), os.getcwd())
+    env = appenv.AppEnv(Path(workdir) / "ducker", Path.cwd())
 
     env.init()
 
@@ -77,7 +78,7 @@ def test_bootstrap_and_run_without_lockfile(workdir, monkeypatch):
 def test_bootstrap_and_run_with_outdated_lockfile(workdir, monkeypatch):
     monkeypatch.setattr("sys.stdin", io.StringIO("ducker\nducker==2.0.1\n\n"))
 
-    env = appenv.AppEnv(os.path.join(workdir, "ducker"), os.getcwd())
+    env = appenv.AppEnv(Path(workdir) / "ducker", Path.cwd())
 
     env.init()
     env.update_lockfile()

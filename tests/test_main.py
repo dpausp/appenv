@@ -2,6 +2,7 @@
 
 import argparse
 import os
+from pathlib import Path
 
 import pytest
 
@@ -112,7 +113,7 @@ def test_ensure_best_python_skips_when_env_set(monkeypatch, tmpdir):
     monkeypatch.setenv("APPENV_BEST_PYTHON", "/usr/bin/python3")
     monkeypatch.setattr("os.chdir", lambda p: None)
 
-    appenv.ensure_best_python(str(tmpdir))
+    appenv.ensure_best_python(Path(tmpdir))
 
 
 def test_ensure_best_python_exits_when_no_python_found(monkeypatch, tmpdir, capsys):
@@ -121,7 +122,7 @@ def test_ensure_best_python_exits_when_no_python_found(monkeypatch, tmpdir, caps
     monkeypatch.setattr("shutil.which", lambda name: None)
 
     with pytest.raises(SystemExit) as err:
-        appenv.ensure_best_python(str(tmpdir))
+        appenv.ensure_best_python(Path(tmpdir))
 
     assert err.value.code == 65
     captured = capsys.readouterr()
@@ -155,7 +156,7 @@ def test_find_minimal_python_exits_when_not_found(monkeypatch, capsys, tmpdir):
 
 
 def test_meta_calls_reset(monkeypatch, tmpdir):
-    env = appenv.AppEnv(str(tmpdir), str(tmpdir))
+    env = appenv.AppEnv(Path(tmpdir), Path.cwd())
     monkeypatch.setattr("sys.argv", ["appenv", "reset"])
 
     reset_called = []
@@ -169,7 +170,7 @@ def test_meta_calls_reset(monkeypatch, tmpdir):
 
 
 def test_meta_calls_prepare(monkeypatch, tmpdir):
-    env = appenv.AppEnv(str(tmpdir), str(tmpdir))
+    env = appenv.AppEnv(Path(tmpdir), Path.cwd())
     monkeypatch.setattr("sys.argv", ["appenv", "prepare"])
 
     prepare_called = []
@@ -185,7 +186,7 @@ def test_meta_calls_prepare(monkeypatch, tmpdir):
 
 
 def test_meta_calls_python(monkeypatch, tmpdir):
-    env = appenv.AppEnv(str(tmpdir), str(tmpdir))
+    env = appenv.AppEnv(Path(tmpdir), Path.cwd())
     monkeypatch.setattr("sys.argv", ["appenv", "python"])
 
     python_called = []
@@ -201,7 +202,7 @@ def test_meta_calls_python(monkeypatch, tmpdir):
 
 
 def test_meta_calls_run_script(monkeypatch, tmpdir):
-    env = appenv.AppEnv(str(tmpdir), str(tmpdir))
+    env = appenv.AppEnv(Path(tmpdir), Path.cwd())
     monkeypatch.setattr("sys.argv", ["appenv", "run", "myscript"])
 
     run_called = []
@@ -220,7 +221,7 @@ def test_meta_calls_run_script(monkeypatch, tmpdir):
 
 
 def test_run_sets_env_and_execs(monkeypatch, tmpdir):
-    env = appenv.AppEnv(str(tmpdir), str(tmpdir))
+    env = appenv.AppEnv(Path(tmpdir), Path.cwd())
 
     env_dir = tmpdir.mkdir(".appenv").mkdir("abc123")
     bin_dir = env_dir.mkdir("bin")
@@ -253,7 +254,7 @@ def test_assert_requirements_lock_hash_mismatch_exits(monkeypatch, tmpdir, capsy
         "# appenv-requirements-hash: wronghash123\nrequests==1.0.0\n"
     )
 
-    env = appenv.AppEnv(str(tmpdir), str(tmpdir))
+    env = appenv.AppEnv(Path(tmpdir), Path.cwd())
 
     with pytest.raises(SystemExit) as err:
         env._assert_requirements_lock()
@@ -270,7 +271,7 @@ def test_update_lockfile_without_uv_exits(monkeypatch, tmpdir, capsys):
     monkeypatch.chdir(tmpdir)
     monkeypatch.setattr(appenv, "has_uv", lambda: False)
 
-    env = appenv.AppEnv(str(tmpdir), str(tmpdir))
+    env = appenv.AppEnv(Path(tmpdir), Path.cwd())
 
     with pytest.raises(SystemExit) as err:
         env.update_lockfile()
@@ -293,7 +294,7 @@ def test_update_lockfile_preserves_editable_installs(monkeypatch, tmpdir):
 
     monkeypatch.setattr(appenv, "uv_cmd", mock_uv_cmd)
 
-    env = appenv.AppEnv(str(tmpdir), str(tmpdir))
+    env = appenv.AppEnv(Path(tmpdir), Path.cwd())
     env.update_lockfile()
 
     with open("requirements.lock") as f:
@@ -305,7 +306,7 @@ def test_update_lockfile_preserves_editable_installs(monkeypatch, tmpdir):
 
 
 def test_python_method_calls_run(monkeypatch, tmpdir):
-    env = appenv.AppEnv(str(tmpdir), str(tmpdir))
+    env = appenv.AppEnv(Path(tmpdir), Path.cwd())
 
     run_called = []
     monkeypatch.setattr(env, "run", lambda cmd, argv: run_called.append((cmd, argv)))
