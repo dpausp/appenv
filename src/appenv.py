@@ -400,9 +400,9 @@ class AppEnv:
         if os.path.exists("requirements.lock"):
             with open("requirements.lock") as f:
                 old_lines = set(
-                    line.strip()
+                    stripped
                     for line in f
-                    if line.strip() and not line.startswith("#")
+                    if (stripped := line.strip()) and not stripped.startswith("#")
                 )
 
         print("Updating lockfile with uv ...")
@@ -453,9 +453,9 @@ class AppEnv:
 
             # Extract new lines for comparison
             new_lines = set(
-                line.strip()
+                stripped
                 for line in new_content.splitlines()
-                if line.strip() and not line.startswith("#")
+                if (stripped := line.strip()) and not stripped.startswith("#")
             )
 
             if args and args.diff:
@@ -479,10 +479,24 @@ class AppEnv:
                 with open("requirements.lock", "w") as f:
                     f.write(new_content)
 
-                # Show summary
+                # Show summary with colors
                 added = new_lines - old_lines
                 removed = old_lines - new_lines
-                print(f"Done. +{len(added)} -{len(removed)}")
+                n_added = len(added)
+                n_removed = len(removed)
+
+                # ANSI colors
+                green = "\033[32m"
+                red = "\033[31m"
+                reset = "\033[0m"
+                check = green + "✓" + reset
+
+                if n_added == 0 and n_removed == 0:
+                    print(f"{check} No changes")
+                else:
+                    added_str = f"{green}+{n_added}{reset}"
+                    removed_str = f"{red}-{n_removed}{reset}"
+                    print(f"{check} Updated ({added_str} / {removed_str})")
         finally:
             if os.path.exists(tmp_requirements):
                 os.unlink(tmp_requirements)
