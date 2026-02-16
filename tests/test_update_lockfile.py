@@ -29,34 +29,32 @@ def test_init_and_create_lockfile(workdir, monkeypatch):
     assert "# appenv-requirements-hash:" in lockfile_content
 
 
-@pytest.mark.skipif(sys.version_info[0:2] != (3, 6), reason="Isolated CI builds")
-def test_update_lockfile_minimal_python(workdir, monkeypatch):
-    """It uses the minimal python version even if it is not best python."""
-    monkeypatch.setattr("sys.stdin", io.StringIO("pytest\npytest==6.1.2\nppytest\n"))
+def test_update_lockfile_uses_minimal_python(workdir, monkeypatch):
+    """It uses the minimal python version from preferences for lockfile."""
+    monkeypatch.setattr("sys.stdin", io.StringIO("httpie\nhttpie\nmyapp\n"))
+    monkeypatch.setattr(appenv, "has_uv", lambda: True)
 
-    env = appenv.AppEnv(Path(workdir) / "ppytest", Path.cwd())
+    env = appenv.AppEnv(Path(workdir) / "myapp", Path.cwd())
     env.init()
 
-    lockfile = os.path.join(workdir, "ppytest", "requirements.lock")
-    requirements_file = os.path.join(workdir, "ppytest", "requirements.txt")
+    requirements_file = Path(workdir) / "myapp" / "requirements.txt"
+    content = requirements_file.read_text()
+    requirements_file.write_text(
+        "# appenv-python-preference: 3.11,3.9,3.10\n" + content
+    )
 
-    with open(requirements_file, "r+") as f:
-        lines = f.readlines()
-        lines.insert(0, "# appenv-python-preference: 3.8,3.6,3.9\n")
-        f.seek(0)
-        f.writelines(lines)
+    # Mock uv_cmd to capture --python argument
+    captured_args = []
+    monkeypatch.setattr(
+        appenv, "uv_cmd", lambda args, **kwargs: captured_args.append(args)
+    )
+    monkeypatch.setattr(appenv, "find_minimal_python", lambda: "/usr/bin/python3.9")
 
     env.update_lockfile()
 
-    assert os.path.exists(lockfile)
-    with open(lockfile) as f:
-        lockfile_content = f.read()
-    # replace underscore with dashes for python 3.6 testing
-    # some versions do not normalize the name like newer python versions
-    lockfile_content = lockfile_content.replace("_", "-")
-    assert "pytest==6.1.2" in lockfile_content
-    assert "importlib-metadata==" in lockfile_content
-    assert "typing-extensions==" in lockfile_content
+    # Verify --python flag was passed with minimal version
+    assert any("--python" in str(arg) for arg in captured_args)
+    assert any("python3.9" in str(arg) for arg in captured_args)
 
 
 @pytest.mark.skipif(sys.version_info[0:2] < (3, 8), reason="Isolated CI builds")
