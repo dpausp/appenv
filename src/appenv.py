@@ -192,6 +192,11 @@ class AppEnv:
         parser = argparse.ArgumentParser()
         subparsers = parser.add_subparsers()
         p = subparsers.add_parser("update-lockfile", help="Update the lock file.")
+        p.add_argument(
+            "--diff",
+            action="store_true",
+            help="Show full diff without writing lockfile.",
+        )
         p.set_defaults(func=self.update_lockfile)
 
         p = subparsers.add_parser("init", help="Create a new appenv project.")
@@ -389,6 +394,17 @@ class AppEnv:
 
         minimal_python = find_minimal_python()
         os.chdir(self.base)
+
+        # Read existing lockfile for comparison
+        old_lines: set[str] = set()
+        if os.path.exists("requirements.lock"):
+            with open("requirements.lock") as f:
+                old_lines = set(
+                    line.strip()
+                    for line in f
+                    if line.strip() and not line.startswith("#")
+                )
+
         print("Updating lockfile with uv ...")
 
         # Separate editable installs from regular requirements
@@ -408,33 +424,70 @@ class AppEnv:
             with os.fdopen(tmp_fd, "w") as tmp:
                 tmp.write("\n".join(regular_lines) + "\n")
 
-            # Compile with uv
+            # Compile with uv to temp file
+            tmp_lock_fd, tmp_lock = tempfile.mkstemp(suffix=".lock", text=True)
+            os.close(tmp_lock_fd)
+
             compile_args = [
                 "pip",
                 "compile",
                 tmp_requirements,
                 "--output-file",
-                "requirements.lock",
+                tmp_lock,
             ]
             if minimal_python:
                 compile_args.extend(["--python", minimal_python])
             uv_cmd(compile_args)
 
-            # Prepend hash header and editable installs
-            with open("requirements.lock") as f:
+            # Read compiled content
+            with open(tmp_lock) as f:
                 compiled = f.read()
-            with open("requirements.lock", "w") as f:
-                f.write(f"# appenv-requirements-hash: {self._hash_requirements()}\n")
-                if editable_specs:
-                    f.write("\n# Editable installs\n")
-                    for spec in editable_specs:
-                        f.write(spec + "\n")
-                f.write(compiled)
+
+            # Build new lockfile content
+            new_content = f"# appenv-requirements-hash: {self._hash_requirements()}\n"
+            if editable_specs:
+                new_content += "\n# Editable installs\n"
+                for spec in editable_specs:
+                    new_content += spec + "\n"
+            new_content += compiled
+
+            # Extract new lines for comparison
+            new_lines = set(
+                line.strip()
+                for line in new_content.splitlines()
+                if line.strip() and not line.startswith("#")
+            )
+
+            if args and args.diff:
+                # Show full diff
+                import difflib
+
+                old_content = ""
+                if os.path.exists("requirements.lock"):
+                    with open("requirements.lock") as f:
+                        old_content = f.read()
+
+                diff = difflib.unified_diff(
+                    old_content.splitlines(keepends=True),
+                    new_content.splitlines(keepends=True),
+                    fromfile="requirements.lock",
+                    tofile="requirements.lock (new)",
+                )
+                print("".join(diff), end="")
+            else:
+                # Write lockfile
+                with open("requirements.lock", "w") as f:
+                    f.write(new_content)
+
+                # Show summary
+                added = new_lines - old_lines
+                removed = old_lines - new_lines
+                print(f"Done. +{len(added)} -{len(removed)}")
         finally:
             if os.path.exists(tmp_requirements):
                 os.unlink(tmp_requirements)
-
-        print("Done.")
+            if os.path.exists(tmp_lock):
+                os.unlink(tmp_lock)
 
 
 def main():
