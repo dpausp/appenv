@@ -8,8 +8,15 @@ example/.httpie
 # Appenv runtime directory (created on first run)
 .appenv/
 
+# uv binary built by nix
+.appenv/.uv/
+
 # Development symlink
 /appenv
+
+# Example project artifacts
+example/.venv/
+example/.appenv/
 
 bin/
 include/
