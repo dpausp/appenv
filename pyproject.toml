@@ -40,8 +40,9 @@ test = [
     "pytest",
     "pytest-cov",
 ]
-lint = [
-]
+ruff = ["ruff"]
+mypy = ["mypy"]
+ty = ["ty"]
 dev = [
     {include-group = "test"},
     "tox",
@@ -49,24 +50,25 @@ dev = [
 ]
 
 [tool.tox]
-env_list = ["py39", "py310", "py311", "py312", "py313", "py314", "lint"]
+env_list = ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14", "lint"]
 skip_missing_interpreters = true
 
 [tool.tox.env_run_base]
 package = "wheel"
+runner = "uv-venv-lock-runner"
 setenv = {APPENV_BEST_PYTHON = "{envpython}"}
 dependency_groups = ["test"]
 commands = [["pytest"]]
 
 [tool.tox.env.lint]
-allowlist_externals = ["ty", "ruff"]
-description = "Run linters"
-package = "skip"
-dependency_groups = ["dev", "lint"]
+skip_install = true
+description = "Format/fix code and run checks"
+dependency_groups = ["test", "ruff", "mypy", "ty"]
 commands = [
     ["ruff", "check", "--fix", "."],
-    ["ty", "check", "."],
     ["ruff", "format", "."],
+    ["ty", "check", "."],
+    ["mypy", "src"]
 ]
 
 [tool.ty.environment]
