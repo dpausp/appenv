@@ -1,16 +1,21 @@
 repos:
 -   repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v5.0.0
     hooks:
     -   id: check-yaml
     -   id: end-of-file-fixer
     -   id: trailing-whitespace
--   repo: https://github.com/google/yapf
-    rev: 'v0.40.2'  # Use the sha / tag you want to point at
+-   repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.10
     hooks:
-    -   id: yapf
-        args: [-i, -p]
--   repo: https://github.com/pycqa/flake8
-    rev: '7.0.0'  # pick a git hash / tag to point to
+    -   id: ruff
+        args: [--fix]
+    -   id: ruff-format
+-   repo: local
     hooks:
-    -   id: flake8
+    -   id: ty
+        name: ty
+        entry: ty check .
+        language: system
+        types: [python]
+        pass_filenames: false
