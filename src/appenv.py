@@ -33,7 +33,7 @@ PYPROJECT_TOML = "pyproject.toml"
 UV_LOCK = "uv.lock"
 
 
-def parse_requires_python(pyproject_path: Path):
+def parse_requires_python(pyproject_path):
     """Parse requires-python from pyproject.toml.
 
     Returns the minimum version string like "3.8" or None if not found.
@@ -67,7 +67,7 @@ def find_available_pythons():
     return pythons
 
 
-def ensure_best_python_for_pyproject(base: Path):
+def ensure_best_python_for_pyproject(base):
     """Ensure best Python for pyproject.toml workflow.
 
     Reads requires-python from pyproject.toml and selects the newest
@@ -125,7 +125,7 @@ def ensure_best_python_for_pyproject(base: Path):
     sys.exit(65)
 
 
-def detect_project_type(base: Path):
+def detect_project_type(base):
     """Detect project type based on present files.
 
     Priority: pyproject.toml > requirements.txt
@@ -323,7 +323,7 @@ def uv_cmd(args, verbose=False, **kwargs):
     return output
 
 
-def python(path: Path, c, **kwargs):
+def python(path, c, **kwargs):
     return cmd([str(path / "bin" / "python")] + c, **kwargs)
 
 
@@ -398,7 +398,7 @@ def find_minimal_python():
     return python_path
 
 
-def ensure_best_python(base: Path):
+def ensure_best_python(base):
     os.chdir(base)
 
     if "APPENV_BEST_PYTHON" in os.environ:
@@ -441,7 +441,7 @@ def ensure_best_python(base: Path):
 
 
 class AppEnv:
-    def __init__(self, base: Path, original_cwd: Path):
+    def __init__(self, base, original_cwd):
         self.base = Path(base)
         self.appenv_dir = self.base / ".appenv"
         self.original_cwd = Path(original_cwd)
@@ -726,7 +726,7 @@ class AppEnv:
             return
 
         initial_command = target.name
-        dependencies: list[str] = []
+        dependencies = []
         description = ""
         python_version = "3.8"
         migrated = requirements_file.exists()
@@ -796,7 +796,7 @@ class AppEnv:
 
             print("\nEnter dependencies (one per line, empty line to finish):")
             print(f"  Default: {initial_command}")
-            deps: list[str] = []
+            deps = []
             while True:
                 dep = input("  Dependency: ").strip()
                 if not dep:
@@ -1080,8 +1080,8 @@ requires-python = ">={python_version}"
             print("Updating lockfile with uv ...")
 
         # Separate editable installs from regular requirements
-        editable_specs: list[str] = []
-        regular_lines: list[str] = []
+        editable_specs = []
+        regular_lines = []
         for line in Path(REQUIREMENTS_TXT).read_text().splitlines():
             stripped = line.strip()
             if stripped.startswith("-e "):
