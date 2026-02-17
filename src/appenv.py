@@ -165,6 +165,10 @@ def uv_cmd(args, verbose=False, project=None, **kwargs):
     if project:
         cmd_args.extend(["--project", str(project)])
     cmd_args.extend(str(arg) for arg in args)
+
+    # Show command if APPENV_VERBOSE is set
+    verbose_print(f"Running: {' '.join(cmd_args)}")
+
     output = cmd(cmd_args, **kwargs)
     if verbose and output:
         print(output.decode("utf-8", "replace"), end="")
@@ -399,6 +403,7 @@ class AppEnv:
         lock_file = self.base / UV_LOCK
         old_appenv = self.appenv_dir
         python_version_file = self.base / ".python-version"
+        pyproject_file = self.base / PYPROJECT_TOML
 
         # Ensure uv.lock exists
         if not lock_file.exists():
@@ -406,6 +411,13 @@ class AppEnv:
             sys.exit(67)
 
         ensure_uv(self.base)
+
+        # Show verbose info
+        verbose_print(f"Project base: {self.base}")
+        verbose_print(f"pyproject.toml: {pyproject_file}")
+        verbose_print(f"uv.lock: {lock_file}")
+        verbose_print(f"venv: {venv}")
+        verbose_print(f"uv binary: {get_uv_bin(self.base)}")
 
         # Show python version info
         if python_version_file.exists():
