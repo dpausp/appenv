@@ -86,3 +86,128 @@ def test_update_lockfile_missing_minimal_python(workdir, monkeypatch):
         with pytest.raises(SystemExit) as e:
             env.update_lockfile()
     assert e.value.code == 66
+
+
+def test_update_lockfile_ignores_parent_pyproject(workdir, monkeypatch, capsys):
+    """Legacy requirements.txt in subdirectory ignores parent pyproject.toml.
+
+    This tests the bug case where uv might walk up the directory tree and find
+    a pyproject.toml in a parent directory instead of using the requirements.txt
+    in the appenv's own directory.
+    """
+    # Create parent directory with pyproject.toml
+    parent_dir = Path(workdir) / "parent"
+    parent_dir.mkdir()
+    (parent_dir / "pyproject.toml").write_text(
+        """
+[project]
+name = "parent-project"
+version = "1.0.0"
+dependencies = ["requests"]
+"""
+    )
+
+    # Create subdirectory with requirements.txt (no pyproject.toml)
+    subdir = parent_dir / "subapp"
+    subdir.mkdir()
+    (subdir / "requirements.txt").write_text("click\n")
+    (subdir / "appenv").write_text("#!/usr/bin/env python3\npass\n")
+    (subdir / "appenv").chmod(0o755)
+
+    # Mock ensure_uv and uv_cmd to capture behavior
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
+
+    captured_calls = []
+
+    def mock_uv_cmd(args, verbose=False, project=None, **kwargs):
+        captured_calls.append(
+            {"args": list(args), "project": project, "cwd": kwargs.get("cwd")}
+        )
+        # Simulate successful pip compile output
+        if "compile" in args:
+            output_file = args[args.index("--output-file") + 1]
+            Path(output_file).write_text("click==8.1.0\n")
+        return b""
+
+    monkeypatch.setattr(appenv, "uv_cmd", mock_uv_cmd)
+
+    # Run update_lockfile from subdirectory
+    env = appenv.AppEnv(subdir, Path.cwd())
+    env.update_lockfile()
+
+    # Verify it detected requirements.txt mode (not pyproject mode)
+    captured = capsys.readouterr()
+    assert "Mode: requirements.txt" in captured.out
+    assert (
+        "pyproject.toml" not in captured.out.lower()
+        or "no pyproject" in captured.out.lower()
+    )
+
+    # Verify pip compile was called (legacy workflow)
+    assert any(
+        "pip" in call["args"] and "compile" in call["args"] for call in captured_calls
+    )
+
+    # Verify it did NOT create uv.lock (would be pyproject workflow)
+    assert not (subdir / "uv.lock").exists()
+
+    # Verify requirements.lock was created
+    assert (subdir / "requirements.lock").exists()
+
+
+def test_update_lockfile_pyproject_uses_project_flag(workdir, monkeypatch, capsys):
+    """pyproject.toml mode should pass --project to uv to prevent upward search.
+
+    This ensures uv only looks in the appenv's directory, not parent directories.
+    """
+    # Create directory with pyproject.toml
+    app_dir = Path(workdir) / "myapp"
+    app_dir.mkdir()
+    (app_dir / "pyproject.toml").write_text(
+        """
+[project]
+name = "myapp"
+version = "1.0.0"
+dependencies = ["click"]
+"""
+    )
+    (app_dir / "appenv").write_text("#!/usr/bin/env python3\npass\n")
+    (app_dir / "appenv").chmod(0o755)
+
+    # Mock ensure_uv and uv_cmd
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
+
+    captured_calls = []
+
+    def mock_uv_cmd(args, verbose=False, project=None, **kwargs):
+        captured_calls.append(
+            {"args": list(args), "project": project, "cwd": kwargs.get("cwd")}
+        )
+        # Simulate uv lock output
+        if "lock" in args and "pip" not in args:
+            (app_dir / "uv.lock").write_text("version = 1\n")
+        elif "pip" in args and "compile" in args:
+            output_file = args[args.index("--output-file") + 1]
+            Path(output_file).write_text("click==8.1.0\n")
+        return b""
+
+    monkeypatch.setattr(appenv, "uv_cmd", mock_uv_cmd)
+
+    # Run update_lockfile
+    env = appenv.AppEnv(app_dir, Path.cwd())
+    env.update_lockfile()
+
+    # Verify it detected pyproject mode
+    captured = capsys.readouterr()
+    assert "Mode: pyproject.toml" in captured.out
+
+    # Verify uv.lock was created
+    assert (app_dir / "uv.lock").exists()
+
+    # Verify --project flag was passed to uv with correct directory
+    lock_calls = [call for call in captured_calls if "lock" in call["args"]]
+    assert len(lock_calls) >= 1, "Expected at least one uv lock call"
+    for call in lock_calls:
+        assert str(call["project"]) == str(app_dir), (
+            f"Expected project={app_dir}, got {call['project']}"
+        )
