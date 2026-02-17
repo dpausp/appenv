@@ -289,6 +289,9 @@ class AppEnv:
         p = subparsers.add_parser("reset", help="Reset the environment.")
         p.set_defaults(func=self.reset)
 
+        p = subparsers.add_parser("version", help="Show appenv version.")
+        p.set_defaults(func=self.show_version)
+
         p = subparsers.add_parser("prepare", help="Prepare the venv.")
         p.set_defaults(func=self.prepare)
 
@@ -598,6 +601,16 @@ requires-python = ">={python_version}"
 
     def run_script(self, args, remaining):
         self.run(args.script, remaining)
+
+    def show_version(self, args=None, remaining=None):
+        """Show appenv version."""
+        from importlib.metadata import version
+
+        try:
+            v = version("appenv")
+        except Exception:
+            v = "unknown"
+        print(f"appenv {v}")
 
     def reset(self, args=None, remaining=None):
         """Reset all virtual environments."""
