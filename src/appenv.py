@@ -84,7 +84,7 @@ def verbose_print(*args, **kwargs):
     Meta commands (init, update-lockfile, etc.) always print.
     """
     if os.environ.get("APPENV_VERBOSE"):
-        print(*args, **kwargs)
+        print(*args, **kwargs, flush=True)
 
 
 # Global cache for uv binary path
@@ -398,6 +398,7 @@ class AppEnv:
         venv = self.base / ".venv"
         lock_file = self.base / UV_LOCK
         old_appenv = self.appenv_dir
+        python_version_file = self.base / ".python-version"
 
         # Ensure uv.lock exists
         if not lock_file.exists():
@@ -406,6 +407,14 @@ class AppEnv:
 
         ensure_uv(self.base)
 
+        # Show python version info
+        if python_version_file.exists():
+            verbose_print(
+                f"Using .python-version: {python_version_file.read_text().strip()}"
+            )
+        else:
+            verbose_print("No .python-version file found")
+
         # Create venv if needed or check integrity
         if not venv.exists() or not (venv / "bin" / "python").exists():
             if venv.exists():
@@ -413,6 +422,17 @@ class AppEnv:
                 shutil.rmtree(venv)
             verbose_print("Creating venv with uv ...")
             uv_cmd(["venv"], project=self.base)
+            # Show which python was selected
+            venv_python = venv / "bin" / "python"
+            if venv_python.exists():
+                result = cmd([str(venv_python), "--version"], quiet=True)
+                verbose_print(f"Created venv with {result.decode().strip()}")
+
+        # Show current venv python version
+        venv_python = venv / "bin" / "python"
+        if venv_python.exists():
+            result = cmd([str(venv_python), "--version"], quiet=True)
+            verbose_print(f"Venv Python: {result.decode().strip()}")
 
         # Sync dependencies (idempotent)
         verbose_print("Syncing dependencies ...")
