@@ -645,20 +645,27 @@ requires-python = ">={python_version}"
             print("Created appenv bootstrap script")
 
         # Handle symlink
-        command_link = target / initial_command
-
         if migrated:
-            # Migration: Don't touch existing symlinks - user may have custom setup
-            if command_link.is_symlink():
-                print(f"Keeping existing {initial_command} symlink")
-            elif command_link.exists():
-                print(f"Note: {initial_command} exists but is not a symlink")
+            # Migration: Find existing symlinks to appenv, don't touch anything
+            existing_symlinks = []
+            for path in target.iterdir():
+                if path.is_symlink() and path.resolve() == appenv_script.resolve():
+                    existing_symlinks.append(path.name)
+
+            if existing_symlinks:
+                print(f"Found existing symlink(s): {', '.join(existing_symlinks)}")
             else:
-                # No existing symlink, create one
+                # No existing symlink, create one with project name
+                command_link = target / project_name
                 command_link.symlink_to("appenv")
-                print(f"Created {initial_command} symlink")
+                print(f"Created {project_name} symlink")
+                existing_symlinks = [project_name]
+
+            # Use first existing symlink for "Run ./..." message
+            initial_command = existing_symlinks[0]
         else:
             # Fresh project: Create symlink (handle broken symlinks)
+            command_link = target / initial_command
             if command_link.is_symlink() or command_link.exists():
                 command_link.unlink(missing_ok=True)
             command_link.symlink_to("appenv")
