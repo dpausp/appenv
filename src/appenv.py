@@ -495,8 +495,9 @@ class AppEnv:
                 verbose_print("Corrupted venv detected, removing ...")
                 shutil.rmtree(venv)
             verbose_print("Creating venv with uv ...")
-            # Note: venv doesn't need --project, it uses current directory
-            uv_cmd(["venv", str(venv)])
+            # Use current Python explicitly to avoid uv downloading its own
+            # (breaks on NixOS where downloaded binaries don't run)
+            uv_cmd(["venv", "--python", sys.executable, str(venv)])
 
         # Sync dependencies (idempotent) - may update venv python version
         verbose_print("Syncing dependencies (uv sync) ...")
