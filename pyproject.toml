@@ -40,17 +40,16 @@ test = [
     "pytest",
     "pytest-cov",
 ]
-ruff = ["ruff"]
-mypy = ["mypy"]
-ty = ["ty"]
+lint = ["ruff", "ty"]
 dev = [
     {include-group = "test"},
+    {include-group = "lint"},
     "tox",
     "tox-uv",
 ]
 
 [tool.tox]
-env_list = ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14", "lint"]
+env_list = ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14", "fix"]
 skip_missing_interpreters = true
 
 [tool.tox.env_run_base]
@@ -60,15 +59,15 @@ setenv = {APPENV_BEST_PYTHON = "{envpython}"}
 dependency_groups = ["test"]
 commands = [["pytest"]]
 
-[tool.tox.env.lint]
+[tool.tox.env.fix]
 skip_install = true
-description = "Format/fix code and run checks"
-dependency_groups = ["test", "ruff", "mypy", "ty"]
+description = "Format, lint, fix whitespace, type-check"
+dependency_groups = ["test", "lint"]
 commands = [
     ["ruff", "check", "--fix", "."],
     ["ruff", "format", "."],
+    ["python", "scripts/fix_whitespace.py", "."],
     ["ty", "check", "."],
-    ["mypy", "src"]
 ]
 
 [tool.ty.environment]
