@@ -129,12 +129,16 @@ def check_uv_version() -> tuple[int, int, int]:
             min_str = ".".join(str(v) for v in UV_MIN_VERSION)
             print(f"Error: uv version {version_str} is too old.")
             print(f"Minimum required version: {min_str}")
+            print(f"uv binary: {uv_bin}")
             print()
             print("To upgrade uv:")
             print("  curl -LsSf https://astral.sh/uv/install.sh | sh")
             print()
             print("Or with nix:")
             print("  nix profile install nixpkgs#uv")
+            print()
+            print("Or remove outdated local uv:")
+            print("  rm -rf .appenv/.uv")
             sys.exit(68)
 
         return version
@@ -151,9 +155,8 @@ def get_uv_bin(base=None):
 
     Priority:
     1. uv in PATH → use it
-    2. .appenv/.uv/bin/uv exists → use it
-    3. nix build nixpkgs#uv --out-link .appenv/.uv → use it
-    4. pip install uv → use it
+    2. nix build nixpkgs#uv → always fresh from nixpkgs
+    3. pip install uv → use it
     """
     global _uv_bin_cache
 
@@ -166,15 +169,10 @@ def get_uv_bin(base=None):
         _uv_bin_cache = uv_in_path
         return uv_in_path
 
-    # 2-3. Check/use nix build in .appenv/.uv
+    # 2. Build with nix (always fresh, cheap symlink to store)
     if base and has_nix():
         uv_local = base / ".appenv" / ".uv" / "bin" / "uv"
-        if uv_local.exists():
-            _uv_bin_cache = str(uv_local)
-            return str(uv_local)
-
-        # Build uv with nix
-        verbose_print("Building uv with nix (one-time setup) ...")
+        verbose_print("Building uv with nix ...")
         uv_out = base / ".appenv" / ".uv"
         subprocess.run(
             ["nix", "build", "nixpkgs#uv", "--out-link", str(uv_out)],
@@ -183,7 +181,7 @@ def get_uv_bin(base=None):
         _uv_bin_cache = str(uv_local)
         return str(uv_local)
 
-    # 4. pip install fallback
+    # 3. pip install fallback
     verbose_print("Installing uv via pip ...")
     subprocess.run(
         [sys.executable, "-m", "pip", "install", "-q", "uv"],
