@@ -6,8 +6,8 @@
 #
 #   - the appenv file is placed in a repo with the name of the application
 #   - the name of the application/file is an entrypoint XXX
-#   - uv is available in PATH
-#   - a requirements.txt file next to the appenv file
+#   - uv will be installed via pip or nix if not available
+#   - pyproject.toml (preferred) or requirements.txt next to the appenv file
 
 # TODO
 #
@@ -26,6 +26,22 @@ from pathlib import Path
 # Constants
 REQUIREMENTS_TXT = "requirements.txt"
 REQUIREMENTS_LOCK = "requirements.lock"
+PYPROJECT_TOML = "pyproject.toml"
+UV_LOCK = "uv.lock"
+
+
+def detect_project_type(base: Path):
+    """Detect project type based on present files.
+
+    Priority: pyproject.toml > requirements.txt
+
+    Returns: "pyproject", "requirements", or None
+    """
+    if (base / PYPROJECT_TOML).exists():
+        return "pyproject"
+    if (base / REQUIREMENTS_TXT).exists():
+        return "requirements"
+    return None
 
 
 class TColors:
@@ -37,7 +53,7 @@ class TColors:
     RESET = "\033[0m"
 
 
-def cmd(c, merge_stderr=True, quiet=False):
+def cmd(c, merge_stderr=True, quiet=False, cwd=None):
     try:
         kwargs = {}
         if isinstance(c, str):
@@ -45,6 +61,8 @@ def cmd(c, merge_stderr=True, quiet=False):
             c = [c]
         if merge_stderr:
             kwargs["stderr"] = subprocess.STDOUT
+        if cwd:
+            kwargs["cwd"] = cwd
         return subprocess.check_output(c, **kwargs)
     except subprocess.CalledProcessError as e:
         print(f"{c} returned with exit code {e.returncode}")
@@ -52,16 +70,76 @@ def cmd(c, merge_stderr=True, quiet=False):
         raise ValueError(e.output.decode("utf-8", "replace")) from None
 
 
-def has_uv():
-    """Check if uv is available."""
-    return shutil.which("uv") is not None
+def has_nix():
+    """Check if nix is available."""
+    return shutil.which("nix") is not None
+
+
+# Global cache for uv binary path
+_uv_bin_cache = None
+
+
+def get_uv_bin(base=None):
+    """Get path to uv binary.
+
+    Priority:
+    1. uv in PATH → use it
+    2. .appenv/.uv/bin/uv exists → use it
+    3. nix build nixpkgs#uv --out-link .appenv/.uv → use it
+    4. pip install uv → use it
+    """
+    global _uv_bin_cache
+
+    if _uv_bin_cache:
+        return _uv_bin_cache
+
+    # 1. Check PATH
+    uv_in_path = shutil.which("uv")
+    if uv_in_path:
+        _uv_bin_cache = uv_in_path
+        return uv_in_path
+
+    # 2-3. Check/use nix build in .appenv/.uv
+    if base and has_nix():
+        uv_local = base / ".appenv" / ".uv" / "bin" / "uv"
+        if uv_local.exists():
+            _uv_bin_cache = str(uv_local)
+            return str(uv_local)
+
+        # Build uv with nix
+        print("Building uv with nix (one-time setup) ...")
+        uv_out = base / ".appenv" / ".uv"
+        subprocess.run(
+            ["nix", "build", "nixpkgs#uv", "--out-link", str(uv_out)],
+            check=True,
+        )
+        _uv_bin_cache = str(uv_local)
+        return str(uv_local)
+
+    # 4. pip install fallback
+    print("Installing uv via pip ...")
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", "-q", "uv"],
+        check=True,
+    )
+    uv_in_path = shutil.which("uv")
+    if uv_in_path:
+        _uv_bin_cache = uv_in_path
+        return uv_in_path
+
+    raise RuntimeError("uv not found and could not be installed.")
+
+
+def ensure_uv(base=None):
+    """Ensure uv is available. Call get_uv_bin to get the path."""
+    get_uv_bin(base)
 
 
 def uv_cmd(args, **kwargs):
     """Execute uv command."""
-    uv_bin = shutil.which("uv")
+    uv_bin = _uv_bin_cache or shutil.which("uv")
     if not uv_bin:
-        raise RuntimeError("uv not found.")
+        raise RuntimeError("uv not found. Call ensure_uv() first.")
     return cmd([uv_bin] + [str(arg) for arg in args], **kwargs)
 
 
@@ -69,9 +147,15 @@ def python(path: Path, c, **kwargs):
     return cmd([str(path / "bin" / "python")] + c, **kwargs)
 
 
-def ensure_venv(target: Path):
+def ensure_venv(target, base=None):
     if (target / "bin" / "python").exists():
         return
+    # Derive base from target if not provided: .appenv/hash -> base
+    if not base:
+        base = (
+            target.parent.parent if target.parent.name == ".appenv" else target.parent
+        )
+    ensure_uv(base)
     if target.exists():
         print("Deleting unclean target")
         cmd(["rm", "-rf", str(target)])
@@ -196,6 +280,12 @@ class AppEnv:
         p = subparsers.add_parser("init", help="Create a new appenv project.")
         p.set_defaults(func=self.init)
 
+        p = subparsers.add_parser(
+            "init-pyproject",
+            help="Create or migrate to pyproject.toml project.",
+        )
+        p.set_defaults(func=self.init_pyproject)
+
         p = subparsers.add_parser("reset", help="Reset the environment.")
         p.set_defaults(func=self.reset)
 
@@ -254,13 +344,53 @@ class AppEnv:
         return hashlib.new("sha256", Path(REQUIREMENTS_TXT).read_bytes()).hexdigest()
 
     def prepare(self, args=None, remaining=None):
-        # copy used requirements.txt into the target directory so we can use
-        # that to check later
-        # - when to clean up old versions? keep like one or two old revisions?
-        # - enumerate the revisions and just copy the requirements.txt, check
-        #   for ones that are clean or rebuild if necessary
         os.chdir(self.base)
 
+        project_type = detect_project_type(self.base)
+
+        if project_type == "pyproject":
+            return self._prepare_pyproject()
+        elif project_type == "requirements":
+            return self._prepare_requirements()
+        else:
+            print(f"No {PYPROJECT_TOML} or {REQUIREMENTS_TXT} found.")
+            sys.exit(67)
+
+    def _prepare_pyproject(self):
+        """Prepare environment for pyproject.toml using uv native workflow."""
+        venv = self.base / ".venv"
+        lock_file = self.base / UV_LOCK
+        old_appenv = self.appenv_dir
+
+        # Ensure uv.lock exists
+        if not lock_file.exists():
+            print(f"No {UV_LOCK} found. Run: ./appenv update-lockfile")
+            sys.exit(67)
+
+        ensure_uv(self.base)
+
+        # Create venv if needed or check integrity
+        if not venv.exists() or not (venv / "bin" / "python").exists():
+            if venv.exists():
+                print("Corrupted venv detected, removing ...")
+                shutil.rmtree(venv)
+            print("Creating venv with uv ...")
+            uv_cmd(["venv"])
+
+        # Sync dependencies (idempotent)
+        print("Syncing dependencies ...")
+        uv_cmd(["sync"])
+
+        # Cleanup old .appenv if migration is complete
+        # (requirements.txt removed = user migrated intentionally)
+        if old_appenv.exists() and not (self.base / REQUIREMENTS_TXT).exists():
+            print("Removing old .appenv ...")
+            shutil.rmtree(old_appenv)
+
+        return str(venv)
+
+    def _prepare_requirements(self):
+        """Prepare environment for requirements.txt using legacy workflow."""
         self._assert_requirements_lock()
 
         requirements = Path(REQUIREMENTS_LOCK).read_bytes()
@@ -286,10 +416,6 @@ class AppEnv:
                     else:
                         path.unlink()
         if env_dir.exists():
-            # check whether the existing environment is OK, it might be
-            # nice to rebuild in a separate place if necessary to avoid
-            # interruptions to running services, but that isn't what we're
-            # using it for at the  moment
             if not (env_dir / "appenv.ready").exists():
                 print("Existing envdir not consistent, deleting")
                 cmd(["rm", "-rf", str(env_dir)])
@@ -357,6 +483,116 @@ class AppEnv:
         print(f"Done. You can now `cd {rel_path}` and call `./{command}`")
         print("to bootstrap and run it.")
 
+    def init_pyproject(self, args=None, remaining=None):
+        """Create or migrate to pyproject.toml project."""
+        target = self.original_cwd.resolve()
+
+        # Check for migration
+        requirements_file = target / REQUIREMENTS_TXT
+        pyproject_file = target / PYPROJECT_TOML
+
+        if pyproject_file.exists():
+            print(f"pyproject.toml already exists in {target}.")
+            print("Nothing to do.")
+            print("Edit pyproject.toml manually to make changes.")
+            return
+
+        initial_command = target.name
+        dependencies: list[str] = []
+        description = ""
+        python_version = "3.8"
+        migrated = requirements_file.exists()
+
+        if migrated:
+            # Migration mode
+            print("Migrating from requirements.txt to pyproject.toml...\n")
+            deps_content = requirements_file.read_text().strip()
+            editable_warnings = []
+            if deps_content:
+                for line in deps_content.splitlines():
+                    stripped = line.strip()
+                    if stripped and not stripped.startswith("#"):
+                        if stripped.startswith("-e "):
+                            # Handle editable installs - warn and skip
+                            editable_warnings.append(stripped)
+                        else:
+                            dependencies.append(stripped)
+            if editable_warnings:
+                print(f"Warning: {len(editable_warnings)} editable install(s) skipped:")
+                for warn in editable_warnings:
+                    print(f"  - {warn}")
+                print("Edit pyproject.toml manually to add them if needed.\n")
+            print(
+                f"Found {len(dependencies)} dependency(ies): {', '.join(dependencies)}"
+            )
+        else:
+            # Fresh start
+            print("Let's create a new pyproject.toml project.\n")
+            initial_command = None
+            while not initial_command:
+                initial_command = input(
+                    "What should the command be named? [app] "
+                ).strip()
+            if not initial_command:
+                initial_command = "app"
+
+            description = input("Description []: ").strip()
+
+            print("\nEnter dependencies (one per line, empty line to finish):")
+            print(f"  Default: {initial_command}")
+            deps: list[str] = []
+            while True:
+                dep = input("  Dependency: ").strip()
+                if not dep:
+                    break
+                deps.append(dep)
+            if not deps:
+                deps = [initial_command]
+
+            python_version = input("\nMinimum Python version [3.8]: ").strip()
+            if not python_version:
+                python_version = "3.8"
+
+            dependencies = deps
+
+        # Generate pyproject.toml
+        deps_toml = ", ".join(f'"{dep}"' for dep in dependencies)
+
+        pyproject_content = f"""[project]
+name = "{initial_command}"
+version = "0.1.0"
+description = "{description}"
+dependencies = [
+    {deps_toml},
+]
+requires-python = ">={python_version}"
+"""
+
+        pyproject_file.write_text(pyproject_content)
+        print(f"Created {PYPROJECT_TOML}")
+
+        # Create appenv bootstrap if needed
+        appenv_script = target / "appenv"
+        if not appenv_script.exists():
+            bootstrap_data = Path(__file__).read_bytes()
+            appenv_script.write_bytes(bootstrap_data)
+            appenv_script.chmod(0o755)
+            print("Created appenv bootstrap script")
+
+        # Create symlink if needed (handle broken symlinks)
+        command_link = target / initial_command
+        if command_link.is_symlink() or command_link.exists():
+            command_link.unlink(missing_ok=True)
+        command_link.symlink_to("appenv")
+        print(f"Created {initial_command} symlink")
+
+        print()
+        if migrated:
+            print("Done. pyproject.toml created, requirements.txt kept as legacy.")
+        else:
+            print("Done. pyproject.toml created.")
+        print(f"Run `./{initial_command}` to bootstrap and run.")
+
     def python(self, args, remaining):
         self.run("python", remaining)
 
@@ -364,22 +600,136 @@ class AppEnv:
         self.run(args.script, remaining)
 
     def reset(self, args=None, remaining=None):
-        print(f"Resetting ALL application environments in {self.appenv_dir} ...")
-        cmd(["rm", "-rf", str(self.appenv_dir)])
+        """Reset all virtual environments."""
+        venv = self.base / ".venv"
+        if venv.exists():
+            print(f"Removing {venv} ...")
+            shutil.rmtree(venv)
+        if self.appenv_dir.exists():
+            print(f"Resetting ALL application environments in {self.appenv_dir} ...")
+            cmd(["rm", "-rf", str(self.appenv_dir)])
 
     def update_lockfile(self, args=None, remaining=None):
-        """Update requirements.lock using uv pip compile.
+        """Update lockfile.
 
-        Editable installs (-e) are preserved exactly as written in
-        requirements.txt to maintain portability across machines.
+        For pyproject.toml: uses uv lock (native)
+        For requirements.txt: uses uv pip compile (legacy)
         """
-        if not has_uv():
-            print("ERROR: uv is required for update-lockfile.")
-            print("Install uv: curl -LsSf https://astral.sh/uv/install.sh | sh")
-            sys.exit(1)
-
-        minimal_python = find_minimal_python()
+        ensure_uv(self.base)
         os.chdir(self.base)
+
+        project_type = detect_project_type(self.base)
+
+        if project_type == "pyproject":
+            self._update_lockfile_pyproject(args)
+        elif project_type == "requirements":
+            self._update_lockfile_requirements(args)
+        else:
+            print(f"No {PYPROJECT_TOML} or {REQUIREMENTS_TXT} found.")
+            sys.exit(67)
+
+    def _update_lockfile_pyproject(self, args):
+        """Update uv.lock using uv lock (native workflow)."""
+        lock_file = self.base / UV_LOCK
+
+        # Read existing lockfile for comparison
+        old_lines: set[str] = set()
+        if lock_file.exists():
+            old_lines = set(
+                stripped
+                for line in lock_file.read_text().splitlines()
+                if (stripped := line.strip()) and not stripped.startswith("#")
+            )
+
+        if args and args.diff:
+            print("Checking lockfile changes ...")
+            old_content = lock_file.read_text() if lock_file.exists() else ""
+
+            # Run uv lock in temp directory to avoid modifying real lockfile
+            with tempfile.TemporaryDirectory() as tmpdir:
+                tmp_pyproject = Path(tmpdir) / PYPROJECT_TOML
+                tmp_lock = Path(tmpdir) / UV_LOCK
+                shutil.copy(self.base / PYPROJECT_TOML, tmp_pyproject)
+                uv_cmd(["lock"], cwd=tmpdir)
+                new_content = tmp_lock.read_text() if tmp_lock.exists() else ""
+
+            import difflib
+
+            # ANSI colors for diff
+            red = "\033[31m"
+            green = "\033[32m"
+            cyan = "\033[36m"
+            reset = "\033[0m"
+
+            diff = difflib.unified_diff(
+                old_content.splitlines(keepends=True),
+                new_content.splitlines(keepends=True),
+                fromfile=UV_LOCK,
+                tofile=f"{UV_LOCK} (new)",
+            )
+            has_changes = False
+            for line in diff:
+                has_changes = True
+                if line.startswith("---") or line.startswith("+++"):
+                    print(cyan + line + reset, end="")
+                elif line.startswith("@@"):
+                    print(cyan + line + reset, end="")
+                elif line.startswith("-"):
+                    print(red + line + reset, end="")
+                elif line.startswith("+"):
+                    print(green + line + reset, end="")
+                else:
+                    print(line, end="")
+            if not has_changes:
+                print("No changes")
+        else:
+            # Run uv lock to update
+            uv_cmd(["lock"])
+
+            # Read new content
+            new_content = lock_file.read_text() if lock_file.exists() else ""
+            new_lines = set(
+                stripped
+                for line in new_content.splitlines()
+                if (stripped := line.strip()) and not stripped.startswith("#")
+            )
+
+            # Show summary
+            added = new_lines - old_lines
+            removed = old_lines - new_lines
+            n_added = len(added)
+            n_removed = len(removed)
+
+            green = "\033[32m"
+            red = "\033[31m"
+            reset = "\033[0m"
+            check = green + "✓" + reset
+
+            if n_added == 0 and n_removed == 0:
+                print("No changes")
+            else:
+                added_str = f"{green}+{n_added}{reset}"
+                removed_str = f"{red}-{n_removed}{reset}"
+                print(f"{check} Updated ({added_str} / {removed_str} lines)")
+
+        # Also generate requirements.lock for non-uv fallback (but not in diff mode)
+        if not (args and args.diff):
+            print("Also generating requirements.lock for non-uv fallback ...")
+            compile_args = [
+                "pip",
+                "compile",
+                str(self.base / PYPROJECT_TOML),
+                "--output-file",
+                REQUIREMENTS_LOCK,
+            ]
+            minimal_python = find_minimal_python()
+            if minimal_python:
+                compile_args.extend(["--python", minimal_python])
+            uv_cmd(compile_args)
+
+    def _update_lockfile_requirements(self, args):
+        """Update requirements.lock using uv pip compile (legacy workflow)."""
+        minimal_python = find_minimal_python()
 
         # Read existing lockfile for comparison
         lock_file = Path(REQUIREMENTS_LOCK)
