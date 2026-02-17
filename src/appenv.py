@@ -77,6 +77,16 @@ def has_nix():
     return shutil.which("nix") is not None
 
 
+def verbose_print(*args, **kwargs):
+    """Print only if APPENV_VERBOSE is set.
+
+    Used for output during symlink calls (app bootstrap).
+    Meta commands (init, update-lockfile, etc.) always print.
+    """
+    if os.environ.get("APPENV_VERBOSE"):
+        print(*args, **kwargs)
+
+
 # Global cache for uv binary path
 _uv_bin_cache = None
 
@@ -109,7 +119,7 @@ def get_uv_bin(base=None):
             return str(uv_local)
 
         # Build uv with nix
-        print("Building uv with nix (one-time setup) ...")
+        verbose_print("Building uv with nix (one-time setup) ...")
         uv_out = base / ".appenv" / ".uv"
         subprocess.run(
             ["nix", "build", "nixpkgs#uv", "--out-link", str(uv_out)],
@@ -119,7 +129,7 @@ def get_uv_bin(base=None):
         return str(uv_local)
 
     # 4. pip install fallback
-    print("Installing uv via pip ...")
+    verbose_print("Installing uv via pip ...")
     subprocess.run(
         [sys.executable, "-m", "pip", "install", "-q", "uv"],
         check=True,
@@ -137,12 +147,28 @@ def ensure_uv(base=None):
     get_uv_bin(base)
 
 
-def uv_cmd(args, **kwargs):
-    """Execute uv command."""
+def uv_cmd(args, verbose=False, project=None, **kwargs):
+    """Execute uv command.
+
+    Args:
+        args: Command arguments for uv
+        verbose: If True, pass -v flag to uv for verbose output and print it
+        project: If set, pass --project <dir> to uv to restrict project discovery
+        **kwargs: Additional arguments passed to cmd()
+    """
     uv_bin = _uv_bin_cache or shutil.which("uv")
     if not uv_bin:
         raise RuntimeError("uv not found. Call ensure_uv() first.")
-    return cmd([uv_bin] + [str(arg) for arg in args], **kwargs)
+    cmd_args = [uv_bin]
+    if verbose:
+        cmd_args.append("-v")
+    if project:
+        cmd_args.extend(["--project", str(project)])
+    cmd_args.extend(str(arg) for arg in args)
+    output = cmd(cmd_args, **kwargs)
+    if verbose and output:
+        print(output.decode("utf-8", "replace"), end="")
+    return output
 
 
 def python(path: Path, c, **kwargs):
@@ -159,10 +185,10 @@ def ensure_venv(target, base=None):
         )
     ensure_uv(base)
     if target.exists():
-        print("Deleting unclean target")
+        verbose_print("Deleting unclean target")
         cmd(["rm", "-rf", str(target)])
-    print("Creating venv with uv ...")
-    uv_cmd(["venv", "--python", sys.executable, str(target)])
+    verbose_print("Creating venv with uv ...")
+    uv_cmd(["venv", "--python", sys.executable, str(target)], project=base)
 
 
 def parse_preferences():
@@ -277,6 +303,12 @@ class AppEnv:
             action="store_true",
             help="Show full diff without writing lockfile.",
         )
+        p.add_argument(
+            "-v",
+            "--verbose",
+            action="store_true",
+            help="Show detailed information about what is being done.",
+        )
         p.set_defaults(func=self.update_lockfile)
 
         p = subparsers.add_parser("init", help="Create a new appenv project.")
@@ -377,19 +409,19 @@ class AppEnv:
         # Create venv if needed or check integrity
         if not venv.exists() or not (venv / "bin" / "python").exists():
             if venv.exists():
-                print("Corrupted venv detected, removing ...")
+                verbose_print("Corrupted venv detected, removing ...")
                 shutil.rmtree(venv)
-            print("Creating venv with uv ...")
-            uv_cmd(["venv"])
+            verbose_print("Creating venv with uv ...")
+            uv_cmd(["venv"], project=self.base)
 
         # Sync dependencies (idempotent)
-        print("Syncing dependencies ...")
-        uv_cmd(["sync"])
+        verbose_print("Syncing dependencies ...")
+        uv_cmd(["sync"], project=self.base)
 
         # Cleanup old .appenv if migration is complete
         # (requirements.txt removed = user migrated intentionally)
         if old_appenv.exists() and not (self.base / REQUIREMENTS_TXT).exists():
-            print("Removing old .appenv ...")
+            verbose_print("Removing old .appenv ...")
             shutil.rmtree(old_appenv)
 
         return str(venv)
@@ -415,14 +447,14 @@ class AppEnv:
         if self.appenv_dir.exists():
             for path in self.appenv_dir.iterdir():
                 if str(path) not in whitelist:
-                    print(f"Removing expired path: {path} ...")
+                    verbose_print(f"Removing expired path: {path} ...")
                     if path.is_dir():
                         shutil.rmtree(path)
                     else:
                         path.unlink()
         if env_dir.exists():
             if not (env_dir / "appenv.ready").exists():
-                print("Existing envdir not consistent, deleting")
+                verbose_print("Existing envdir not consistent, deleting")
                 cmd(["rm", "-rf", str(env_dir)])
 
         if not env_dir.exists():
@@ -430,7 +462,7 @@ class AppEnv:
 
             (env_dir / REQUIREMENTS_LOCK).write_bytes(requirements)
 
-            print("Installing ...")
+            verbose_print("Installing ...")
             uv_cmd(
                 [
                     "pip",
@@ -530,6 +562,13 @@ class AppEnv:
             print(
                 f"Found {len(dependencies)} dependency(ies): {', '.join(dependencies)}"
             )
+
+            # Ask for project name (not command name - existing symlink is kept)
+            default_name = target.name
+            project_name = input(f"\nProject name [{default_name}]: ").strip()
+            if not project_name:
+                project_name = default_name
+            initial_command = project_name
         else:
             # Fresh start
             print("Let's create a new pyproject.toml project.\n")
@@ -584,12 +623,25 @@ requires-python = ">={python_version}"
             appenv_script.chmod(0o755)
             print("Created appenv bootstrap script")
 
-        # Create symlink if needed (handle broken symlinks)
+        # Handle symlink
         command_link = target / initial_command
-        if command_link.is_symlink() or command_link.exists():
-            command_link.unlink(missing_ok=True)
-        command_link.symlink_to("appenv")
-        print(f"Created {initial_command} symlink")
+
+        if migrated:
+            # Migration: Don't touch existing symlinks - user may have custom setup
+            if command_link.is_symlink():
+                print(f"Keeping existing {initial_command} symlink")
+            elif command_link.exists():
+                print(f"Note: {initial_command} exists but is not a symlink")
+            else:
+                # No existing symlink, create one
+                command_link.symlink_to("appenv")
+                print(f"Created {initial_command} symlink")
+        else:
+            # Fresh project: Create symlink (handle broken symlinks)
+            if command_link.is_symlink() or command_link.exists():
+                command_link.unlink(missing_ok=True)
+            command_link.symlink_to("appenv")
+            print(f"Created {initial_command} symlink")
 
         print()
         if migrated:
@@ -628,22 +680,43 @@ requires-python = ">={python_version}"
         os.chdir(self.base)
 
         project_type = detect_project_type(self.base)
+        verbose = args and getattr(args, "verbose", False)
 
+        # Show what we're doing
+        print(f"Base directory: {self.base}")
         if project_type == "pyproject":
-            self._update_lockfile_pyproject(args)
+            source_file = self.base / PYPROJECT_TOML
+            lock_file = self.base / UV_LOCK
+            print("Mode: pyproject.toml (native uv workflow)")
+            print(f"Reading: {source_file}")
+            print(f"Lockfile: {lock_file}")
         elif project_type == "requirements":
-            self._update_lockfile_requirements(args)
+            source_file = self.base / REQUIREMENTS_TXT
+            lock_file = self.base / REQUIREMENTS_LOCK
+            print("Mode: requirements.txt (legacy uv pip compile)")
+            print(f"Reading: {source_file}")
+            print(f"Lockfile: {lock_file}")
+            if verbose and source_file.exists():
+                print(f"Requirements hash: {self._hash_requirements()}")
         else:
             print(f"No {PYPROJECT_TOML} or {REQUIREMENTS_TXT} found.")
             sys.exit(67)
+        print()
 
-    def _update_lockfile_pyproject(self, args):
+        if project_type == "pyproject":
+            self._update_lockfile_pyproject(args, verbose)
+        elif project_type == "requirements":
+            self._update_lockfile_requirements(args, verbose)
+
+    def _update_lockfile_pyproject(self, args, verbose=False):
         """Update uv.lock using uv lock (native workflow)."""
         lock_file = self.base / UV_LOCK
 
         # Read existing lockfile for comparison
         old_lines: set[str] = set()
         if lock_file.exists():
+            if verbose:
+                print(f"Reading existing lockfile: {lock_file}")
             old_lines = set(
                 stripped
                 for line in lock_file.read_text().splitlines()
@@ -652,6 +725,8 @@ requires-python = ">={python_version}"
 
         if args and args.diff:
             print("Checking lockfile changes ...")
+            if verbose:
+                print("Running uv lock in temp directory (dry run)")
             old_content = lock_file.read_text() if lock_file.exists() else ""
 
             # Run uv lock in temp directory to avoid modifying real lockfile
@@ -659,7 +734,7 @@ requires-python = ">={python_version}"
                 tmp_pyproject = Path(tmpdir) / PYPROJECT_TOML
                 tmp_lock = Path(tmpdir) / UV_LOCK
                 shutil.copy(self.base / PYPROJECT_TOML, tmp_pyproject)
-                uv_cmd(["lock"], cwd=tmpdir)
+                uv_cmd(["lock"], verbose=verbose, cwd=tmpdir)
                 new_content = tmp_lock.read_text() if tmp_lock.exists() else ""
 
             import difflib
@@ -693,7 +768,9 @@ requires-python = ">={python_version}"
                 print("No changes")
         else:
             # Run uv lock to update
-            uv_cmd(["lock"])
+            if verbose:
+                print("Running: uv lock")
+            uv_cmd(["lock"], verbose=verbose, project=self.base)
 
             # Read new content
             new_content = lock_file.read_text() if lock_file.exists() else ""
@@ -723,27 +800,44 @@ requires-python = ">={python_version}"
 
         # Also generate requirements.lock for non-uv fallback (but not in diff mode)
         if not (args and args.diff):
-            print("Also generating requirements.lock for non-uv fallback ...")
+            print("Generating requirements.lock for non-uv fallback ...")
             compile_args = [
                 "pip",
                 "compile",
                 str(self.base / PYPROJECT_TOML),
+                "--no-header",
                 "--output-file",
                 REQUIREMENTS_LOCK,
             ]
             minimal_python = find_minimal_python()
             if minimal_python:
+                if verbose:
+                    print(f"Using minimal Python: {minimal_python}")
                 compile_args.extend(["--python", minimal_python])
-            uv_cmd(compile_args)
+            if verbose:
+                print(f"Running: uv {' '.join(compile_args)}")
+            # Note: pip compile doesn't need --project because input file is explicit
+            uv_cmd(compile_args, verbose=verbose)
 
-    def _update_lockfile_requirements(self, args):
+            # Prepend stable header (uv's header contains absolute paths)
+            lock_path = Path(REQUIREMENTS_LOCK)
+            if lock_path.exists():
+                lock_content = lock_path.read_text()
+                stable_header = "# Generated by appenv from pyproject.toml\n"
+                lock_path.write_text(stable_header + lock_content)
+
+    def _update_lockfile_requirements(self, args, verbose=False):
         """Update requirements.lock using uv pip compile (legacy workflow)."""
         minimal_python = find_minimal_python()
+        if verbose and minimal_python:
+            print(f"Using minimal Python: {minimal_python}")
 
         # Read existing lockfile for comparison
         lock_file = Path(REQUIREMENTS_LOCK)
         old_lines: set[str] = set()
         if lock_file.exists():
+            if verbose:
+                print(f"Reading existing lockfile: {lock_file}")
             old_lines = set(
                 stripped
                 for line in lock_file.read_text().splitlines()
@@ -756,14 +850,18 @@ requires-python = ">={python_version}"
             print("Updating lockfile with uv ...")
 
         # Separate editable installs from regular requirements
-        editable_specs = []
-        regular_lines = []
+        editable_specs: list[str] = []
+        regular_lines: list[str] = []
         for line in Path(REQUIREMENTS_TXT).read_text().splitlines():
             stripped = line.strip()
             if stripped.startswith("-e "):
                 editable_specs.append(stripped)
             elif stripped and not stripped.startswith("#"):
                 regular_lines.append(stripped)
+
+        if verbose:
+            print(f"Regular requirements: {len(regular_lines)}")
+            print(f"Editable installs: {len(editable_specs)}")
 
         # Create temp requirements without editables for uv
         tmp_fd, tmp_requirements = tempfile.mkstemp(suffix=".txt", text=True)
@@ -779,12 +877,16 @@ requires-python = ">={python_version}"
                 "pip",
                 "compile",
                 tmp_requirements,
+                "--no-header",
                 "--output-file",
                 tmp_lock,
             ]
             if minimal_python:
                 compile_args.extend(["--python", minimal_python])
-            uv_cmd(compile_args)
+            if verbose:
+                print(f"Running: uv {' '.join(compile_args)}")
+            # Note: pip compile doesn't need --project because input file is explicit
+            uv_cmd(compile_args, verbose=verbose)
 
             # Read compiled content
             compiled = Path(tmp_lock).read_text()
