@@ -669,15 +669,17 @@ class AppEnv:
             dependencies = deps
 
         # Generate pyproject.toml
-        deps_toml = ", ".join(f'"{dep}"' for dep in dependencies)
+        if dependencies:
+            deps_toml = ",\n    ".join(f'"{dep}"' for dep in dependencies)
+            deps_block = f"[\n    {deps_toml},\n]"
+        else:
+            deps_block = "[]"
 
         pyproject_content = f"""[project]
 name = "{initial_command}"
 version = "0.1.0"
 description = "{description}"
-dependencies = [
-    {deps_toml},
-]
+dependencies = {deps_block}
 requires-python = ">={python_version}"
 """
 
@@ -724,7 +726,10 @@ requires-python = ">={python_version}"
             print("Done. pyproject.toml created, requirements.txt kept as legacy.")
         else:
             print("Done. pyproject.toml created.")
-        print(f"Run `./{initial_command}` to bootstrap and run.")
+        print()
+        print("Next steps:")
+        print(f"  1. Run `./appenv update-lockfile` to create uv.lock")
+        print(f"  2. Run `./{initial_command}` to bootstrap and run")
 
     def python(self, args, remaining):
         self.run("python", remaining)
