@@ -422,8 +422,7 @@ class AppEnv:
         verbose_print(f"uv.lock: {lock_file}")
         verbose_print(f"venv: {venv}")
         verbose_print(f"uv binary: {get_uv_bin(self.base)}")
-        verbose_print(f"Python: {sys.executable}")
-        verbose_print(f"Python (realpath): {Path(sys.executable).resolve()}")
+        verbose_print(f"Python: {Path(sys.executable).resolve()}")
 
         # Show python version info
         if python_version_file.exists():
@@ -450,7 +449,7 @@ class AppEnv:
             verbose_print(f"Venv Python version: {result.decode().strip()}")
 
         # Sync dependencies (idempotent)
-        verbose_print("Syncing dependencies ...")
+        verbose_print("Syncing dependencies (uv sync) ...")
         uv_cmd(["sync"], project=self.base)
 
         # Cleanup old .appenv if migration is complete
@@ -468,8 +467,7 @@ class AppEnv:
         self._assert_requirements_lock()
 
         verbose_print(f"Project base: {self.base}")
-        verbose_print(f"Python: {sys.executable}")
-        verbose_print(f"Python (realpath): {Path(sys.executable).resolve()}")
+        verbose_print(f"Python: {Path(sys.executable).resolve()}")
         verbose_print(f"uv binary: {get_uv_bin(self.base)}")
 
         requirements = Path(REQUIREMENTS_LOCK).read_bytes()
@@ -504,7 +502,7 @@ class AppEnv:
 
             (env_dir / REQUIREMENTS_LOCK).write_bytes(requirements)
 
-            verbose_print("Installing ...")
+            verbose_print("Installing dependencies (uv pip sync) ...")
             uv_cmd(
                 [
                     "pip",
