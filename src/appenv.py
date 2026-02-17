@@ -25,6 +25,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import cast
 
 # Constants
 REQUIREMENTS_TXT = "requirements.txt"
@@ -55,14 +56,9 @@ def find_available_pythons():
 
     Returns list of (version_str, path) tuples, sorted by version (newest first).
     """
-    pythons = []
-    for i in range(4, 20):  # Python 3.4 to 3.19
-        version = f"3.{i}"
-        path = shutil.which(f"python{version}")
-        if path:
-            pythons.append((version, path))
-
-    # Sort by version, newest first
+    pythons = [
+        (f"3.{i}", path) for i in range(4, 20) if (path := shutil.which(f"python3.{i}"))
+    ]
     pythons.sort(key=lambda x: [int(p) for p in x[0].split(".")], reverse=True)
     return pythons
 
@@ -150,15 +146,10 @@ class TColors:
 
 def cmd(c, merge_stderr=True, quiet=False, cwd=None):
     try:
-        kwargs = {}
-        if isinstance(c, str):
-            kwargs["shell"] = True
-            c = [c]
-        if merge_stderr:
-            kwargs["stderr"] = subprocess.STDOUT
-        if cwd:
-            kwargs["cwd"] = cwd
-        return subprocess.check_output(c, **kwargs)
+        is_shell = isinstance(c, str)
+        cmd_list = cast("list[str]", [c] if is_shell else c)
+        stderr = subprocess.STDOUT if merge_stderr else None
+        return subprocess.check_output(cmd_list, shell=is_shell, stderr=stderr, cwd=cwd)
     except subprocess.CalledProcessError as e:
         print(f"{c} returned with exit code {e.returncode}")
         print(e.output.decode("utf-8", "replace"))
@@ -345,19 +336,14 @@ def ensure_venv(target, base=None):
 
 
 def parse_preferences():
-    preferences = None
     req_file = Path(REQUIREMENTS_TXT)
-    if req_file.exists():
-        for line in req_file.read_text().splitlines():
-            # Expected format:
-            # # appenv-python-preference: 3.1,3.9,3.4
-            if not line.startswith("# appenv-python-preference: "):
-                continue
-            preferences = line.split(":")[1]
-            preferences = [x.strip() for x in preferences.split(",")]
-            preferences = list(filter(None, preferences))
-            break
-    return preferences
+    if not req_file.exists():
+        return None
+    for line in req_file.read_text().splitlines():
+        if line.startswith("# appenv-python-preference: "):
+            raw = line.split(":")[1]
+            return [x.strip() for x in raw.split(",") if x.strip()]
+    return None
 
 
 def find_minimal_python():
@@ -518,11 +504,14 @@ class AppEnv:
             )
             sys.exit(67)
 
-        locked_hash = None
-        for line in lock_file.read_text().splitlines():
-            if line.startswith("# appenv-requirements-hash: "):
-                locked_hash = line.split(":")[1].strip()
-                break
+        locked_hash = next(
+            (
+                line.split(":")[1].strip()
+                for line in lock_file.read_text().splitlines()
+                if line.startswith("# appenv-requirements-hash: ")
+            ),
+            None,
+        )
         if locked_hash != self._hash_requirements():
             print(
                 f"{REQUIREMENTS_TXT} seems out of date (hash mismatch). "
@@ -735,27 +724,16 @@ class AppEnv:
             # Migration mode
             print("Migrating from requirements.txt to pyproject.toml...\n")
             deps_content = requirements_file.read_text().strip()
-            editable_warnings = []
 
-            # Parse python preference from requirements.txt
-            preferences = None
-            if deps_content:
-                for line in deps_content.splitlines():
-                    if line.startswith("# appenv-python-preference: "):
-                        preferences = line.split(":")[1]
-                        preferences = [x.strip() for x in preferences.split(",")]
-                        preferences = list(filter(None, preferences))
-                        break
+            # Parse dependencies - separate editable from regular
+            all_deps = [
+                line.strip()
+                for line in deps_content.splitlines()
+                if line.strip() and not line.strip().startswith("#")
+            ]
+            dependencies = [d for d in all_deps if not d.startswith("-e ")]
+            editable_warnings = [d for d in all_deps if d.startswith("-e ")]
 
-            if deps_content:
-                for line in deps_content.splitlines():
-                    stripped = line.strip()
-                    if stripped and not stripped.startswith("#"):
-                        if stripped.startswith("-e "):
-                            # Handle editable installs - warn and skip
-                            editable_warnings.append(stripped)
-                        else:
-                            dependencies.append(stripped)
             if editable_warnings:
                 print(f"Warning: {len(editable_warnings)} editable install(s) skipped:")
                 for warn in editable_warnings:
@@ -766,6 +744,7 @@ class AppEnv:
             )
 
             # Set python version from preferences
+            preferences = parse_preferences()
             if preferences:
                 # Sort to get minimal version
                 preferences_sorted = sorted(
@@ -796,20 +775,18 @@ class AppEnv:
 
             print("\nEnter dependencies (one per line, empty line to finish):")
             print(f"  Default: {initial_command}")
-            deps = []
+            dependencies = []
             while True:
                 dep = input("  Dependency: ").strip()
                 if not dep:
                     break
-                deps.append(dep)
-            if not deps:
-                deps = [initial_command]
+                dependencies.append(dep)
+            if not dependencies:
+                dependencies = [initial_command]
 
             python_version = input("\nMinimum Python version [3.8]: ").strip()
             if not python_version:
                 python_version = "3.8"
-
-            dependencies = deps
 
         # Generate pyproject.toml
         if dependencies:
@@ -840,10 +817,11 @@ requires-python = ">={python_version}"
         # Handle symlink
         if migrated:
             # Migration: Find existing symlinks to appenv, don't touch anything
-            existing_symlinks = []
-            for path in target.iterdir():
-                if path.is_symlink() and path.resolve() == appenv_script.resolve():
-                    existing_symlinks.append(path.name)
+            existing_symlinks = [
+                path.name
+                for path in target.iterdir()
+                if path.is_symlink() and path.resolve() == appenv_script.resolve()
+            ]
 
             if existing_symlinks:
                 print(f"Found existing symlink(s): {', '.join(existing_symlinks)}")
@@ -1080,14 +1058,13 @@ requires-python = ">={python_version}"
             print("Updating lockfile with uv ...")
 
         # Separate editable installs from regular requirements
-        editable_specs = []
-        regular_lines = []
-        for line in Path(REQUIREMENTS_TXT).read_text().splitlines():
-            stripped = line.strip()
-            if stripped.startswith("-e "):
-                editable_specs.append(stripped)
-            elif stripped and not stripped.startswith("#"):
-                regular_lines.append(stripped)
+        all_reqs = [
+            line.strip()
+            for line in Path(REQUIREMENTS_TXT).read_text().splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        ]
+        editable_specs = [r for r in all_reqs if r.startswith("-e ")]
+        regular_lines = [r for r in all_reqs if not r.startswith("-e ")]
 
         if verbose:
             print(f"Regular requirements: {len(regular_lines)}")
