@@ -389,6 +389,8 @@ class AppEnv:
 
         project_type = detect_project_type(self.base)
 
+        verbose_print(f"Mode: {project_type}")
+
         if project_type == "pyproject":
             return self._prepare_pyproject()
         elif project_type == "requirements":
@@ -405,6 +407,8 @@ class AppEnv:
         python_version_file = self.base / ".python-version"
         pyproject_file = self.base / PYPROJECT_TOML
 
+        verbose_print("Workflow: pyproject.toml (uv native)")
+
         # Ensure uv.lock exists
         if not lock_file.exists():
             print(f"No {UV_LOCK} found. Run: ./appenv update-lockfile")
@@ -418,6 +422,8 @@ class AppEnv:
         verbose_print(f"uv.lock: {lock_file}")
         verbose_print(f"venv: {venv}")
         verbose_print(f"uv binary: {get_uv_bin(self.base)}")
+        verbose_print(f"Python: {sys.executable}")
+        verbose_print(f"Python (realpath): {Path(sys.executable).resolve()}")
 
         # Show python version info
         if python_version_file.exists():
@@ -460,7 +466,14 @@ class AppEnv:
 
     def _prepare_requirements(self):
         """Prepare environment for requirements.txt using legacy workflow."""
+        verbose_print("Workflow: requirements.txt (legacy)")
+
         self._assert_requirements_lock()
+
+        verbose_print(f"Project base: {self.base}")
+        verbose_print(f"Python: {sys.executable}")
+        verbose_print(f"Python (realpath): {Path(sys.executable).resolve()}")
+        verbose_print(f"uv binary: {get_uv_bin(self.base)}")
 
         requirements = Path(REQUIREMENTS_LOCK).read_bytes()
         hash_content = [
