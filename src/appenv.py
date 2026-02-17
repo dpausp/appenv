@@ -545,6 +545,17 @@ class AppEnv:
             print("Migrating from requirements.txt to pyproject.toml...\n")
             deps_content = requirements_file.read_text().strip()
             editable_warnings = []
+
+            # Parse python preference from requirements.txt
+            preferences = None
+            if deps_content:
+                for line in deps_content.splitlines():
+                    if line.startswith("# appenv-python-preference: "):
+                        preferences = line.split(":")[1]
+                        preferences = [x.strip() for x in preferences.split(",")]
+                        preferences = list(filter(None, preferences))
+                        break
+
             if deps_content:
                 for line in deps_content.splitlines():
                     stripped = line.strip()
@@ -562,6 +573,16 @@ class AppEnv:
             print(
                 f"Found {len(dependencies)} dependency(ies): {', '.join(dependencies)}"
             )
+
+            # Set python version from preferences
+            if preferences:
+                # Sort to get minimal version
+                preferences_sorted = sorted(
+                    preferences, key=lambda s: [int(u) for u in s.split(".")]
+                )
+                python_version = preferences_sorted[0]
+                print(f"Found python preference: {', '.join(preferences)}")
+                print(f"Using minimum version: {python_version}")
 
             # Ask for project name (not command name - existing symlink is kept)
             default_name = target.name

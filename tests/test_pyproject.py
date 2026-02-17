@@ -156,3 +156,32 @@ def test_prepare_exits_without_project_files(tmpdir, monkeypatch, capsys):
     assert err.value.code == 67
     captured = capsys.readouterr()
     assert "pyproject.toml" in captured.out or "requirements.txt" in captured.out
+
+
+def test_init_pyproject_uses_python_preference_from_requirements(
+    tmpdir, monkeypatch, capsys
+):
+    """init-pyproject migration reads python preference from requirements.txt."""
+    monkeypatch.chdir(tmpdir)
+    base = Path(tmpdir)
+
+    # Create requirements.txt with python preference
+    (base / "requirements.txt").write_text(
+        "# appenv-python-preference: 3.12,3.13,3.14\nrequests\n"
+    )
+
+    # Mock input to use defaults
+    inputs = iter(["test-project"])  # project name
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.init_pyproject()
+
+    # Check that pyproject.toml has the correct python version
+    pyproject = (base / "pyproject.toml").read_text()
+    assert 'requires-python = ">=3.12"' in pyproject
+
+    # Check output mentions the preference
+    captured = capsys.readouterr()
+    assert "python preference" in captured.out
+    assert "3.12" in captured.out
