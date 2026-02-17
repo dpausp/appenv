@@ -119,10 +119,8 @@ dependencies = ["requests"]
 
     captured_calls = []
 
-    def mock_uv_cmd(args, verbose=False, project=None, **kwargs):
-        captured_calls.append(
-            {"args": list(args), "project": project, "cwd": kwargs.get("cwd")}
-        )
+    def mock_uv_cmd(args, verbose=False, **kwargs):
+        captured_calls.append({"args": list(args), "cwd": kwargs.get("cwd")})
         # Simulate successful pip compile output
         if "compile" in args:
             output_file = args[args.index("--output-file") + 1]
@@ -155,10 +153,11 @@ dependencies = ["requests"]
     assert (subdir / "requirements.lock").exists()
 
 
-def test_update_lockfile_pyproject_uses_project_flag(workdir, monkeypatch, capsys):
-    """pyproject.toml mode should pass --project to uv to prevent upward search.
+def test_update_lockfile_pyproject_workflow(workdir, monkeypatch, capsys):
+    """pyproject.toml mode should use uv lock and create uv.lock.
 
-    This ensures uv only looks in the appenv's directory, not parent directories.
+    The working directory is set correctly via os.chdir, so uv finds
+    the correct pyproject.toml without needing --project flag.
     """
     # Create directory with pyproject.toml
     app_dir = Path(workdir) / "myapp"
@@ -179,10 +178,8 @@ dependencies = ["click"]
 
     captured_calls = []
 
-    def mock_uv_cmd(args, verbose=False, project=None, **kwargs):
-        captured_calls.append(
-            {"args": list(args), "project": project, "cwd": kwargs.get("cwd")}
-        )
+    def mock_uv_cmd(args, verbose=False, **kwargs):
+        captured_calls.append({"args": list(args), "cwd": kwargs.get("cwd")})
         # Simulate uv lock output
         if "lock" in args and "pip" not in args:
             (app_dir / "uv.lock").write_text("version = 1\n")
@@ -204,10 +201,10 @@ dependencies = ["click"]
     # Verify uv.lock was created
     assert (app_dir / "uv.lock").exists()
 
-    # Verify --project flag was passed to uv with correct directory
-    lock_calls = [call for call in captured_calls if "lock" in call["args"]]
+    # Verify uv lock was called
+    lock_calls = [
+        call
+        for call in captured_calls
+        if "lock" in call["args"] and "pip" not in call["args"]
+    ]
     assert len(lock_calls) >= 1, "Expected at least one uv lock call"
-    for call in lock_calls:
-        assert str(call["project"]) == str(app_dir), (
-            f"Expected project={app_dir}, got {call['project']}"
-        )

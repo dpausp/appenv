@@ -57,8 +57,9 @@ def test_prepare_pyproject_creates_venv(tmpdir, monkeypatch):
     result = env._prepare_pyproject()
 
     assert result == str(base / ".venv")
-    assert ("venv",) in [tuple(c) for c in uv_calls]
-    assert ("sync",) in [tuple(c) for c in uv_calls]
+    # venv command should be called with path argument
+    assert any("venv" in c for c in uv_calls), f"Expected venv call, got {uv_calls}"
+    assert any("sync" in c for c in uv_calls), f"Expected sync call, got {uv_calls}"
 
 
 def test_prepare_pyproject_cleanup_old_appenv(tmpdir, monkeypatch):

@@ -147,13 +147,12 @@ def ensure_uv(base=None):
     get_uv_bin(base)
 
 
-def uv_cmd(args, verbose=False, project=None, **kwargs):
+def uv_cmd(args, verbose=False, **kwargs):
     """Execute uv command.
 
     Args:
         args: Command arguments for uv
         verbose: If True, pass -v flag to uv for verbose output and print it
-        project: If set, pass --project <dir> to uv to restrict project discovery
         **kwargs: Additional arguments passed to cmd()
     """
     uv_bin = _uv_bin_cache or shutil.which("uv")
@@ -162,8 +161,6 @@ def uv_cmd(args, verbose=False, project=None, **kwargs):
     cmd_args = [uv_bin]
     if verbose:
         cmd_args.append("-v")
-    if project:
-        cmd_args.extend(["--project", str(project)])
     cmd_args.extend(str(arg) for arg in args)
 
     # Show command if APPENV_VERBOSE is set
@@ -192,7 +189,8 @@ def ensure_venv(target, base=None):
         verbose_print("Deleting unclean target")
         cmd(["rm", "-rf", str(target)])
     verbose_print("Creating venv with uv ...")
-    uv_cmd(["venv", "--python", sys.executable, str(target)], project=base)
+    # Note: venv doesn't need --project, explicit python path is given
+    uv_cmd(["venv", "--python", sys.executable, str(target)])
 
 
 def parse_preferences():
@@ -438,11 +436,12 @@ class AppEnv:
                 verbose_print("Corrupted venv detected, removing ...")
                 shutil.rmtree(venv)
             verbose_print("Creating venv with uv ...")
-            uv_cmd(["venv"], project=self.base)
+            # Note: venv doesn't need --project, it uses current directory
+            uv_cmd(["venv", str(venv)])
 
         # Sync dependencies (idempotent) - may update venv python version
         verbose_print("Syncing dependencies (uv sync) ...")
-        uv_cmd(["sync"], project=self.base)
+        uv_cmd(["sync"])
 
         # Show venv python info AFTER sync (version may have changed)
         venv_python = venv / "bin" / "python"
@@ -851,7 +850,7 @@ requires-python = ">={python_version}"
             # Run uv lock to update
             if verbose:
                 print("Running: uv lock")
-            uv_cmd(["lock"], verbose=verbose, project=self.base)
+            uv_cmd(["lock"], verbose=verbose)
 
             # Read new content
             new_content = lock_file.read_text() if lock_file.exists() else ""
