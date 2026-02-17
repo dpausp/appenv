@@ -728,7 +728,7 @@ requires-python = ">={python_version}"
             print("Done. pyproject.toml created.")
         print()
         print("Next steps:")
-        print(f"  1. Run `./appenv update-lockfile` to create uv.lock")
+        print("  1. Run `./appenv update-lockfile` to create uv.lock")
         print(f"  2. Run `./{initial_command}` to bootstrap and run")
 
     def python(self, args, remaining):
@@ -872,12 +872,16 @@ requires-python = ">={python_version}"
             reset = "\033[0m"
             check = green + "✓" + reset
 
-            if n_added == 0 and n_removed == 0:
+            is_new = len(old_lines) == 0
+            if n_added == 0 and n_removed == 0 and not is_new:
                 print("No changes")
             else:
                 added_str = f"{green}+{n_added}{reset}"
                 removed_str = f"{red}-{n_removed}{reset}"
-                print(f"{check} Updated ({added_str} / {removed_str} lines)")
+                if is_new:
+                    print(f"{check} Created ({added_str} lines)")
+                else:
+                    print(f"{check} Updated ({added_str} / {removed_str} lines)")
 
         # Also generate requirements.lock for non-uv fallback (but not in diff mode)
         if not (args and args.diff):
@@ -1032,12 +1036,16 @@ requires-python = ">={python_version}"
                 reset = "\033[0m"
                 check = green + "✓" + reset
 
-                if n_added == 0 and n_removed == 0:
+                is_new = len(old_lines) == 0
+                if n_added == 0 and n_removed == 0 and not is_new:
                     print("No changes")
                 else:
                     added_str = f"{green}+{n_added}{reset}"
                     removed_str = f"{red}-{n_removed}{reset}"
-                    print(f"{check} Updated ({added_str} / {removed_str} lines)")
+                    if is_new:
+                        print(f"{check} Created ({added_str} lines)")
+                    else:
+                        print(f"{check} Updated ({added_str} / {removed_str} lines)")
         finally:
             Path(tmp_requirements).unlink(missing_ok=True)
             Path(tmp_lock).unlink(missing_ok=True)
