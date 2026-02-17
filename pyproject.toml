@@ -62,11 +62,13 @@ skip_missing_interpreters = true
 package = "wheel"
 runner = "uv-venv-lock-runner"
 setenv = {APPENV_BEST_PYTHON = "{envpython}"}
+depends = ["fix"]
 dependency_groups = ["test"]
 commands = [["pytest"]]
 
 [tool.tox.env.fix]
 skip_install = true
+depends = []
 description = "Format, lint, fix whitespace, type-check"
 dependency_groups = ["test", "lint"]
 commands = [
