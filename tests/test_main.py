@@ -96,14 +96,30 @@ def test_uv_cmd_raises_when_uv_not_found(monkeypatch):
         appenv.uv_cmd(["--version"])
 
 
-def test_has_uv_returns_true(monkeypatch):
-    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/uv")
-    assert appenv.has_uv() is True
+def test_get_uv_bin_uses_path(monkeypatch):
+    """get_uv_bin returns uv from PATH if available."""
+    appenv._uv_bin_cache = None  # Reset cache
+    monkeypatch.setattr(
+        "shutil.which", lambda name: "/usr/bin/uv" if name == "uv" else None
+    )
+    assert appenv.get_uv_bin() == "/usr/bin/uv"
 
 
-def test_has_uv_returns_false(monkeypatch):
-    monkeypatch.setattr("shutil.which", lambda name: None)
-    assert appenv.has_uv() is False
+def test_get_uv_bin_uses_pip_fallback(monkeypatch, tmpdir):
+    """get_uv_bin installs uv via pip if not in PATH and no nix."""
+    appenv._uv_bin_cache = None  # Reset cache
+    monkeypatch.setattr("shutil.which", lambda name: None)  # no uv, no nix
+
+    pip_called = []
+    monkeypatch.setattr(
+        "subprocess.run",
+        lambda cmd, **kwargs: pip_called.append(cmd),
+    )
+
+    with pytest.raises(RuntimeError, match="uv not found"):
+        appenv.get_uv_bin(Path(tmpdir))
+
+    assert any("pip" in str(cmd) and "uv" in str(cmd) for cmd in pip_called)
 
 
 # ensure_best_python() tests
@@ -267,23 +283,41 @@ def test_assert_requirements_lock_hash_mismatch_exits(monkeypatch, tmpdir, capsy
 # update_lockfile() tests
 
 
-def test_update_lockfile_without_uv_exits(monkeypatch, tmpdir, capsys):
+def test_update_lockfile_without_uv_installs_it(monkeypatch, tmpdir, capsys):
+    """When uv is not available, ensure_uv installs it via pip."""
     monkeypatch.chdir(tmpdir)
-    monkeypatch.setattr(appenv, "has_uv", lambda: False)
+    monkeypatch.setattr("shutil.which", lambda name: None)  # no uv, no nix
+
+    pip_install_called = []
+    monkeypatch.setattr(
+        "subprocess.run",
+        lambda cmd, **kwargs: pip_install_called.append(cmd),
+    )
 
     env = appenv.AppEnv(Path(tmpdir), Path.cwd())
 
-    with pytest.raises(SystemExit) as err:
-        env.update_lockfile()
+    # Reset uv cache
+    appenv._uv_bin_cache = None
 
-    assert err.value.code == 1
-    captured = capsys.readouterr()
-    assert "uv is required" in captured.out
+    # Mock uv_cmd to avoid actual execution
+    monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: None)
+    monkeypatch.setattr(appenv, "find_minimal_python", lambda: None)
+
+    (tmpdir / "requirements.txt").write("requests\n")
+
+    # This should try to install uv via pip
+    try:
+        env.update_lockfile()
+    except RuntimeError:
+        # Expected: uv not found (mocked)
+        pass
+
+    assert any("pip" in str(cmd) and "uv" in str(cmd) for cmd in pip_install_called)
 
 
 def test_update_lockfile_preserves_editable_installs(monkeypatch, tmpdir):
     monkeypatch.chdir(tmpdir)
-    monkeypatch.setattr(appenv, "has_uv", lambda: True)
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
     monkeypatch.setattr(appenv, "find_minimal_python", lambda: None)
 
     (tmpdir / "requirements.txt").write("-e /path/to/local/pkg\nrequests\n")

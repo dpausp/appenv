@@ -32,7 +32,7 @@ def test_init_and_create_lockfile(workdir, monkeypatch):
 def test_update_lockfile_uses_minimal_python(workdir, monkeypatch):
     """It uses the minimal python version from preferences for lockfile."""
     monkeypatch.setattr("sys.stdin", io.StringIO("httpie\nhttpie\nmyapp\n"))
-    monkeypatch.setattr(appenv, "has_uv", lambda: True)
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
 
     env = appenv.AppEnv(Path(workdir) / "myapp", Path.cwd())
     env.init()
