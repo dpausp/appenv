@@ -10,7 +10,6 @@ resolution-markers = [
 
 [[package]]
 name = "appenv"
-version = "0.2.dev0"
 source = { editable = "." }
 
 [package.dev-dependencies]

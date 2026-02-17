@@ -11,8 +11,10 @@
 
 # TODO
 #
-# - provide a `clone` meta command to create a new project based on this one
-#   maybe use an entry point to allow further initialisation of the clone.
+#   - provide a `clone` meta command to create a new project based on this one
+#     maybe use an entry point to allow further initialisation of the clone.
+
+__version__ = "2026.2.0"
 
 import argparse
 import hashlib
@@ -604,13 +606,7 @@ requires-python = ">={python_version}"
 
     def show_version(self, args=None, remaining=None):
         """Show appenv version."""
-        from importlib.metadata import version
-
-        try:
-            v = version("appenv")
-        except Exception:
-            v = "unknown"
-        print(f"appenv {v}")
+        print(f"appenv {__version__}")
 
     def reset(self, args=None, remaining=None):
         """Reset all virtual environments."""
