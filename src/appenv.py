@@ -19,6 +19,7 @@ __version__ = "2026.2.0"
 import argparse
 import hashlib
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -30,6 +31,98 @@ REQUIREMENTS_TXT = "requirements.txt"
 REQUIREMENTS_LOCK = "requirements.lock"
 PYPROJECT_TOML = "pyproject.toml"
 UV_LOCK = "uv.lock"
+
+
+def parse_requires_python(pyproject_path: Path) -> str | None:
+    """Parse requires-python from pyproject.toml.
+
+    Returns the minimum version string like "3.8" or None if not found.
+    Only handles simple >=X.Y format for now.
+    """
+    if not pyproject_path.exists():
+        return None
+
+    content = pyproject_path.read_text()
+    # Look for requires-python = ">=X.Y" or similar
+    match = re.search(r'requires-python\s*=\s*["\']>=?(\d+\.\d+)', content)
+    if match:
+        return match.group(1)
+    return None
+
+
+def find_available_pythons() -> list[tuple[str, str]]:
+    """Find all available Python versions in PATH.
+
+    Returns list of (version_str, path) tuples, sorted by version (newest first).
+    """
+    pythons = []
+    for i in range(4, 20):  # Python 3.4 to 3.19
+        version = f"3.{i}"
+        path = shutil.which(f"python{version}")
+        if path:
+            pythons.append((version, path))
+
+    # Sort by version, newest first
+    pythons.sort(key=lambda x: [int(p) for p in x[0].split(".")], reverse=True)
+    return pythons
+
+
+def ensure_best_python_for_pyproject(base: Path):
+    """Ensure best Python for pyproject.toml workflow.
+
+    Reads requires-python from pyproject.toml and selects the newest
+    available Python that satisfies the constraint.
+    """
+    os.chdir(base)
+
+    if "APPENV_BEST_PYTHON" in os.environ:
+        return
+
+    pyproject_path = base / PYPROJECT_TOML
+    min_version = parse_requires_python(pyproject_path)
+
+    if min_version is None:
+        # No constraint, use default (newest available)
+        min_version = "3.8"
+
+    available = find_available_pythons()
+    current_python = str(Path(sys.executable).resolve())
+
+    for version, path in available:
+        # Check if version satisfies >= min_version
+        min_parts = [int(p) for p in min_version.split(".")]
+        ver_parts = [int(p) for p in version.split(".")]
+
+        if ver_parts < min_parts:
+            # Too old, skip
+            continue
+
+        path = str(Path(path).resolve())
+        if path == current_python:
+            # Already running this version
+            return
+
+        # Try whether this Python works
+        try:
+            subprocess.check_call(
+                [path, "-c", "print(1)"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except subprocess.CalledProcessError:
+            continue
+
+        # Re-exec with this Python
+        argv = [Path(path).name] + sys.argv
+        os.environ["APPENV_BEST_PYTHON"] = path
+        os.execv(path, argv)
+
+    # No suitable Python found
+    print(f"Could not find Python >= {min_version}")
+    print("Available versions:")
+    for version, path in available:
+        print(f"  python{version}: {path}")
+    sys.exit(65)
 
 
 def detect_project_type(base: Path):
@@ -460,7 +553,6 @@ class AppEnv:
         venv = self.base / ".venv"
         lock_file = self.base / UV_LOCK
         old_appenv = self.appenv_dir
-        python_version_file = self.base / ".python-version"
         pyproject_file = self.base / PYPROJECT_TOML
 
         verbose_print("Workflow: pyproject.toml (uv native)")
@@ -481,25 +573,17 @@ class AppEnv:
         verbose_print(f"uv binary: {get_uv_bin(self.base)}")
         verbose_print(f"Python: {Path(sys.executable).resolve()}")
 
-        # Show python version info
-        if python_version_file.exists():
-            verbose_print(
-                f"Using .python-version: {python_version_file.read_text().strip()}"
-            )
-        else:
-            verbose_print("No .python-version file found")
-
         # Create venv if needed or check integrity
         if not venv.exists() or not (venv / "bin" / "python").exists():
             if venv.exists():
                 verbose_print("Corrupted venv detected, removing ...")
                 shutil.rmtree(venv)
             verbose_print("Creating venv with uv ...")
-            # Use current Python explicitly to avoid uv downloading its own
-            # (breaks on NixOS where downloaded binaries don't run)
+            # Use current Python (already selected by ensure_best_python_for_pyproject)
+            # Explicit path avoids uv downloading its own (breaks on NixOS)
             uv_cmd(["venv", "--python", sys.executable, str(venv)])
 
-        # Sync dependencies (idempotent) - may update venv python version
+        # Sync dependencies (idempotent)
         verbose_print("Syncing dependencies (uv sync) ...")
         uv_cmd(["sync"])
 
@@ -1116,7 +1200,13 @@ def main():
     base = Path(__file__).parent
     original_cwd = Path.cwd()
 
-    ensure_best_python(base)
+    # Select best Python based on project type
+    project_type = detect_project_type(base)
+    if project_type == "pyproject":
+        ensure_best_python_for_pyproject(base)
+    else:
+        ensure_best_python(base)
+
     # clear PYTHONPATH variable to get a defined environment
     # XXX this is a bit of history. not sure whether its still needed. keeping
     # it for good measure
