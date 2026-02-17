@@ -33,7 +33,7 @@ PYPROJECT_TOML = "pyproject.toml"
 UV_LOCK = "uv.lock"
 
 
-def parse_requires_python(pyproject_path: Path) -> str | None:
+def parse_requires_python(pyproject_path: Path):
     """Parse requires-python from pyproject.toml.
 
     Returns the minimum version string like "3.8" or None if not found.
@@ -50,7 +50,7 @@ def parse_requires_python(pyproject_path: Path) -> str | None:
     return None
 
 
-def find_available_pythons() -> list[tuple[str, str]]:
+def find_available_pythons():
     """Find all available Python versions in PATH.
 
     Returns list of (version_str, path) tuples, sorted by version (newest first).
@@ -187,7 +187,7 @@ _uv_bin_cache = None
 UV_MIN_VERSION = (0, 5, 0)
 
 
-def parse_uv_version(version_str: str) -> tuple[int, int, int]:
+def parse_uv_version(version_str):
     """Parse uv version string like '0.5.11' to tuple."""
     # Remove leading 'v' if present
     version_str = version_str.lstrip("v")
@@ -198,7 +198,7 @@ def parse_uv_version(version_str: str) -> tuple[int, int, int]:
         return (0, 0, 0)
 
 
-def check_uv_version() -> tuple[int, int, int]:
+def check_uv_version():
     """Check uv version and return version tuple.
 
     Exits with error if version is too old.
