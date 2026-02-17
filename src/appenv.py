@@ -440,17 +440,17 @@ class AppEnv:
             verbose_print("Creating venv with uv ...")
             uv_cmd(["venv"], project=self.base)
 
-        # Show current venv python version
+        # Sync dependencies (idempotent) - may update venv python version
+        verbose_print("Syncing dependencies (uv sync) ...")
+        uv_cmd(["sync"], project=self.base)
+
+        # Show venv python info AFTER sync (version may have changed)
         venv_python = venv / "bin" / "python"
         if venv_python.exists():
             verbose_print(f"Venv Python: {venv_python}")
             verbose_print(f"Venv Python (realpath): {venv_python.resolve()}")
             result = cmd([str(venv_python), "--version"], quiet=True)
             verbose_print(f"Venv Python version: {result.decode().strip()}")
-
-        # Sync dependencies (idempotent)
-        verbose_print("Syncing dependencies (uv sync) ...")
-        uv_cmd(["sync"], project=self.base)
 
         # Cleanup old .appenv if migration is complete
         # (requirements.txt removed = user migrated intentionally)
