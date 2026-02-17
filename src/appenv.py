@@ -90,6 +90,61 @@ def verbose_print(*args, **kwargs):
 # Global cache for uv binary path
 _uv_bin_cache = None
 
+# Minimum uv version required for pyproject workflow
+UV_MIN_VERSION = (0, 5, 0)
+
+
+def parse_uv_version(version_str: str) -> tuple[int, int, int]:
+    """Parse uv version string like '0.5.11' to tuple."""
+    # Remove leading 'v' if present
+    version_str = version_str.lstrip("v")
+    parts = version_str.split(".")
+    try:
+        return (int(parts[0]), int(parts[1]), int(parts[2]) if len(parts) > 2 else 0)
+    except (ValueError, IndexError):
+        return (0, 0, 0)
+
+
+def check_uv_version() -> tuple[int, int, int]:
+    """Check uv version and return version tuple.
+
+    Exits with error if version is too old.
+    """
+    uv_bin = _uv_bin_cache or shutil.which("uv")
+    if not uv_bin:
+        raise RuntimeError("uv not found")
+
+    try:
+        result = subprocess.run(
+            [uv_bin, "--version"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        # Output format: "uv 0.10.3 (c75a0c625 2026-02-16)"
+        version_str = result.stdout.strip().split()[1]
+        version = parse_uv_version(version_str)
+
+        if version < UV_MIN_VERSION:
+            min_str = ".".join(str(v) for v in UV_MIN_VERSION)
+            print(f"Error: uv version {version_str} is too old.")
+            print(f"Minimum required version: {min_str}")
+            print()
+            print("To upgrade uv:")
+            print("  curl -LsSf https://astral.sh/uv/install.sh | sh")
+            print()
+            print("Or with nix:")
+            print("  nix profile install nixpkgs#uv")
+            sys.exit(68)
+
+        return version
+    except subprocess.CalledProcessError as e:
+        print(f"Warning: Could not determine uv version: {e}")
+        return (0, 0, 0)
+    except (IndexError, ValueError) as e:
+        print(f"Warning: Could not parse uv version: {e}")
+        return (0, 0, 0)
+
 
 def get_uv_bin(base=None):
     """Get path to uv binary.
@@ -145,6 +200,11 @@ def get_uv_bin(base=None):
 def ensure_uv(base=None):
     """Ensure uv is available. Call get_uv_bin to get the path."""
     get_uv_bin(base)
+
+
+def ensure_uv_version():
+    """Ensure uv version is new enough for pyproject workflow."""
+    check_uv_version()
 
 
 def uv_cmd(args, verbose=False, **kwargs):
@@ -413,6 +473,7 @@ class AppEnv:
             sys.exit(67)
 
         ensure_uv(self.base)
+        ensure_uv_version()
 
         # Show verbose info
         verbose_print(f"Project base: {self.base}")
@@ -790,6 +851,8 @@ requires-python = ">={python_version}"
 
     def _update_lockfile_pyproject(self, args, verbose=False):
         """Update uv.lock using uv lock (native workflow)."""
+        ensure_uv_version()
+
         lock_file = self.base / UV_LOCK
 
         # Read existing lockfile for comparison

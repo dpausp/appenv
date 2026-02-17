@@ -175,6 +175,7 @@ dependencies = ["click"]
 
     # Mock ensure_uv and uv_cmd
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
+    monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
 
     captured_calls = []
 

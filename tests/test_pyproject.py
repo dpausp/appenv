@@ -47,6 +47,7 @@ def test_prepare_pyproject_creates_venv(tmpdir, monkeypatch):
     # Mock uv commands
     uv_calls = []
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
+    monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
     monkeypatch.setattr(
         appenv,
         "uv_cmd",
@@ -80,6 +81,7 @@ def test_prepare_pyproject_cleanup_old_appenv(tmpdir, monkeypatch):
 
     # Mock uv commands
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
+    monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
     monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: None)
 
     env = appenv.AppEnv(base, Path.cwd())
@@ -108,6 +110,7 @@ def test_prepare_pyproject_keeps_appenv_if_requirements_exists(tmpdir, monkeypat
 
     # Mock uv commands
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
+    monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
     monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: None)
 
     env = appenv.AppEnv(base, Path.cwd())
@@ -128,6 +131,7 @@ def test_update_lockfile_pyproject_calls_uv_lock(tmpdir, monkeypatch):
 
     uv_calls = []
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
+    monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
     monkeypatch.setattr(appenv, "find_minimal_python", lambda: None)
     monkeypatch.setattr(
         appenv,
