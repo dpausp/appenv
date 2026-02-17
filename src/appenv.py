@@ -440,17 +440,14 @@ class AppEnv:
                 shutil.rmtree(venv)
             verbose_print("Creating venv with uv ...")
             uv_cmd(["venv"], project=self.base)
-            # Show which python was selected
-            venv_python = venv / "bin" / "python"
-            if venv_python.exists():
-                result = cmd([str(venv_python), "--version"], quiet=True)
-                verbose_print(f"Created venv with {result.decode().strip()}")
 
         # Show current venv python version
         venv_python = venv / "bin" / "python"
         if venv_python.exists():
+            verbose_print(f"Venv Python: {venv_python}")
+            verbose_print(f"Venv Python (realpath): {venv_python.resolve()}")
             result = cmd([str(venv_python), "--version"], quiet=True)
-            verbose_print(f"Venv Python: {result.decode().strip()}")
+            verbose_print(f"Venv Python version: {result.decode().strip()}")
 
         # Sync dependencies (idempotent)
         verbose_print("Syncing dependencies ...")
@@ -524,6 +521,14 @@ class AppEnv:
             current_path = self.appenv_dir / "current"
             current_path.unlink(missing_ok=True)
             current_path.symlink_to(env_hash)
+
+        # Show venv python info
+        env_python = env_dir / "bin" / "python"
+        if env_python.exists():
+            verbose_print(f"Venv Python: {env_python}")
+            verbose_print(f"Venv Python (realpath): {env_python.resolve()}")
+            result = cmd([str(env_python), "--version"], quiet=True)
+            verbose_print(f"Venv Python version: {result.decode().strip()}")
 
         return str(env_dir)
 
