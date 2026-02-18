@@ -1064,6 +1064,11 @@ requires-python = ">={python_version}"
         """Run uv with the appenv-configured uv binary."""
         ensure_uv(self.base)
         uv_bin = get_uv_bin(self.base)
+
+        # Tell uv where the venv lives (in .appenv/venv, not .venv)
+        venv_real = self.appenv_dir / "venv"
+        os.environ["UV_PROJECT_ENVIRONMENT"] = str(venv_real)
+
         uv_argv = [uv_bin] + remaining
         os.chdir(self.base)
         os.execv(uv_bin, uv_argv)
