@@ -17,6 +17,7 @@
 __version__ = "2026.2.0"
 
 import argparse
+import difflib
 import hashlib
 import os
 import re
@@ -37,18 +38,34 @@ UV_LOCK = "uv.lock"
 def parse_requires_python(pyproject_path):
     """Parse requires-python from pyproject.toml.
 
-    Returns the minimum version string like "3.8" or None if not found.
-    Only handles simple >=X.Y format for now.
+    Returns tuple of (min_version, max_version) where max may be None.
+    Handles patterns like:
+        ">=3.8" → ("3.8", None)
+        ">=3.11,<3.15" → ("3.11", "3.15")
+        ">=3.11.0,<3.15.0" → ("3.11", "3.15")
     """
     if not pyproject_path.exists():
-        return None
+        return (None, None)
 
     content = pyproject_path.read_text()
-    # Look for requires-python = ">=X.Y" or similar
-    match = re.search(r'requires-python\s*=\s*["\']>=?(\d+\.\d+)', content)
-    if match:
-        return match.group(1)
-    return None
+
+    # Extract the requires-python value
+    value_match = re.search(r'requires-python\s*=\s*["\']([^"\']+)["\']', content)
+    if not value_match:
+        return (None, None)
+
+    spec = value_match.group(1)
+
+    # Parse minimum version (>=X.Y or >X.Y)
+    min_match = re.search(r">=?\s*(\d+\.\d+)", spec)
+    min_version = min_match.group(1) if min_match else None
+
+    # Parse maximum version (<X.Y or <=X.Y)
+    # For < we exclude that version, for <= we include it
+    max_match = re.search(r"<=?\s*(\d+\.\d+)", spec)
+    max_version = max_match.group(1) if max_match else None
+
+    return (min_version, max_version)
 
 
 def find_available_pythons():
@@ -75,7 +92,7 @@ def ensure_best_python_for_pyproject(base):
         return
 
     pyproject_path = base / PYPROJECT_TOML
-    min_version = parse_requires_python(pyproject_path)
+    min_version, max_version = parse_requires_python(pyproject_path)
 
     if min_version is None:
         # No constraint, use default (newest available)
@@ -85,13 +102,20 @@ def ensure_best_python_for_pyproject(base):
     current_python = str(Path(sys.executable).resolve())
 
     for version, path in available:
-        # Check if version satisfies >= min_version
-        min_parts = [int(p) for p in min_version.split(".")]
         ver_parts = [int(p) for p in version.split(".")]
 
+        # Check minimum version
+        min_parts = [int(p) for p in min_version.split(".")]
         if ver_parts < min_parts:
             # Too old, skip
             continue
+
+        # Check maximum version (if specified)
+        if max_version is not None:
+            max_parts = [int(p) for p in max_version.split(".")]
+            if ver_parts >= max_parts:
+                # Too new (max is exclusive), skip
+                continue
 
         path = str(Path(path).resolve())
         if path == current_python:
@@ -114,7 +138,10 @@ def ensure_best_python_for_pyproject(base):
         os.execv(path, argv)
 
     # No suitable Python found
-    print(f"Could not find Python >= {min_version}")
+    if max_version:
+        print(f"Could not find Python >={min_version}, <{max_version}")
+    else:
+        print(f"Could not find Python >= {min_version}")
     print("Available versions:")
     for version, path in available:
         print(f"  python{version}: {path}")
@@ -169,6 +196,36 @@ def verbose_print(*args, **kwargs):
     """
     if os.environ.get("APPENV_VERBOSE"):
         print(*args, **kwargs, flush=True)
+
+
+def print_colored_diff(old_content, new_content, fromfile, tofile):
+    """Print a unified diff with ANSI colors.
+
+    Returns True if there were changes, False otherwise.
+    """
+    red = "\033[31m"
+    green = "\033[32m"
+    cyan = "\033[36m"
+    reset = "\033[0m"
+
+    diff = difflib.unified_diff(
+        old_content.splitlines(keepends=True),
+        new_content.splitlines(keepends=True),
+        fromfile=fromfile,
+        tofile=tofile,
+    )
+    has_changes = False
+    for line in diff:
+        has_changes = True
+        if line.startswith(("---", "+++", "@@")):
+            print(cyan + line + reset, end="")
+        elif line.startswith("-"):
+            print(red + line + reset, end="")
+        elif line.startswith("+"):
+            print(green + line + reset, end="")
+        else:
+            print(line, end="")
+    return has_changes
 
 
 # Global cache for uv binary path
@@ -941,33 +998,9 @@ requires-python = ">={python_version}"
                 uv_cmd(["lock"], verbose=verbose, cwd=tmpdir)
                 new_content = tmp_lock.read_text() if tmp_lock.exists() else ""
 
-            import difflib
-
-            # ANSI colors for diff
-            red = "\033[31m"
-            green = "\033[32m"
-            cyan = "\033[36m"
-            reset = "\033[0m"
-
-            diff = difflib.unified_diff(
-                old_content.splitlines(keepends=True),
-                new_content.splitlines(keepends=True),
-                fromfile=UV_LOCK,
-                tofile=f"{UV_LOCK} (new)",
+            has_changes = print_colored_diff(
+                old_content, new_content, UV_LOCK, f"{UV_LOCK} (new)"
             )
-            has_changes = False
-            for line in diff:
-                has_changes = True
-                if line.startswith("---") or line.startswith("+++"):
-                    print(cyan + line + reset, end="")
-                elif line.startswith("@@"):
-                    print(cyan + line + reset, end="")
-                elif line.startswith("-"):
-                    print(red + line + reset, end="")
-                elif line.startswith("+"):
-                    print(green + line + reset, end="")
-                else:
-                    print(line, end="")
             if not has_changes:
                 print("No changes")
         else:
@@ -1115,33 +1148,13 @@ requires-python = ">={python_version}"
 
             if args and args.diff:
                 # Show full diff with colors
-                import difflib
-
                 old_content = lock_file.read_text() if lock_file.exists() else ""
-
-                # ANSI colors for diff
-                red = "\033[31m"
-                green = "\033[32m"
-                cyan = "\033[36m"
-                reset = "\033[0m"
-
-                diff = difflib.unified_diff(
-                    old_content.splitlines(keepends=True),
-                    new_content.splitlines(keepends=True),
-                    fromfile=REQUIREMENTS_LOCK,
-                    tofile=f"{REQUIREMENTS_LOCK} (new)",
+                print_colored_diff(
+                    old_content,
+                    new_content,
+                    REQUIREMENTS_LOCK,
+                    f"{REQUIREMENTS_LOCK} (new)",
                 )
-                for line in diff:
-                    if line.startswith("---") or line.startswith("+++"):
-                        print(cyan + line + reset, end="")
-                    elif line.startswith("@@"):
-                        print(cyan + line + reset, end="")
-                    elif line.startswith("-"):
-                        print(red + line + reset, end="")
-                    elif line.startswith("+"):
-                        print(green + line + reset, end="")
-                    else:
-                        print(line, end="")
             else:
                 # Write lockfile
                 lock_file.write_text(new_content)

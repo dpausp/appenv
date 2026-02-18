@@ -209,3 +209,101 @@ dependencies = ["click"]
         if "lock" in call["args"] and "pip" not in call["args"]
     ]
     assert len(lock_calls) >= 1, "Expected at least one uv lock call"
+
+
+# Tier 2 tests
+
+
+def test_update_lockfile_pyproject_diff_mode(workdir, monkeypatch, capsys, tmp_path):
+    """update_lockfile with --diff shows changes without modifying uv.lock."""
+    import argparse
+
+    # Create directory with pyproject.toml and uv.lock
+    app_dir = Path(workdir) / "diffapp"
+    app_dir.mkdir()
+
+    (app_dir / "pyproject.toml").write_text(
+        """[project]
+name = "diffapp"
+version = "1.0.0"
+dependencies = ["click"]
+"""
+    )
+
+    # Create existing uv.lock with old content
+    old_lock_content = "version = 1\n[[package]]\nname = 'click'\nversion = '8.0.0'\n"
+    (app_dir / "uv.lock").write_text(old_lock_content)
+
+    # Mock ensure_uv and uv_cmd
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
+    monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
+    monkeypatch.setattr(appenv, "find_minimal_python", lambda: None)
+
+    def mock_uv_cmd(args, verbose=False, **kwargs):
+        cwd = kwargs.get("cwd")
+        if cwd and "lock" in args and "pip" not in args:
+            # In diff mode, uv lock runs in temp dir
+            # Create a "new" lock file with different content
+            new_lock = Path(cwd) / "uv.lock"
+            new_lock.write_text(
+                "version = 1\n[[package]]\nname = 'click'\nversion = '8.1.0'\n"
+            )
+        return b""
+
+    monkeypatch.setattr(appenv, "uv_cmd", mock_uv_cmd)
+
+    env = appenv.AppEnv(app_dir, Path.cwd())
+    args = argparse.Namespace(diff=True, verbose=False)
+
+    env.update_lockfile(args=args, remaining=None)
+
+    # Verify diff output was shown
+    captured = capsys.readouterr()
+    assert "Checking lockfile changes" in captured.out
+
+    # Verify original uv.lock was NOT modified
+    assert (app_dir / "uv.lock").read_text() == old_lock_content
+
+
+def test_update_lockfile_requirements_diff_mode(workdir, monkeypatch, capsys):
+    """update_lockfile with --diff for requirements.txt shows changes.
+
+    Does not modify the lockfile.
+    """
+    import argparse
+
+    # Create directory with requirements.txt
+    app_dir = Path(workdir) / "reqdiff"
+    app_dir.mkdir()
+
+    (app_dir / "requirements.txt").write_text("requests\n")
+
+    # Create existing requirements.lock with old content
+    old_lock_content = "# appenv-requirements-hash: oldhash\nrequests==2.28.0\n"
+    (app_dir / "requirements.lock").write_text(old_lock_content)
+
+    # Mock ensure_uv and uv_cmd
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
+    monkeypatch.setattr(appenv, "find_minimal_python", lambda: None)
+
+    def mock_uv_cmd(args, verbose=False, **kwargs):
+        # Simulate pip compile creating new content
+        if "compile" in args:
+            output_file = args[args.index("--output-file") + 1]
+            Path(output_file).write_text("requests==2.31.0\n")
+        return b""
+
+    monkeypatch.setattr(appenv, "uv_cmd", mock_uv_cmd)
+
+    env = appenv.AppEnv(app_dir, Path.cwd())
+    args = argparse.Namespace(diff=True, verbose=False)
+
+    env.update_lockfile(args=args, remaining=None)
+
+    # Verify diff output was shown
+    captured = capsys.readouterr()
+    assert "Checking lockfile changes" in captured.out
+
+    # Verify original requirements.lock was NOT modified
+    current_content = (app_dir / "requirements.lock").read_text()
+    assert current_content == old_lock_content
