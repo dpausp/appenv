@@ -1008,3 +1008,178 @@ def test_run_uv_sets_environment_and_execs(workdir, monkeypatch):
     assert execv_called[0][0] == "/usr/bin/uv"
     assert execv_called[0][1] == ["/usr/bin/uv", "--version"]
     assert os.environ.get("UV_PROJECT_ENVIRONMENT") == str(base / ".appenv" / "venv")
+
+
+# ==============================================================================
+# Line 678: prepare() calls _prepare_requirements for requirements.txt workflow
+# ==============================================================================
+
+
+def test_prepare_calls_prepare_requirements(workdir, monkeypatch, capsys):
+    """Line 678: prepare() calls _prepare_requirements for requirements.txt workflow."""
+    base = Path(workdir)
+    (base / "requirements.txt").write_text("requests==2.28.0\n")
+
+    req_content = (base / "requirements.txt").read_bytes()
+    correct_hash = hashlib.new("sha256", req_content).hexdigest()
+    (base / "requirements.lock").write_text(
+        f"# appenv-requirements-hash: {correct_hash}\nrequests==2.28.0\n"
+    )
+
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
+    monkeypatch.setattr(appenv, "get_uv_bin", lambda base: "/usr/bin/uv")
+    monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: b"")
+
+    def mock_ensure_venv(target, base=None):
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "bin").mkdir(exist_ok=True)
+        python = target / "bin" / "python"
+        python.write_text("#!/bin/sh\necho Python 3.12.0\n")
+        python.chmod(0o755)
+
+    monkeypatch.setattr(appenv, "ensure_venv", mock_ensure_venv)
+    monkeypatch.setattr(appenv, "cmd", lambda c, **kwargs: b"Python 3.12.0")
+
+    original_resolve = Path.resolve
+
+    def mock_resolve(self):
+        if "python" in str(self):
+            return Path("/python_path")
+        return original_resolve(self)
+
+    monkeypatch.setattr("pathlib.Path.resolve", mock_resolve)
+    monkeypatch.setenv("APPENV_VERBOSE", "1")
+
+    env = appenv.AppEnv(base, Path.cwd())
+    result = env.prepare()
+
+    captured = capsys.readouterr()
+    assert "Mode: requirements" in captured.out
+    assert result is not None
+
+
+# ==============================================================================
+# Line 758: _prepare_pyproject unlinks non-directory files in .appenv
+# ==============================================================================
+
+
+def test_prepare_pyproject_unlink_file_in_appenv(workdir, monkeypatch, capsys):
+    """Line 758: _prepare_pyproject unlinks non-directory files in .appenv."""
+    base = Path(workdir)
+
+    # Create pyproject.toml and uv.lock (NO requirements.txt for cleanup)
+    (base / "pyproject.toml").write_text(
+        '[project]\nname = "test"\ndependencies = []\n'
+    )
+    (base / "uv.lock").write_text("version = 1\n")
+
+    # Create .appenv with a file (not directory)
+    appenv_dir = base / ".appenv"
+    appenv_dir.mkdir()
+    old_file = appenv_dir / "old_file.txt"
+    old_file.write_text("old content")
+
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
+    monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
+    monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: None)
+
+    monkeypatch.setenv("APPENV_VERBOSE", "1")
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env._prepare_pyproject()
+
+    assert not old_file.exists()
+    captured = capsys.readouterr()
+    assert "Removing old .appenv entry" in captured.out
+
+
+# ==============================================================================
+# Lines 838-841: init() returns early when pyproject.toml exists
+# ==============================================================================
+
+
+def test_init_pyproject_already_exists(workdir, monkeypatch, capsys):
+    """Lines 838-841: init() returns early when pyproject.toml exists."""
+    base = Path(workdir)
+
+    (base / "pyproject.toml").write_text(
+        '[project]\nname = "existing"\ndependencies = []\n'
+    )
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.init()
+
+    captured = capsys.readouterr()
+    assert "already exists" in captured.out
+    assert "Nothing to do" in captured.out
+
+
+# ==============================================================================
+# Line 847: init() uses default "app" for empty command name
+# ==============================================================================
+
+
+def test_init_empty_command_name_defaults_to_app(workdir, monkeypatch, capsys):
+    """Line 847: init() uses 'app' as default when command name is empty."""
+    base = Path(workdir)
+
+    # Empty command name -> defaults to "app"
+    inputs = iter(
+        [
+            "",  # empty command name -> default "app"
+            "test description",
+            "",  # no dependencies -> defaults to "app"
+            "",  # python version default
+        ]
+    )
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.init()
+
+    pyproject = (base / "pyproject.toml").read_text()
+    assert 'name = "app"' in pyproject
+    assert '"app"' in pyproject  # dependency also defaults to app
+
+
+# ==============================================================================
+# Lines 888-890: migrate() returns early when requirements.txt not found
+# ==============================================================================
+
+
+def test_migrate_no_requirements_txt(workdir, monkeypatch, capsys):
+    """Lines 888-890: migrate() returns early when requirements.txt not found."""
+    base = Path(workdir)
+
+    # No requirements.txt, no pyproject.toml
+    env = appenv.AppEnv(base, Path.cwd())
+    env.migrate()
+
+    captured = capsys.readouterr()
+    assert "No requirements.txt found" in captured.out
+    assert "Use 'init' to create" in captured.out
+
+
+# ==============================================================================
+# Line 1108: reset() unlinks files in .appenv
+# ==============================================================================
+
+
+def test_reset_unlinks_file_in_appenv(workdir, monkeypatch, capsys):
+    """Line 1108: reset() unlinks non-directory files in .appenv."""
+    base = Path(workdir)
+
+    # Create .appenv with a file (not directory)
+    appenv_dir = base / ".appenv"
+    appenv_dir.mkdir()
+    old_file = appenv_dir / "old_file.txt"
+    old_file.write_text("old content")
+
+    monkeypatch.setenv("APPENV_VERBOSE", "1")
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.reset()
+
+    assert not old_file.exists()
+    captured = capsys.readouterr()
+    assert "Removing" in captured.out
