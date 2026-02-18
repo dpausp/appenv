@@ -731,9 +731,12 @@ class AppEnv:
             result = cmd([str(venv_python), "--version"], quiet=True)
             verbose_print(f"Venv Python version: {result.decode().strip()}")
 
-        # Optional: create symlink for tool compatibility
+        # Create symlink for tool compatibility
         # (e.g., IDEs, formatters, linters that expect .venv)
-        if not venv_link.exists() and not venv_link.is_symlink():
+        # Always update symlink unless .venv is a real directory
+        if venv_link.is_symlink():
+            venv_link.unlink()
+        if not venv_link.exists():
             venv_link.symlink_to(".appenv/venv")
 
         # Cleanup old .appenv hash-based venvs if migration is complete

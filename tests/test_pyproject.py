@@ -1005,8 +1005,8 @@ def test_prepare_pyproject_creates_symlink(tmpdir, monkeypatch):
     assert venv_link.resolve() == (base / ".appenv" / "venv").resolve()
 
 
-def test_prepare_pyproject_keeps_existing_symlink(tmpdir, monkeypatch):
-    """_prepare_pyproject does not overwrite existing .venv symlink."""
+def test_prepare_pyproject_updates_broken_symlink(tmpdir, monkeypatch):
+    """_prepare_pyproject updates broken .venv symlink to point to .appenv/venv."""
     monkeypatch.chdir(tmpdir)
     base = Path(tmpdir)
 
@@ -1015,9 +1015,9 @@ def test_prepare_pyproject_keeps_existing_symlink(tmpdir, monkeypatch):
     )
     (base / "uv.lock").write_text("version = 1\n")
 
-    # Create existing symlink (can be broken - pointing to non-existent path)
+    # Create broken symlink (pointing to non-existent path)
     venv_link = base / ".venv"
-    venv_link.symlink_to("/some/other/path")
+    venv_link.symlink_to("/nonexistent/path")
 
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
     monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
@@ -1026,11 +1026,39 @@ def test_prepare_pyproject_keeps_existing_symlink(tmpdir, monkeypatch):
     env = appenv.AppEnv(base, Path.cwd())
     env._prepare_pyproject()
 
-    # Symlink should still point to the original target (not overwritten)
+    # Symlink should now point to correct location
     assert venv_link.is_symlink()
     import os
 
-    assert os.readlink(venv_link) == "/some/other/path"
+    assert os.readlink(venv_link) == ".appenv/venv"
+
+
+def test_prepare_pyproject_keeps_real_venv_directory(tmpdir, monkeypatch):
+    """_prepare_pyproject does not touch .venv if it's a real directory."""
+    monkeypatch.chdir(tmpdir)
+    base = Path(tmpdir)
+
+    (base / "pyproject.toml").write_text(
+        "[project]\nname = 'test'\ndependencies = []\n"
+    )
+    (base / "uv.lock").write_text("version = 1\n")
+
+    # Create real .venv directory (not a symlink)
+    venv_dir = base / ".venv"
+    venv_dir.mkdir()
+    (venv_dir / "marker.txt").write_text("real directory")
+
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
+    monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
+    monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: None)
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env._prepare_pyproject()
+
+    # .venv should still be a real directory, not a symlink
+    assert venv_dir.is_dir()
+    assert not venv_dir.is_symlink()
+    assert (venv_dir / "marker.txt").exists()
 
 
 def test_reset_removes_symlink_and_venv(tmpdir, monkeypatch, capsys):
