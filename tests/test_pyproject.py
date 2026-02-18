@@ -34,7 +34,7 @@ def test_detect_project_type_none(tmpdir, monkeypatch):
 
 
 def test_prepare_pyproject_creates_venv(tmpdir, monkeypatch):
-    """_prepare_pyproject creates .venv and runs uv sync."""
+    """_prepare_pyproject creates .appenv/venv and runs uv sync."""
     monkeypatch.chdir(tmpdir)
     base = Path(tmpdir)
 
@@ -57,14 +57,17 @@ def test_prepare_pyproject_creates_venv(tmpdir, monkeypatch):
     env = appenv.AppEnv(base, Path.cwd())
     result = env._prepare_pyproject()
 
-    assert result == str(base / ".venv")
+    # venv is now in .appenv/venv
+    assert result == str(base / ".appenv" / "venv")
     # venv command should be called with path argument
     assert any("venv" in c for c in uv_calls), f"Expected venv call, got {uv_calls}"
     assert any("sync" in c for c in uv_calls), f"Expected sync call, got {uv_calls}"
+    # Symlink should be created
+    assert (base / ".venv").is_symlink()
 
 
 def test_prepare_pyproject_cleanup_old_appenv(tmpdir, monkeypatch):
-    """_prepare_pyproject removes old .appenv after successful sync."""
+    """_prepare_pyproject removes old hash-based venvs but keeps .appenv."""
     monkeypatch.chdir(tmpdir)
     base = Path(tmpdir)
 
@@ -74,7 +77,7 @@ def test_prepare_pyproject_cleanup_old_appenv(tmpdir, monkeypatch):
     )
     (base / "uv.lock").write_text("version = 1\n")
 
-    # Create old .appenv directory
+    # Create old .appenv directory with hash-based venv
     old_appenv = base / ".appenv" / "oldhash"
     old_appenv.mkdir(parents=True)
     (old_appenv / "marker.txt").write_text("old")
@@ -87,8 +90,10 @@ def test_prepare_pyproject_cleanup_old_appenv(tmpdir, monkeypatch):
     env = appenv.AppEnv(base, Path.cwd())
     env._prepare_pyproject()
 
-    # Old .appenv should be gone
-    assert not (base / ".appenv").exists()
+    # Old hash-based venv should be gone
+    assert not (base / ".appenv" / "oldhash").exists()
+    # .appenv should still exist (even though mock didn't create venv)
+    assert (base / ".appenv").exists()
 
 
 def test_prepare_pyproject_keeps_appenv_if_requirements_exists(tmpdir, monkeypatch):
@@ -226,10 +231,10 @@ def test_prepare_pyproject_corrupted_venv(tmpdir, monkeypatch):
     )
     (base / "uv.lock").write_text("version = 1\n")
 
-    # Create broken .venv (directory without bin/python)
-    venv = base / ".venv"
-    venv.mkdir()
-    (venv / "broken_marker.txt").write_text("broken")
+    # Create broken .appenv/venv (directory without bin/python)
+    venv_real = base / ".appenv" / "venv"
+    venv_real.mkdir(parents=True)
+    (venv_real / "broken_marker.txt").write_text("broken")
 
     # Mock uv commands
     uv_calls = []
@@ -244,9 +249,10 @@ def test_prepare_pyproject_corrupted_venv(tmpdir, monkeypatch):
     env = appenv.AppEnv(base, Path.cwd())
     result = env._prepare_pyproject()
 
-    assert result == str(venv)
+    # venv is now in .appenv/venv
+    assert result == str(venv_real)
     # The broken marker should be gone (venv was recreated)
-    assert not (venv / "broken_marker.txt").exists()
+    assert not (venv_real / "broken_marker.txt").exists()
     # venv command should be called
     assert any("venv" in c for c in uv_calls), f"Expected venv call, got {uv_calls}"
 
@@ -949,3 +955,155 @@ def test_init_pyproject_editable_warnings_updated(tmpdir, monkeypatch, capsys):
     assert "requests" in pyproject
     assert "click" in pyproject
     assert "[tool.uv.sources]" not in pyproject
+
+
+# Tests for .appenv/venv location and symlink behavior
+
+
+def test_prepare_pyproject_sets_uv_project_environment(tmpdir, monkeypatch):
+    """_prepare_pyproject sets UV_PROJECT_ENVIRONMENT to .appenv/venv."""
+    monkeypatch.chdir(tmpdir)
+    base = Path(tmpdir)
+
+    (base / "pyproject.toml").write_text(
+        "[project]\nname = 'test'\ndependencies = []\n"
+    )
+    (base / "uv.lock").write_text("version = 1\n")
+
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
+    monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
+    monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: None)
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env._prepare_pyproject()
+
+    import os
+
+    assert os.environ.get("UV_PROJECT_ENVIRONMENT") == str(base / ".appenv" / "venv")
+
+
+def test_prepare_pyproject_creates_symlink(tmpdir, monkeypatch):
+    """_prepare_pyproject creates .venv symlink to .appenv/venv."""
+    monkeypatch.chdir(tmpdir)
+    base = Path(tmpdir)
+
+    (base / "pyproject.toml").write_text(
+        "[project]\nname = 'test'\ndependencies = []\n"
+    )
+    (base / "uv.lock").write_text("version = 1\n")
+
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
+    monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
+    monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: None)
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env._prepare_pyproject()
+
+    venv_link = base / ".venv"
+    assert venv_link.is_symlink()
+    # Symlink should point to .appenv/venv (relative path)
+    assert venv_link.resolve() == (base / ".appenv" / "venv").resolve()
+
+
+def test_prepare_pyproject_keeps_existing_symlink(tmpdir, monkeypatch):
+    """_prepare_pyproject does not overwrite existing .venv symlink."""
+    monkeypatch.chdir(tmpdir)
+    base = Path(tmpdir)
+
+    (base / "pyproject.toml").write_text(
+        "[project]\nname = 'test'\ndependencies = []\n"
+    )
+    (base / "uv.lock").write_text("version = 1\n")
+
+    # Create existing symlink (can be broken - pointing to non-existent path)
+    venv_link = base / ".venv"
+    venv_link.symlink_to("/some/other/path")
+
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
+    monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
+    monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: None)
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env._prepare_pyproject()
+
+    # Symlink should still point to the original target (not overwritten)
+    assert venv_link.is_symlink()
+    import os
+
+    assert os.readlink(venv_link) == "/some/other/path"
+
+
+def test_reset_removes_symlink_and_venv(tmpdir, monkeypatch, capsys):
+    """reset removes .venv symlink and .appenv/venv."""
+    monkeypatch.chdir(tmpdir)
+    base = Path(tmpdir)
+
+    # Create .appenv/venv
+    venv_real = base / ".appenv" / "venv"
+    venv_real.mkdir(parents=True)
+    (venv_real / "bin").mkdir()
+    (venv_real / "bin" / "python").write_text("#!/bin/bash")
+
+    # Create symlink
+    venv_link = base / ".venv"
+    venv_link.symlink_to(".appenv/venv")
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.reset()
+
+    # Symlink should be removed
+    assert not venv_link.exists()
+    # venv should be removed
+    assert not venv_real.exists()
+
+
+def test_reset_keeps_uv_binary(tmpdir, monkeypatch, capsys):
+    """reset keeps .appenv/.uv directory (uv binary cache)."""
+    monkeypatch.chdir(tmpdir)
+    base = Path(tmpdir)
+
+    # Create .appenv/.uv
+    uv_dir = base / ".appenv" / ".uv"
+    uv_dir.mkdir(parents=True)
+    (uv_dir / "bin").mkdir()
+    (uv_dir / "bin" / "uv").write_text("#!/bin/bash")
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.reset()
+
+    # .appenv/.uv should still exist
+    assert uv_dir.exists()
+    assert (uv_dir / "bin" / "uv").exists()
+
+
+def test_prepare_pyproject_keeps_dot_uv_dir(tmpdir, monkeypatch):
+    """_prepare_pyproject does not delete .appenv/.uv during cleanup."""
+    monkeypatch.chdir(tmpdir)
+    base = Path(tmpdir)
+
+    (base / "pyproject.toml").write_text(
+        "[project]\nname = 'test'\ndependencies = []\n"
+    )
+    (base / "uv.lock").write_text("version = 1\n")
+
+    # Create old hash-based venv AND .uv
+    old_venv = base / ".appenv" / "oldhash"
+    old_venv.mkdir(parents=True)
+    (old_venv / "marker.txt").write_text("old")
+
+    uv_dir = base / ".appenv" / ".uv"
+    uv_dir.mkdir(parents=True)
+    (uv_dir / "uv_binary").write_text("uv")
+
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
+    monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
+    monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: None)
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env._prepare_pyproject()
+
+    # .uv should be kept
+    assert uv_dir.exists()
+    assert (uv_dir / "uv_binary").exists()
+    # old hash venv should be removed
+    assert not old_venv.exists()

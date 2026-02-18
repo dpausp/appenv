@@ -676,7 +676,10 @@ class AppEnv:
 
     def _prepare_pyproject(self):
         """Prepare environment for pyproject.toml using uv native workflow."""
-        venv = self.base / ".venv"
+        # Store venv in .appenv/venv to avoid deployment issues
+        # (batou and similar tools can ignore .appenv)
+        venv_real = self.appenv_dir / "venv"
+        venv_link = self.base / ".venv"
         lock_file = self.base / UV_LOCK
         old_appenv = self.appenv_dir
         pyproject_file = self.base / PYPROJECT_TOML
@@ -691,43 +694,61 @@ class AppEnv:
         ensure_uv(self.base)
         ensure_uv_version()
 
+        # Tell uv where to put/find the venv
+        os.environ["UV_PROJECT_ENVIRONMENT"] = str(venv_real)
+
         # Show verbose info
         verbose_print(f"Project base: {self.base}")
         verbose_print(f"pyproject.toml: {pyproject_file}")
         verbose_print(f"uv.lock: {lock_file}")
-        verbose_print(f"venv: {venv}")
+        verbose_print(f"venv: {venv_real}")
         verbose_print(f"uv binary: {get_uv_bin(self.base)}")
         verbose_print(f"Python: {Path(sys.executable).resolve()}")
 
+        # Ensure .appenv directory exists
+        if not self.appenv_dir.exists():
+            self.appenv_dir.mkdir()
+
         # Create venv if needed or check integrity
-        if not venv.exists() or not (venv / "bin" / "python").exists():
-            if venv.exists():
+        if not venv_real.exists() or not (venv_real / "bin" / "python").exists():
+            if venv_real.exists():
                 verbose_print("Corrupted venv detected, removing ...")
-                shutil.rmtree(venv)
+                shutil.rmtree(venv_real)
             verbose_print("Creating venv with uv ...")
             # Use current Python (already selected by ensure_best_python_for_pyproject)
             # Explicit path avoids uv downloading its own (breaks on NixOS)
-            uv_cmd(["venv", "--python", sys.executable, str(venv)])
+            uv_cmd(["venv", "--python", sys.executable, str(venv_real)])
 
         # Sync dependencies (idempotent)
         verbose_print("Syncing dependencies (uv sync) ...")
         uv_cmd(["sync"])
 
         # Show venv python info AFTER sync (version may have changed)
-        venv_python = venv / "bin" / "python"
+        venv_python = venv_real / "bin" / "python"
         if venv_python.exists():
             verbose_print(f"Venv Python: {venv_python}")
             verbose_print(f"Venv Python (realpath): {venv_python.resolve()}")
             result = cmd([str(venv_python), "--version"], quiet=True)
             verbose_print(f"Venv Python version: {result.decode().strip()}")
 
-        # Cleanup old .appenv if migration is complete
-        # (requirements.txt removed = user migrated intentionally)
-        if old_appenv.exists() and not (self.base / REQUIREMENTS_TXT).exists():
-            verbose_print("Removing old .appenv ...")
-            shutil.rmtree(old_appenv)
+        # Optional: create symlink for tool compatibility
+        # (e.g., IDEs, formatters, linters that expect .venv)
+        if not venv_link.exists() and not venv_link.is_symlink():
+            venv_link.symlink_to(".appenv/venv")
 
-        return str(venv)
+        # Cleanup old .appenv hash-based venvs if migration is complete
+        # (requirements.txt removed = user migrated intentionally)
+        # But keep .appenv/venv (the new venv location)
+        if old_appenv.exists() and not (self.base / REQUIREMENTS_TXT).exists():
+            for path in list(old_appenv.iterdir()):
+                if path.name != "venv" and path.name != ".uv":
+                    verbose_print(f"Removing old .appenv entry: {path.name} ...")
+                    if path.is_dir():
+                        shutil.rmtree(path)
+                    else:
+                        path.unlink()
+
+        return str(venv_real)
 
     def _prepare_requirements(self):
         """Prepare environment for requirements.txt using legacy workflow."""
@@ -1036,13 +1057,33 @@ requires-python = ">={python_version}"
 
     def reset(self, args=None, remaining=None):
         """Reset all virtual environments."""
-        venv = self.base / ".venv"
-        if venv.exists():
-            print(f"Removing {venv} ...")
-            shutil.rmtree(venv)
+        venv_link = self.base / ".venv"
+        venv_real = self.appenv_dir / "venv"
+
+        # Remove symlink if it exists
+        if venv_link.is_symlink():
+            print(f"Removing {venv_link} symlink ...")
+            venv_link.unlink()
+
+        # Remove real venv in .appenv
+        if venv_real.exists():
+            print(f"Removing {venv_real} ...")
+            shutil.rmtree(venv_real)
+
+        # Legacy: also handle old .venv directory (pre-migration)
+        if venv_link.exists() and not venv_link.is_symlink():
+            print(f"Removing old {venv_link} ...")
+            shutil.rmtree(venv_link)
+
+        # Clean up old hash-based venvs in .appenv (keep .uv)
         if self.appenv_dir.exists():
-            print(f"Resetting ALL application environments in {self.appenv_dir} ...")
-            cmd(["rm", "-rf", str(self.appenv_dir)])
+            for path in list(self.appenv_dir.iterdir()):
+                if path.name not in (".uv", "venv"):
+                    verbose_print(f"Removing {path} ...")
+                    if path.is_dir():
+                        shutil.rmtree(path)
+                    else:
+                        path.unlink()
 
     def update_lockfile(self, args=None, remaining=None):
         """Update lockfile.

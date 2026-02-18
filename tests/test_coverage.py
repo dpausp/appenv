@@ -876,8 +876,9 @@ def test_prepare_pyproject_verbose(workdir, monkeypatch, capsys):
 
     def mock_uv_cmd(args, **kwargs):
         if "venv" in args:
-            venv = base / ".venv"
-            venv.mkdir(exist_ok=True)
+            # venv is now created in .appenv/venv
+            venv = base / ".appenv" / "venv"
+            venv.mkdir(parents=True, exist_ok=True)
             (venv / "bin").mkdir(exist_ok=True)
             python = venv / "bin" / "python"
             python.write_text("#!/bin/sh\necho Python 3.12.0\n")
@@ -951,8 +952,9 @@ def test_prepare_pyproject_mode_verbose(workdir, monkeypatch, capsys):
 
     def mock_uv_cmd(args, **kwargs):
         if "venv" in args:
-            venv = base / ".venv"
-            venv.mkdir(exist_ok=True)
+            # venv is now created in .appenv/venv
+            venv = base / ".appenv" / "venv"
+            venv.mkdir(parents=True, exist_ok=True)
             (venv / "bin").mkdir(exist_ok=True)
             python = venv / "bin" / "python"
             python.write_text("#!/bin/sh\necho Python 3.12.0\n")

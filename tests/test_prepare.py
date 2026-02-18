@@ -23,8 +23,9 @@ def test_prepare_creates_envdir(workdir, monkeypatch):
 
     def mock_uv_cmd(args, **kwargs):
         if "venv" in args:
-            venv = base / ".venv"
-            venv.mkdir(exist_ok=True)
+            # venv is now created in .appenv/venv
+            venv = base / ".appenv" / "venv"
+            venv.mkdir(parents=True, exist_ok=True)
             (venv / "bin").mkdir(exist_ok=True)
             (venv / "bin" / "python").write_text("#!/bin/sh\n")
         return b""
@@ -37,11 +38,14 @@ def test_prepare_creates_envdir(workdir, monkeypatch):
     env = appenv.AppEnv(base, Path.cwd())
     env.prepare()
 
-    assert (base / ".venv").exists()
+    # .appenv/venv should exist
+    assert (base / ".appenv" / "venv").exists()
+    # .venv symlink should be created
+    assert (base / ".venv").is_symlink()
 
 
 def test_prepare_creates_venv_symlink(workdir, monkeypatch):
-    """Test prepare creates .venv for pyproject workflow."""
+    """Test prepare returns .appenv/venv path for pyproject workflow."""
     base = Path(workdir) / "ducker"
     base.mkdir()
     os.chdir(base)
@@ -56,8 +60,9 @@ def test_prepare_creates_venv_symlink(workdir, monkeypatch):
 
     def mock_uv_cmd(args, **kwargs):
         if "venv" in args:
-            venv = base / ".venv"
-            venv.mkdir(exist_ok=True)
+            # venv is now created in .appenv/venv
+            venv = base / ".appenv" / "venv"
+            venv.mkdir(parents=True, exist_ok=True)
             (venv / "bin").mkdir(exist_ok=True)
             (venv / "bin" / "python").write_text("#!/bin/sh\n")
         return b""
@@ -68,7 +73,8 @@ def test_prepare_creates_venv_symlink(workdir, monkeypatch):
     env = appenv.AppEnv(base, Path.cwd())
     env_dir = env.prepare()
 
-    assert env_dir == str(base / ".venv")
+    # prepare() returns the real venv path (.appenv/venv)
+    assert env_dir == str(base / ".appenv" / "venv")
 
 
 # Tier 2 tests
