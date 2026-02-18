@@ -1029,10 +1029,14 @@ requires-python = ">={python_version}"
             print("Done. pyproject.toml created, requirements.txt kept as legacy.")
         else:
             print("Done. pyproject.toml created.")
+
+        # Auto-generate lockfile for better UX
+        print("\nGenerating lockfile ...")
+        self.update_lockfile(
+            argparse.Namespace(diff=False, verbose=False), remaining=None
+        )
         print()
-        print("Next steps:")
-        print("  1. Run `./appenv update-lockfile` to create uv.lock")
-        print(f"  2. Run `./{initial_command}` to bootstrap and run")
+        print(f"Run `./{initial_command}` to bootstrap and run")
 
     def python(self, args, remaining):
         self.run("python", remaining)
