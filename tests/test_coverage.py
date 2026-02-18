@@ -2,6 +2,7 @@
 
 import argparse
 import hashlib
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -974,3 +975,36 @@ def test_prepare_pyproject_mode_verbose(workdir, monkeypatch, capsys):
 
     captured = capsys.readouterr()
     assert "Mode: pyproject" in captured.out
+
+
+# ==============================================================================
+# run_uv command
+# ==============================================================================
+
+
+def test_run_uv_sets_environment_and_execs(workdir, monkeypatch):
+    """run_uv sets UV_PROJECT_ENVIRONMENT and execs uv binary."""
+    base = Path(workdir)
+
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
+    monkeypatch.setattr(appenv, "get_uv_bin", lambda base: "/usr/bin/uv")
+
+    execv_called = []
+
+    def mock_execv(path, argv):
+        execv_called.append((path, argv))
+        raise SystemExit(0)
+
+    monkeypatch.setattr("os.execv", mock_execv)
+
+    env = appenv.AppEnv(base, Path.cwd())
+    args = argparse.Namespace()
+    remaining = ["--version"]
+
+    with pytest.raises(SystemExit):
+        env.run_uv(args, remaining)
+
+    assert len(execv_called) == 1
+    assert execv_called[0][0] == "/usr/bin/uv"
+    assert execv_called[0][1] == ["/usr/bin/uv", "--version"]
+    assert os.environ.get("UV_PROJECT_ENVIRONMENT") == str(base / ".appenv" / "venv")
