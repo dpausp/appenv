@@ -623,6 +623,9 @@ def test_update_lockfile_pyproject_verbose(workdir, monkeypatch, capsys):
 
     monkeypatch.setattr(appenv, "uv_cmd", mock_uv_cmd)
 
+    # Enable verbose mode via environment variable
+    monkeypatch.setenv("APPENV_VERBOSE", "1")
+
     env = appenv.AppEnv(base, Path.cwd())
     args = argparse.Namespace(diff=False, verbose=True)
 

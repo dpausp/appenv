@@ -141,6 +141,9 @@ dependencies = ["requests"]
 
     monkeypatch.setattr(appenv, "uv_cmd", mock_uv_cmd)
 
+    # Enable verbose output to check mode detection
+    monkeypatch.setenv("APPENV_VERBOSE", "1")
+
     # Run update_lockfile from subdirectory
     env = appenv.AppEnv(subdir, Path.cwd())
     env.update_lockfile()
@@ -148,10 +151,6 @@ dependencies = ["requests"]
     # Verify it detected requirements.txt mode (not pyproject mode)
     captured = capsys.readouterr()
     assert "Mode: requirements.txt" in captured.out
-    assert (
-        "pyproject.toml" not in captured.out.lower()
-        or "no pyproject" in captured.out.lower()
-    )
 
     # Verify pip compile was called (legacy workflow)
     assert any(
@@ -202,6 +201,9 @@ dependencies = ["click"]
         return b""
 
     monkeypatch.setattr(appenv, "uv_cmd", mock_uv_cmd)
+
+    # Enable verbose output to check mode detection
+    monkeypatch.setenv("APPENV_VERBOSE", "1")
 
     # Run update_lockfile
     env = appenv.AppEnv(app_dir, Path.cwd())

@@ -1100,26 +1100,25 @@ requires-python = ">={python_version}"
         project_type = detect_project_type(self.base)
         verbose: bool = bool(args and getattr(args, "verbose", False))
 
-        # Show what we're doing
-        print(f"Base directory: {self.base}")
+        # Show what we're doing (only in verbose mode)
+        verbose_print(f"Base directory: {self.base}")
         if project_type == "pyproject":
             source_file = self.base / PYPROJECT_TOML
             lock_file = self.base / UV_LOCK
-            print("Mode: pyproject.toml (native uv workflow)")
-            print(f"Reading: {source_file}")
-            print(f"Lockfile: {lock_file}")
+            verbose_print("Mode: pyproject.toml (native uv workflow)")
+            verbose_print(f"Reading: {source_file}")
+            verbose_print(f"Lockfile: {lock_file}")
         elif project_type == "requirements":
             source_file = self.base / REQUIREMENTS_TXT
             lock_file = self.base / REQUIREMENTS_LOCK
-            print("Mode: requirements.txt (legacy uv pip compile)")
-            print(f"Reading: {source_file}")
-            print(f"Lockfile: {lock_file}")
+            verbose_print("Mode: requirements.txt (legacy uv pip compile)")
+            verbose_print(f"Reading: {source_file}")
+            verbose_print(f"Lockfile: {lock_file}")
             if verbose and source_file.exists():
-                print(f"Requirements hash: {self._hash_requirements()}")
+                verbose_print(f"Requirements hash: {self._hash_requirements()}")
         else:
             print(f"No {PYPROJECT_TOML} or {REQUIREMENTS_TXT} found.")
             sys.exit(67)
-        print()
 
         if project_type == "pyproject":
             self._update_lockfile_pyproject(args, verbose)
@@ -1200,7 +1199,7 @@ requires-python = ">={python_version}"
 
         # Also generate requirements.lock for non-uv fallback (but not in diff mode)
         if not (args and args.diff):
-            print("Generating requirements.lock for non-uv fallback ...")
+            verbose_print("Generating requirements.lock for non-uv fallback ...")
             compile_args = [
                 "pip",
                 "compile",
@@ -1211,11 +1210,9 @@ requires-python = ">={python_version}"
             ]
             minimal_python = find_minimal_python()
             if minimal_python:
-                if verbose:
-                    print(f"Using minimal Python: {minimal_python}")
+                verbose_print(f"Using minimal Python: {minimal_python}")
                 compile_args.extend(["--python", minimal_python])
-            if verbose:
-                print(f"Running: uv {' '.join(compile_args)}")
+            verbose_print(f"Running: uv {' '.join(compile_args)}")
             # Note: pip compile doesn't need --project because input file is explicit
             uv_cmd(compile_args, verbose=verbose)
 
