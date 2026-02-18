@@ -415,3 +415,90 @@ def test_init_pyproject_empty_dependencies(tmpdir, monkeypatch, capsys):
     # Verify output mentions 0 dependencies found
     captured = capsys.readouterr()
     assert "0 dependency" in captured.out or "Found 0" in captured.out
+
+
+def test_init_pyproject_fresh_start_interactive(tmpdir, monkeypatch, capsys):
+    """init_pyproject fresh start flow with interactive inputs."""
+    monkeypatch.chdir(tmpdir)
+    base = Path(tmpdir)
+
+    # No requirements.txt - triggers fresh start flow
+    # Inputs: command name, description, dependencies (2), empty, python version
+    inputs = iter(
+        [
+            "myapp",  # command name
+            "My test app",  # description
+            "requests",  # dependency 1
+            "click",  # dependency 2
+            "",  # empty line to finish dependencies
+            "3.10",  # python version
+        ]
+    )
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.init_pyproject()
+
+    # Verify pyproject.toml was created
+    pyproject = (base / "pyproject.toml").read_text()
+    assert 'name = "myapp"' in pyproject
+    assert 'description = "My test app"' in pyproject
+    assert '"requests"' in pyproject
+    assert '"click"' in pyproject
+    assert 'requires-python = ">=3.10"' in pyproject
+
+    # Verify appenv script and symlink were created
+    assert (base / "appenv").exists()
+    assert (base / "myapp").exists()
+    assert (base / "myapp").is_symlink()
+
+
+def test_init_pyproject_fresh_start_default_dependencies(tmpdir, monkeypatch, capsys):
+    """init_pyproject fresh start uses command name as default dependency when empty."""
+    monkeypatch.chdir(tmpdir)
+    base = Path(tmpdir)
+
+    # No requirements.txt - triggers fresh start flow
+    # Immediately empty line for dependencies - should default to command name
+    inputs = iter(
+        [
+            "defaultapp",  # command name
+            "",  # empty description
+            "",  # empty line immediately - no dependencies entered
+            "",  # python version (use default 3.8)
+        ]
+    )
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.init_pyproject()
+
+    # Verify pyproject.toml was created with command name as dependency
+    pyproject = (base / "pyproject.toml").read_text()
+    assert 'name = "defaultapp"' in pyproject
+    assert '"defaultapp"' in pyproject  # dependency defaults to command name
+    assert 'requires-python = ">=3.8"' in pyproject  # default version
+
+
+def test_init_pyproject_migration_interactive_project_name(tmpdir, monkeypatch, capsys):
+    """init_pyproject migration asks for project name interactively."""
+    monkeypatch.chdir(tmpdir)
+    base = Path(tmpdir)
+
+    # Create requirements.txt to trigger migration
+    (base / "requirements.txt").write_text("requests>=2.0\n")
+
+    # Input: custom project name
+    inputs = iter(["custom-project"])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.init_pyproject()
+
+    # Verify pyproject.toml uses custom project name
+    pyproject = (base / "pyproject.toml").read_text()
+    assert 'name = "custom-project"' in pyproject
+    assert '"requests>=2.0"' in pyproject
+
+    captured = capsys.readouterr()
+    assert "Migrating" in captured.out
