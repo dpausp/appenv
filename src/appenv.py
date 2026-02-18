@@ -822,11 +822,9 @@ class AppEnv:
             print("Let's create a new pyproject.toml project.\n")
             initial_command = None
             while not initial_command:
-                initial_command = input(
-                    "What should the command be named? [app] "
-                ).strip()
-            if not initial_command:
-                initial_command = "app"
+                initial_command = (
+                    input("What should the command be named? [app] ").strip() or "app"
+                )
 
             description = input("Description []: ").strip()
 
@@ -1212,5 +1210,5 @@ def main():
         appenv.run(application_name, sys.argv[1:])
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main()
