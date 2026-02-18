@@ -8,11 +8,18 @@ import pytest
 
 import appenv
 
+
+def mock_ensure_python(monkeypatch):
+    """Mock both ensure_best_python functions to prevent re-exec."""
+    monkeypatch.setattr(appenv, "ensure_best_python", lambda base: None)
+    monkeypatch.setattr(appenv, "ensure_best_python_for_pyproject", lambda base: None)
+
+
 # main() tests
 
 
 def test_main_shows_usage_without_subcommand(monkeypatch, capsys):
-    monkeypatch.setattr(appenv, "ensure_best_python", lambda base: None)
+    mock_ensure_python(monkeypatch)
     monkeypatch.setattr("sys.argv", ["appenv"])
 
     appenv.main()
@@ -22,7 +29,7 @@ def test_main_shows_usage_without_subcommand(monkeypatch, capsys):
 
 
 def test_main_clears_pythonpath(monkeypatch):
-    monkeypatch.setattr(appenv, "ensure_best_python", lambda base: None)
+    mock_ensure_python(monkeypatch)
     monkeypatch.setattr("sys.argv", ["appenv"])
 
     monkeypatch.setenv("PYTHONPATH", "/some/path")
@@ -34,7 +41,7 @@ def test_main_clears_pythonpath(monkeypatch):
 
 
 def test_main_calls_run_when_not_appenv(monkeypatch, tmpdir):
-    monkeypatch.setattr(appenv, "ensure_best_python", lambda base: None)
+    mock_ensure_python(monkeypatch)
 
     app_file = tmpdir / "myapp"
     app_file.write("#!/usr/bin/env python3\nprint('test')\n")
@@ -55,7 +62,7 @@ def test_main_calls_run_when_not_appenv(monkeypatch, tmpdir):
 
 
 def test_main_calls_meta_when_appenv(monkeypatch):
-    monkeypatch.setattr(appenv, "ensure_best_python", lambda base: None)
+    mock_ensure_python(monkeypatch)
 
     meta_called = []
     monkeypatch.setattr(appenv.AppEnv, "meta", lambda self: meta_called.append(True))

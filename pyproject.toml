@@ -45,6 +45,7 @@ path = "src/appenv.py"
 test = [
     "pytest",
     "pytest-cov",
+    "pexpect",
 ]
 lint = ["ruff", "ty"]
 dev = [
