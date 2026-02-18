@@ -595,7 +595,7 @@ def test_run_uv_sets_environment_and_execs(workdir, monkeypatch):
     remaining = ["--version"]
 
     with pytest.raises(SystemExit):
-        env.run_uv(args, remaining)
+        env.run_uv(args, remaining)  # type: ignore[attr-defined]
 
     assert len(execv_called) == 1
     assert execv_called[0][0] == "/usr/bin/uv"
