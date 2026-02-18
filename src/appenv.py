@@ -414,7 +414,7 @@ def parse_preferences():
     return None
 
 
-def parse_editable_spec(spec: str) -> dict | None:
+def parse_editable_spec(spec):
     """Parse an editable install spec like '-e ./path' or '-e /absolute/path'.
 
     Returns dict with 'path' and 'package_name', or None if parsing fails.
@@ -452,7 +452,7 @@ def parse_editable_spec(spec: str) -> dict | None:
     return {"path": path_part, "extras": extras}
 
 
-def extract_package_name_from_path(path: str, base_dir: Path) -> str | None:
+def extract_package_name_from_path(path, base_dir):
     """Extract package name from a local path.
 
     Checks for:
@@ -588,14 +588,13 @@ class AppEnv:
         )
         p.set_defaults(func=self.update_lockfile)
 
-        p = subparsers.add_parser("init", help="Create a new appenv project.")
+        p = subparsers.add_parser("init", help="Create a new pyproject.toml project.")
         p.set_defaults(func=self.init)
 
         p = subparsers.add_parser(
-            "init-pyproject",
-            help="Create or migrate to pyproject.toml project.",
+            "migrate", help="Migrate from requirements.txt to pyproject.toml."
         )
-        p.set_defaults(func=self.init_pyproject)
+        p.set_defaults(func=self.migrate)
 
         p = subparsers.add_parser("reset", help="Reset the environment.")
         p.set_defaults(func=self.reset)
@@ -801,49 +800,8 @@ class AppEnv:
         return str(env_dir)
 
     def init(self, args=None, remaining=None):
-        print("Let's create a new appenv project.\n")
-        command = None
-        while not command:
-            command = input("What should the command be named? ").strip()
-        dependency = input(
-            f"What is the main dependency as found on PyPI? [{command}] "
-        ).strip()
-        if not dependency:
-            dependency = command
-        default_target = (self.original_cwd / command).resolve()
-        target_input = input(
-            f"Where should we create this? [{default_target}] "
-        ).strip()
-        if target_input:
-            target = (self.original_cwd / target_input).resolve()
-        else:
-            target = default_target
-        if not target.exists():
-            target.mkdir(parents=True)
-        print()
-        print(f"Creating appenv setup in {target} ...")
-        bootstrap_data = Path(__file__).read_bytes()
-        os.chdir(target)
-        (target / "appenv").write_bytes(bootstrap_data)
-        (target / "appenv").chmod(0o755)
-        link = target / command
-        link.unlink(missing_ok=True)
-        link.symlink_to("appenv")
-        (target / REQUIREMENTS_TXT).write_text(dependency + "\n")
-        print()
-        try:
-            rel_path = target.relative_to(self.original_cwd)
-        except ValueError:
-            rel_path = target
-        print(f"Done. You can now `cd {rel_path}` and call `./{command}`")
-        print("to bootstrap and run it.")
-
-    def init_pyproject(self, args=None, remaining=None):
-        """Create or migrate to pyproject.toml project."""
+        """Create a new pyproject.toml project."""
         target = self.original_cwd.resolve()
-
-        # Check for migration
-        requirements_file = target / REQUIREMENTS_TXT
         pyproject_file = target / PYPROJECT_TOML
 
         if pyproject_file.exists():
@@ -852,113 +810,152 @@ class AppEnv:
             print("Edit pyproject.toml manually to make changes.")
             return
 
-        initial_command = target.name
+        print("Let's create a new pyproject.toml project.\n")
+
+        command_name = input("What should the command be named? [app] ").strip()
+        if not command_name:
+            command_name = "app"
+
+        description = input("Description []: ").strip()
+
+        print("\nEnter dependencies (one per line, empty line to finish):")
+        print(f"  Default: {command_name}")
         dependencies = []
-        editable_sources: dict[str, dict] = {}  # package_name -> source config
-        description = ""
+        while True:
+            dep = input("  Dependency: ").strip()
+            if not dep:
+                break
+            dependencies.append(dep)
+        if not dependencies:
+            dependencies = [command_name]
+
+        python_version = input("\nMinimum Python version [3.8]: ").strip()
+        if not python_version:
+            python_version = "3.8"
+
+        self._create_pyproject(
+            target=target,
+            project_name=command_name,
+            description=description,
+            dependencies=dependencies,
+            editable_sources={},
+            python_version=python_version,
+            command_name=command_name,
+        )
+
+    def migrate(self, args=None, remaining=None):
+        """Migrate from requirements.txt to pyproject.toml."""
+        target = self.original_cwd.resolve()
+        requirements_file = target / REQUIREMENTS_TXT
+        pyproject_file = target / PYPROJECT_TOML
+
+        if pyproject_file.exists():
+            print(f"pyproject.toml already exists in {target}.")
+            print("Nothing to do.")
+            return
+
+        if not requirements_file.exists():
+            print(f"No {REQUIREMENTS_TXT} found in {target}.")
+            print("Use 'init' to create a new project.")
+            return
+
+        print("Migrating from requirements.txt to pyproject.toml...\n")
+        deps_content = requirements_file.read_text().strip()
+
+        # Parse dependencies - separate editable from regular
+        all_deps = [
+            line.strip()
+            for line in deps_content.splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        ]
+        editable_specs = [d for d in all_deps if d.startswith("-e ")]
+        dependencies = [d for d in all_deps if not d.startswith("-e ")]
+
+        # Process editable installs
+        editable_sources = {}
+        editable_warnings = []
+        for spec in editable_specs:
+            parsed = parse_editable_spec(spec)
+            if not parsed:
+                editable_warnings.append(f"{spec} (unsupported format)")
+                continue
+
+            package_name = extract_package_name_from_path(parsed["path"], target)
+            if not package_name:
+                editable_warnings.append(
+                    f"{spec} (no pyproject.toml or setup.py found)"
+                )
+                continue
+
+            # Build dependency string with extras if present
+            dep_str = package_name
+            if parsed["extras"]:
+                dep_str = f"{package_name}[{','.join(parsed['extras'])}]"
+            dependencies.append(dep_str)
+
+            # Build source config
+            path = parsed["path"]
+            if not path.startswith(("./", "../", "/")):
+                path = "./" + path
+            editable_sources[package_name] = {"path": path, "editable": True}
+
+        if editable_warnings:
+            print(f"Warning: {len(editable_warnings)} editable install(s) skipped:")
+            for warn in editable_warnings:
+                print(f"  - {warn}")
+            print("Add them manually to pyproject.toml if needed.\n")
+
+        if editable_sources:
+            print(f"Found {len(editable_sources)} editable install(s):")
+            for name, src in editable_sources.items():
+                print(f"  - {name} ({src['path']})")
+            print()
+
+        print(f"Found {len(dependencies)} dependency(ies): {', '.join(dependencies)}")
+
+        # Set python version from preferences
         python_version = "3.8"
-        migrated = requirements_file.exists()
-
-        if migrated:
-            # Migration mode
-            print("Migrating from requirements.txt to pyproject.toml...\n")
-            deps_content = requirements_file.read_text().strip()
-
-            # Parse dependencies - separate editable from regular
-            all_deps = [
-                line.strip()
-                for line in deps_content.splitlines()
-                if line.strip() and not line.strip().startswith("#")
-            ]
-            editable_specs = [d for d in all_deps if d.startswith("-e ")]
-            dependencies = [d for d in all_deps if not d.startswith("-e ")]
-
-            # Process editable installs
-            editable_warnings = []
-            for spec in editable_specs:
-                parsed = parse_editable_spec(spec)
-                if not parsed:
-                    editable_warnings.append(f"{spec} (unsupported format)")
-                    continue
-
-                package_name = extract_package_name_from_path(parsed["path"], target)
-                if not package_name:
-                    editable_warnings.append(
-                        f"{spec} (no pyproject.toml or setup.py found)"
-                    )
-                    continue
-
-                # Build dependency string with extras if present
-                dep_str = package_name
-                if parsed["extras"]:
-                    dep_str = f"{package_name}[{','.join(parsed['extras'])}]"
-
-                dependencies.append(dep_str)
-
-                # Build source config (normalize path for cross-platform)
-                path = parsed["path"]
-                if not path.startswith(("./", "../", "/")):
-                    path = "./" + path
-                editable_sources[package_name] = {"path": path, "editable": True}
-
-            if editable_warnings:
-                print(f"Warning: {len(editable_warnings)} editable install(s) skipped:")
-                for warn in editable_warnings:
-                    print(f"  - {warn}")
-                print("Add them manually to pyproject.toml if needed.\n")
-
-            if editable_sources:
-                print(f"Found {len(editable_sources)} editable install(s):")
-                for name, src in editable_sources.items():
-                    print(f"  - {name} ({src['path']})")
-                print()
-
-            print(
-                f"Found {len(dependencies)} dependency(ies): {', '.join(dependencies)}"
+        preferences = parse_preferences()
+        if preferences:
+            preferences_sorted = sorted(
+                preferences, key=lambda s: [int(u) for u in s.split(".")]
             )
+            python_version = preferences_sorted[0]
+            print(f"Found python preference: {', '.join(preferences)}")
+            print(f"Using minimum version: {python_version}")
 
-            # Set python version from preferences
-            preferences = parse_preferences()
-            if preferences:
-                # Sort to get minimal version
-                preferences_sorted = sorted(
-                    preferences, key=lambda s: [int(u) for u in s.split(".")]
-                )
-                python_version = preferences_sorted[0]
-                print(f"Found python preference: {', '.join(preferences)}")
-                print(f"Using minimum version: {python_version}")
+        # Ask for project name
+        default_name = target.name
+        project_name = input(f"\nProject name [{default_name}]: ").strip()
+        if not project_name:
+            project_name = default_name
 
-            # Ask for project name (not command name - existing symlink is kept)
-            default_name = target.name
-            project_name = input(f"\nProject name [{default_name}]: ").strip()
-            if not project_name:
-                project_name = default_name
-            initial_command = project_name
-        else:
-            # Fresh start
-            print("Let's create a new pyproject.toml project.\n")
-            initial_command = None
-            while not initial_command:
-                initial_command = (
-                    input("What should the command be named? [app] ").strip() or "app"
-                )
+        self._create_pyproject(
+            target=target,
+            project_name=project_name,
+            description="",
+            dependencies=dependencies,
+            editable_sources=editable_sources,
+            python_version=python_version,
+            command_name=None,  # Find existing symlinks
+        )
+        print(
+            "\nrequirements.txt kept as legacy. Delete it when migration is complete."
+        )
 
-            description = input("Description []: ").strip()
-
-            print("\nEnter dependencies (one per line, empty line to finish):")
-            print(f"  Default: {initial_command}")
-            dependencies = []
-            while True:
-                dep = input("  Dependency: ").strip()
-                if not dep:
-                    break
-                dependencies.append(dep)
-            if not dependencies:
-                dependencies = [initial_command]
-
-            python_version = input("\nMinimum Python version [3.8]: ").strip()
-            if not python_version:
-                python_version = "3.8"
+    def _create_pyproject(
+        self,
+        target,
+        project_name,
+        description,
+        dependencies,
+        editable_sources,
+        python_version,
+        command_name,
+    ):
+        """Create pyproject.toml, appenv bootstrap, symlink, and lockfile."""
+        pyproject_file = target / PYPROJECT_TOML
+        appenv_script = target / "appenv"
 
         # Generate pyproject.toml
         if dependencies:
@@ -968,14 +965,13 @@ class AppEnv:
             deps_block = "[]"
 
         pyproject_content = f"""[project]
-name = "{initial_command}"
+name = "{project_name}"
 version = "0.1.0"
 description = "{description}"
 dependencies = {deps_block}
 requires-python = ">={python_version}"
 """
 
-        # Add [tool.uv.sources] for editable installs
         if editable_sources:
             sources_lines = ["[tool.uv.sources]"]
             for pkg_name, src_config in sorted(editable_sources.items()):
@@ -986,10 +982,9 @@ requires-python = ">={python_version}"
             pyproject_content += "\n" + "\n".join(sources_lines) + "\n"
 
         pyproject_file.write_text(pyproject_content)
-        print(f"Created {PYPROJECT_TOML}")
+        print(f"\nCreated {PYPROJECT_TOML}")
 
         # Create appenv bootstrap if needed
-        appenv_script = target / "appenv"
         if not appenv_script.exists():
             bootstrap_data = Path(__file__).read_bytes()
             appenv_script.write_bytes(bootstrap_data)
@@ -997,46 +992,37 @@ requires-python = ">={python_version}"
             print("Created appenv bootstrap script")
 
         # Handle symlink
-        if migrated:
-            # Migration: Find existing symlinks to appenv, don't touch anything
+        if command_name:
+            # Fresh project: create new symlink
+            command_link = target / command_name
+            if command_link.is_symlink() or command_link.exists():
+                command_link.unlink(missing_ok=True)
+            command_link.symlink_to("appenv")
+            print(f"Created {command_name} symlink")
+        else:
+            # Migration: find existing symlinks
             existing_symlinks = [
                 path.name
                 for path in target.iterdir()
                 if path.is_symlink() and path.resolve() == appenv_script.resolve()
             ]
-
             if existing_symlinks:
                 print(f"Found existing symlink(s): {', '.join(existing_symlinks)}")
+                command_name = existing_symlinks[0]
             else:
-                # No existing symlink, create one with project name
                 command_link = target / project_name
                 command_link.symlink_to("appenv")
                 print(f"Created {project_name} symlink")
-                existing_symlinks = [project_name]
+                command_name = project_name
 
-            # Use first existing symlink for "Run ./..." message
-            initial_command = existing_symlinks[0]
-        else:
-            # Fresh project: Create symlink (handle broken symlinks)
-            command_link = target / initial_command
-            if command_link.is_symlink() or command_link.exists():
-                command_link.unlink(missing_ok=True)
-            command_link.symlink_to("appenv")
-            print(f"Created {initial_command} symlink")
+        print("\nDone. pyproject.toml created.")
 
-        print()
-        if migrated:
-            print("Done. pyproject.toml created, requirements.txt kept as legacy.")
-        else:
-            print("Done. pyproject.toml created.")
-
-        # Auto-generate lockfile for better UX
+        # Auto-generate lockfile
         print("\nGenerating lockfile ...")
         self.update_lockfile(
             argparse.Namespace(diff=False, verbose=False), remaining=None
         )
-        print()
-        print(f"Run `./{initial_command}` to bootstrap and run")
+        print(f"\nRun `./{command_name}` to bootstrap and run")
 
     def python(self, args, remaining):
         self.run("python", remaining)
@@ -1068,7 +1054,7 @@ requires-python = ">={python_version}"
         os.chdir(self.base)
 
         project_type = detect_project_type(self.base)
-        verbose = args and getattr(args, "verbose", False)
+        verbose: bool = bool(args and getattr(args, "verbose", False))
 
         # Show what we're doing
         print(f"Base directory: {self.base}")
@@ -1233,8 +1219,10 @@ requires-python = ">={python_version}"
             print(f"Editable installs: {len(editable_specs)}")
 
         # Create temp requirements without editables for uv
-        tmp_fd, tmp_requirements = tempfile.mkstemp(suffix=".txt", text=True)
+        tmp_requirements = ""
+        tmp_lock = ""
         try:
+            tmp_fd, tmp_requirements = tempfile.mkstemp(suffix=".txt", text=True)
             with os.fdopen(tmp_fd, "w") as tmp:
                 tmp.write("\n".join(regular_lines) + "\n")
 
@@ -1311,8 +1299,10 @@ requires-python = ">={python_version}"
                     else:
                         print(f"{check} Updated ({added_str} / {removed_str} lines)")
         finally:
-            Path(tmp_requirements).unlink(missing_ok=True)
-            Path(tmp_lock).unlink(missing_ok=True)
+            if tmp_requirements:
+                Path(tmp_requirements).unlink(missing_ok=True)
+            if tmp_lock:
+                Path(tmp_lock).unlink(missing_ok=True)
 
 
 def main():
