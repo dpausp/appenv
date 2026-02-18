@@ -16,6 +16,17 @@
 
 __version__ = "2026.2.0"
 
+__all__ = [
+    "main",
+    "AppEnv",
+    "parse_editable_spec",
+    "extract_package_name_from_path",
+    "parse_preferences",
+    "detect_project_type",
+    "ensure_best_python",
+    "ensure_best_python_for_pyproject",
+]
+
 import argparse
 import difflib
 import hashlib
@@ -403,6 +414,76 @@ def parse_preferences():
     return None
 
 
+def parse_editable_spec(spec: str) -> dict | None:
+    """Parse an editable install spec like '-e ./path' or '-e /absolute/path'.
+
+    Returns dict with 'path' and 'package_name', or None if parsing fails.
+
+    Supports:
+        -e ./relative/path
+        -e ../relative/path
+        -e /absolute/path
+        -e path  (no leading ./ or /)
+
+    Does NOT support:
+        -e git+... (git URLs)
+        -e package @ path (PEP 508 direct references)
+    """
+    if not spec.startswith("-e "):
+        return None
+
+    path_part = spec[3:].strip()
+
+    # Skip git URLs and PEP 508 direct references
+    if path_part.startswith(("git+", "git://", "hg+", "svn+")):
+        return None
+    if " @ " in path_part:
+        return None
+
+    # Handle extras like `-e ./path[extra]`
+    extras = []
+    if "[" in path_part and "]" in path_part:
+        start = path_part.index("[")
+        end = path_part.index("]")
+        extras_str = path_part[start + 1 : end]
+        extras = [e.strip() for e in extras_str.split(",") if e.strip()]
+        path_part = path_part[:start] + path_part[end + 1 :]
+
+    return {"path": path_part, "extras": extras}
+
+
+def extract_package_name_from_path(path: str, base_dir: Path) -> str | None:
+    """Extract package name from a local path.
+
+    Checks for:
+    1. pyproject.toml with [project] name
+    2. setup.py with name= or name =
+
+    Returns package name or None if not found.
+    """
+    full_path = (base_dir / path).resolve()
+
+    # Try pyproject.toml first
+    pyproject_path = full_path / PYPROJECT_TOML
+    if pyproject_path.exists():
+        content = pyproject_path.read_text()
+        # Match name = "..." or name='...'
+        match = re.search(r'^name\s*=\s*["\']([^"\']+)["\']', content, re.MULTILINE)
+        if match:
+            return match.group(1)
+
+    # Try setup.py
+    setup_path = full_path / "setup.py"
+    if setup_path.exists():
+        content = setup_path.read_text()
+        # Match name="..." or name='...' or name = "..."
+        match = re.search(r'name\s*=\s*["\']([^"\']+)["\']', content)
+        if match:
+            return match.group(1)
+
+    return None
+
+
 def find_minimal_python():
     """Find the minimal preferred Python version for lockfile generation.
 
@@ -773,6 +854,7 @@ class AppEnv:
 
         initial_command = target.name
         dependencies = []
+        editable_sources: dict[str, dict] = {}  # package_name -> source config
         description = ""
         python_version = "3.8"
         migrated = requirements_file.exists()
@@ -788,14 +870,49 @@ class AppEnv:
                 for line in deps_content.splitlines()
                 if line.strip() and not line.strip().startswith("#")
             ]
+            editable_specs = [d for d in all_deps if d.startswith("-e ")]
             dependencies = [d for d in all_deps if not d.startswith("-e ")]
-            editable_warnings = [d for d in all_deps if d.startswith("-e ")]
+
+            # Process editable installs
+            editable_warnings = []
+            for spec in editable_specs:
+                parsed = parse_editable_spec(spec)
+                if not parsed:
+                    editable_warnings.append(f"{spec} (unsupported format)")
+                    continue
+
+                package_name = extract_package_name_from_path(parsed["path"], target)
+                if not package_name:
+                    editable_warnings.append(
+                        f"{spec} (no pyproject.toml or setup.py found)"
+                    )
+                    continue
+
+                # Build dependency string with extras if present
+                dep_str = package_name
+                if parsed["extras"]:
+                    dep_str = f"{package_name}[{','.join(parsed['extras'])}]"
+
+                dependencies.append(dep_str)
+
+                # Build source config (normalize path for cross-platform)
+                path = parsed["path"]
+                if not path.startswith(("./", "../", "/")):
+                    path = "./" + path
+                editable_sources[package_name] = {"path": path, "editable": True}
 
             if editable_warnings:
                 print(f"Warning: {len(editable_warnings)} editable install(s) skipped:")
                 for warn in editable_warnings:
                     print(f"  - {warn}")
-                print("Edit pyproject.toml manually to add them if needed.\n")
+                print("Add them manually to pyproject.toml if needed.\n")
+
+            if editable_sources:
+                print(f"Found {len(editable_sources)} editable install(s):")
+                for name, src in editable_sources.items():
+                    print(f"  - {name} ({src['path']})")
+                print()
+
             print(
                 f"Found {len(dependencies)} dependency(ies): {', '.join(dependencies)}"
             )
@@ -857,6 +974,16 @@ description = "{description}"
 dependencies = {deps_block}
 requires-python = ">={python_version}"
 """
+
+        # Add [tool.uv.sources] for editable installs
+        if editable_sources:
+            sources_lines = ["[tool.uv.sources]"]
+            for pkg_name, src_config in sorted(editable_sources.items()):
+                path = src_config["path"]
+                sources_lines.append(
+                    f'{pkg_name} = {{ path = "{path}", editable = true }}'
+                )
+            pyproject_content += "\n" + "\n".join(sources_lines) + "\n"
 
         pyproject_file.write_text(pyproject_content)
         print(f"Created {PYPROJECT_TOML}")

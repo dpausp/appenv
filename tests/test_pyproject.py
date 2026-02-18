@@ -502,3 +502,450 @@ def test_init_pyproject_migration_interactive_project_name(tmpdir, monkeypatch, 
 
     captured = capsys.readouterr()
     assert "Migrating" in captured.out
+
+
+# Tests for parse_editable_spec
+
+
+@pytest.mark.parametrize(
+    "spec,expected",
+    [
+        ("-e ./local/pkg", {"path": "./local/pkg", "extras": []}),
+        ("-e ../sibling/pkg", {"path": "../sibling/pkg", "extras": []}),
+        ("-e /absolute/path/pkg", {"path": "/absolute/path/pkg", "extras": []}),
+        ("-e plainpath", {"path": "plainpath", "extras": []}),
+        ("-e ./pkg[extra1]", {"path": "./pkg", "extras": ["extra1"]}),
+        ("-e ./pkg[extra1,extra2]", {"path": "./pkg", "extras": ["extra1", "extra2"]}),
+        (
+            "-e ./pkg[ extra1 , extra2 ]",
+            {"path": "./pkg", "extras": ["extra1", "extra2"]},
+        ),
+        ("requests", None),  # not an editable spec
+        ("-e git+https://github.com/user/repo", None),  # git URL not supported
+        ("-e package @ ./path", None),  # PEP 508 direct ref not supported
+    ],
+)
+def test_parse_editable_spec(spec, expected):
+    """parse_editable_spec handles various editable spec formats."""
+    # Use direct attribute access - ty can't resolve __all__ for single-file modules
+    parse_editable_spec = getattr(appenv, "parse_editable_spec")
+    result = parse_editable_spec(spec)
+    assert result == expected
+
+
+# Tests for extract_package_name_from_path
+
+
+def test_extract_package_name_from_pyproject(tmpdir):
+    """extract_package_name_from_path reads name from pyproject.toml."""
+    extract_package_name_from_path = getattr(appenv, "extract_package_name_from_path")
+    base = Path(tmpdir)
+    pkg_dir = base / "mypackage"
+    pkg_dir.mkdir()
+
+    (pkg_dir / "pyproject.toml").write_text(
+        '[project]\nname = "my-cool-package"\nversion = "1.0.0"\n'
+    )
+
+    result = extract_package_name_from_path("mypackage", base)
+    assert result == "my-cool-package"
+
+
+def test_extract_package_name_from_setup_py(tmpdir):
+    """extract_package_name_from_path reads name from setup.py."""
+    extract_package_name_from_path = getattr(appenv, "extract_package_name_from_path")
+    base = Path(tmpdir)
+    pkg_dir = base / "legacy-pkg"
+    pkg_dir.mkdir()
+
+    (pkg_dir / "setup.py").write_text(
+        'from setuptools import setup\nsetup(name="legacy-package", version="0.1.0")\n'
+    )
+
+    result = extract_package_name_from_path("legacy-pkg", base)
+    assert result == "legacy-package"
+
+
+def test_extract_package_name_from_path_relative(tmpdir):
+    """extract_package_name_from_path handles relative paths."""
+    extract_package_name_from_path = getattr(appenv, "extract_package_name_from_path")
+    base = Path(tmpdir)
+    pkg_dir = base / "packages" / "subpkg"
+    pkg_dir.mkdir(parents=True)
+
+    (pkg_dir / "pyproject.toml").write_text('[project]\nname = "sub-package"\n')
+
+    result = extract_package_name_from_path("./packages/subpkg", base)
+    assert result == "sub-package"
+
+
+def test_extract_package_name_from_path_not_found(tmpdir):
+    """extract_package_name_from_path returns None when no package metadata found."""
+    extract_package_name_from_path = getattr(appenv, "extract_package_name_from_path")
+    base = Path(tmpdir)
+    empty_dir = base / "empty"
+    empty_dir.mkdir()
+
+    result = extract_package_name_from_path("empty", base)
+    assert result is None
+
+
+def test_extract_package_name_from_path_missing_dir(tmpdir):
+    """extract_package_name_from_path returns None when directory doesn't exist."""
+    extract_package_name_from_path = getattr(appenv, "extract_package_name_from_path")
+    base = Path(tmpdir)
+
+    result = extract_package_name_from_path("nonexistent", base)
+    assert result is None
+
+
+# Tests for init_pyproject with editable installs
+
+
+def test_init_pyproject_editable_with_valid_local_package(tmpdir, monkeypatch, capsys):
+    """init_pyproject converts -e ./path to proper uv.sources entry."""
+    monkeypatch.chdir(tmpdir)
+    base = Path(tmpdir)
+
+    # Create local package with pyproject.toml
+    local_pkg = base / "local-lib"
+    local_pkg.mkdir()
+    (local_pkg / "pyproject.toml").write_text(
+        '[project]\nname = "my-local-lib"\nversion = "0.1.0"\n'
+    )
+
+    # Create requirements.txt with editable install
+    (base / "requirements.txt").write_text("-e ./local-lib\nrequests>=2.0\n")
+
+    # Mock input to use defaults
+    inputs = iter(["myproject"])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.init_pyproject()
+
+    # Check pyproject.toml has both dependencies
+    pyproject = (base / "pyproject.toml").read_text()
+    assert '"my-local-lib"' in pyproject
+    assert '"requests>=2.0"' in pyproject
+
+    # Check [tool.uv.sources] was generated
+    assert "[tool.uv.sources]" in pyproject
+    assert 'my-local-lib = { path = "./local-lib", editable = true }' in pyproject
+
+    # Check output mentions editable
+    captured = capsys.readouterr()
+    assert "editable" in captured.out.lower()
+    assert "my-local-lib" in captured.out
+
+
+def test_init_pyproject_editable_with_setup_py(tmpdir, monkeypatch, capsys):
+    """init_pyproject handles editable with setup.py package."""
+    monkeypatch.chdir(tmpdir)
+    base = Path(tmpdir)
+
+    # Create local package with setup.py
+    local_pkg = base / "legacy-lib"
+    local_pkg.mkdir()
+    (local_pkg / "setup.py").write_text(
+        'from setuptools import setup\nsetup(name="legacy-lib")\n'
+    )
+
+    # Create requirements.txt with editable install
+    (base / "requirements.txt").write_text("-e ./legacy-lib\n")
+
+    inputs = iter(["myproject"])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.init_pyproject()
+
+    pyproject = (base / "pyproject.toml").read_text()
+    assert '"legacy-lib"' in pyproject
+    assert "[tool.uv.sources]" in pyproject
+    assert 'legacy-lib = { path = "./legacy-lib", editable = true }' in pyproject
+
+
+def test_init_pyproject_editable_only_dependencies(tmpdir, monkeypatch, capsys):
+    """init_pyproject handles requirements.txt with ONLY editable installs."""
+    monkeypatch.chdir(tmpdir)
+    base = Path(tmpdir)
+
+    # Create local package
+    local_pkg = base / "only-pkg"
+    local_pkg.mkdir()
+    (local_pkg / "pyproject.toml").write_text(
+        '[project]\nname = "only-pkg"\nversion = "1.0.0"\n'
+    )
+
+    # Create requirements.txt with ONLY editable (the bug case!)
+    (base / "requirements.txt").write_text("-e ./only-pkg\n")
+
+    inputs = iter(["myproject"])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.init_pyproject()
+
+    pyproject = (base / "pyproject.toml").read_text()
+
+    # Should have the editable as dependency
+    assert '"only-pkg"' in pyproject
+    assert "[tool.uv.sources]" in pyproject
+    assert 'only-pkg = { path = "./only-pkg", editable = true }' in pyproject
+
+    # Should NOT have empty dependencies
+    assert "dependencies = []" not in pyproject
+
+
+def test_init_pyproject_multiple_editables(tmpdir, monkeypatch, capsys):
+    """init_pyproject handles multiple editable installs."""
+    monkeypatch.chdir(tmpdir)
+    base = Path(tmpdir)
+
+    # Create multiple local packages
+    for name in ["pkg-a", "pkg-b", "pkg-c"]:
+        pkg_dir = base / name
+        pkg_dir.mkdir()
+        (pkg_dir / "pyproject.toml").write_text(
+            f'[project]\nname = "{name}"\nversion = "0.1.0"\n'
+        )
+
+    # Create requirements.txt with multiple editables
+    (base / "requirements.txt").write_text(
+        "-e ./pkg-a\n-e ./pkg-b\n-e ./pkg-c\nrequests\n"
+    )
+
+    inputs = iter(["myproject"])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.init_pyproject()
+
+    pyproject = (base / "pyproject.toml").read_text()
+
+    # All packages should be in dependencies
+    assert '"pkg-a"' in pyproject
+    assert '"pkg-b"' in pyproject
+    assert '"pkg-c"' in pyproject
+    assert '"requests"' in pyproject
+
+    # All should have sources
+    assert "[tool.uv.sources]" in pyproject
+    assert "pkg-a" in pyproject
+    assert "pkg-b" in pyproject
+    assert "pkg-c" in pyproject
+
+
+def test_init_pyproject_editable_with_extras(tmpdir, monkeypatch, capsys):
+    """init_pyproject handles editable with extras like -e ./pkg[extra]."""
+    monkeypatch.chdir(tmpdir)
+    base = Path(tmpdir)
+
+    # Create local package
+    local_pkg = base / "lib-with-extras"
+    local_pkg.mkdir()
+    (local_pkg / "pyproject.toml").write_text(
+        '[project]\nname = "lib-with-extras"\nversion = "0.1.0"\n'
+    )
+
+    # Create requirements.txt with extras
+    (base / "requirements.txt").write_text("-e ./lib-with-extras[dev,test]\n")
+
+    inputs = iter(["myproject"])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.init_pyproject()
+
+    pyproject = (base / "pyproject.toml").read_text()
+
+    # Should have dependency with extras
+    assert '"lib-with-extras[dev,test]"' in pyproject
+    assert "[tool.uv.sources]" in pyproject
+
+
+def test_init_pyproject_editable_missing_package_warns(tmpdir, monkeypatch, capsys):
+    """init_pyproject warns when editable path has no package metadata."""
+    monkeypatch.chdir(tmpdir)
+    base = Path(tmpdir)
+
+    # Create directory without pyproject.toml or setup.py
+    empty_dir = base / "empty-dir"
+    empty_dir.mkdir()
+
+    # Create requirements.txt with invalid editable
+    (base / "requirements.txt").write_text("-e ./empty-dir\nrequests\n")
+
+    inputs = iter(["myproject"])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.init_pyproject()
+
+    # Check warning in output
+    captured = capsys.readouterr()
+    assert "skipped" in captured.out.lower()
+    assert "empty-dir" in captured.out
+
+    # pyproject.toml should still have requests
+    pyproject = (base / "pyproject.toml").read_text()
+    assert '"requests"' in pyproject
+    assert "[tool.uv.sources]" not in pyproject
+
+
+def test_init_pyproject_editable_git_url_warns(tmpdir, monkeypatch, capsys):
+    """init_pyproject warns for git URL editable (not supported)."""
+    monkeypatch.chdir(tmpdir)
+    base = Path(tmpdir)
+
+    # Create requirements.txt with git URL
+    (base / "requirements.txt").write_text(
+        "-e git+https://github.com/user/repo.git\nrequests\n"
+    )
+
+    inputs = iter(["myproject"])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.init_pyproject()
+
+    # Check warning
+    captured = capsys.readouterr()
+    assert "skipped" in captured.out.lower()
+    assert "unsupported format" in captured.out.lower()
+
+    # pyproject.toml should only have requests
+    pyproject = (base / "pyproject.toml").read_text()
+    assert '"requests"' in pyproject
+    assert "[tool.uv.sources]" not in pyproject
+
+
+def test_init_pyproject_editable_relative_parent_path(tmpdir, monkeypatch, capsys):
+    """init_pyproject handles -e ../sibling style paths."""
+    base = Path(tmpdir)
+
+    # Create sibling package
+    sibling = base / "sibling-pkg"
+    sibling.mkdir()
+    (sibling / "pyproject.toml").write_text(
+        '[project]\nname = "sibling-lib"\nversion = "1.0.0"\n'
+    )
+
+    # Create project subdirectory (where we run init)
+    project_dir = base / "myproject"
+    project_dir.mkdir()
+
+    # Create requirements.txt INSIDE project_dir (not base)
+    (project_dir / "requirements.txt").write_text("-e ../sibling-pkg\n")
+
+    inputs = iter(["myproject"])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+    # AppEnv uses original_cwd as target, so pass project_dir as original_cwd
+    env = appenv.AppEnv(project_dir, project_dir)
+    env.init_pyproject()
+
+    pyproject = (project_dir / "pyproject.toml").read_text()
+    assert '"sibling-lib"' in pyproject
+    assert "[tool.uv.sources]" in pyproject
+    assert "../sibling-pkg" in pyproject
+
+
+def test_init_pyproject_editable_bare_path_gets_prefix(tmpdir, monkeypatch, capsys):
+    """init_pyproject adds ./ prefix to bare path editables."""
+    monkeypatch.chdir(tmpdir)
+    base = Path(tmpdir)
+
+    # Create local package
+    local_pkg = base / "bare-pkg"
+    local_pkg.mkdir()
+    (local_pkg / "pyproject.toml").write_text(
+        '[project]\nname = "bare-pkg"\nversion = "1.0.0"\n'
+    )
+
+    # Create requirements.txt with bare path (no ./)
+    (base / "requirements.txt").write_text("-e bare-pkg\n")
+
+    inputs = iter(["myproject"])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.init_pyproject()
+
+    pyproject = (base / "pyproject.toml").read_text()
+    assert '"bare-pkg"' in pyproject
+    # Should have ./ prefix in source path
+    assert 'path = "./bare-pkg"' in pyproject
+
+
+def test_init_pyproject_editable_mixed_valid_and_invalid(tmpdir, monkeypatch, capsys):
+    """init_pyproject handles mix of valid and invalid editables."""
+    monkeypatch.chdir(tmpdir)
+    base = Path(tmpdir)
+
+    # Create one valid package
+    valid_pkg = base / "valid-pkg"
+    valid_pkg.mkdir()
+    (valid_pkg / "pyproject.toml").write_text(
+        '[project]\nname = "valid-pkg"\nversion = "1.0.0"\n'
+    )
+
+    # Create one empty directory (invalid)
+    empty_dir = base / "empty-dir"
+    empty_dir.mkdir()
+
+    # Create requirements.txt with mix
+    (base / "requirements.txt").write_text("-e ./valid-pkg\n-e ./empty-dir\nrequests\n")
+
+    inputs = iter(["myproject"])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.init_pyproject()
+
+    pyproject = (base / "pyproject.toml").read_text()
+
+    # Valid should be in pyproject
+    assert '"valid-pkg"' in pyproject
+    assert "[tool.uv.sources]" in pyproject
+
+    # Check warning for invalid
+    captured = capsys.readouterr()
+    assert "skipped" in captured.out.lower()
+    assert "empty-dir" in captured.out
+
+
+# Update the old test to match new behavior
+
+
+def test_init_pyproject_editable_warnings_updated(tmpdir, monkeypatch, capsys):
+    """init_pyproject warns about unsupported editable formats (git URLs, etc)."""
+    monkeypatch.chdir(tmpdir)
+    base = Path(tmpdir)
+
+    # Create requirements.txt with git URLs (not supported)
+    (base / "requirements.txt").write_text(
+        "-e git+https://github.com/user/pkg.git\n"
+        "-e package @ ./path\n"  # PEP 508 format
+        "requests\nclick\n"
+    )
+
+    # Mock input to use defaults
+    inputs = iter(["myproject"])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.init_pyproject()
+
+    # Check output mentions editable installs warning
+    captured = capsys.readouterr()
+    assert "editable" in captured.out.lower()
+    assert "skipped" in captured.out.lower()
+
+    # Check pyproject.toml was created with only regular deps
+    pyproject = (base / "pyproject.toml").read_text()
+    assert "-e" not in pyproject
+    assert "requests" in pyproject
+    assert "click" in pyproject
+    assert "[tool.uv.sources]" not in pyproject
