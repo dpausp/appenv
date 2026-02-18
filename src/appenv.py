@@ -617,6 +617,12 @@ class AppEnv:
         p.add_argument("script", help="Name of the script to run.")
         p.set_defaults(func=self.run_script)
 
+        p = subparsers.add_parser(
+            "uv",
+            help="Run uv with the appenv-configured uv binary.",
+        )
+        p.set_defaults(func=self.run_uv)
+
         args, remaining = parser.parse_known_args()
 
         if not hasattr(args, "func"):
@@ -1053,6 +1059,14 @@ requires-python = ">={python_version}"
 
     def run_script(self, args, remaining):
         self.run(args.script, remaining)
+
+    def run_uv(self, args, remaining):
+        """Run uv with the appenv-configured uv binary."""
+        ensure_uv(self.base)
+        uv_bin = get_uv_bin(self.base)
+        uv_argv = [uv_bin] + remaining
+        os.chdir(self.base)
+        os.execv(uv_bin, uv_argv)
 
     def show_version(self, args=None, remaining=None):
         """Show appenv version."""
