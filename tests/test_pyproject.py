@@ -8,26 +8,16 @@ import appenv
 
 
 def test_detect_project_type_pyproject(tmpdir, monkeypatch):
-    """pyproject.toml is detected and has priority over requirements.txt."""
+    """pyproject.toml is detected."""
     monkeypatch.chdir(tmpdir)
     (Path(tmpdir) / "pyproject.toml").write_text("[project]\nname = 'test'\n")
-    (Path(tmpdir) / "requirements.txt").write_text("requests\n")
 
     result = appenv.detect_project_type(Path(tmpdir))
     assert result == "pyproject"
 
 
-def test_detect_project_type_requirements(tmpdir, monkeypatch):
-    """requirements.txt is detected when no pyproject.toml."""
-    monkeypatch.chdir(tmpdir)
-    (Path(tmpdir) / "requirements.txt").write_text("requests\n")
-
-    result = appenv.detect_project_type(Path(tmpdir))
-    assert result == "requirements"
-
-
 def test_detect_project_type_none(tmpdir, monkeypatch):
-    """Returns None when neither file exists."""
+    """Returns None when no pyproject.toml exists."""
     monkeypatch.chdir(tmpdir)
     result = appenv.detect_project_type(Path(tmpdir))
     assert result is None
@@ -137,7 +127,6 @@ def test_update_lockfile_pyproject_calls_uv_lock(tmpdir, monkeypatch):
     uv_calls = []
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
     monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
-    monkeypatch.setattr(appenv, "find_minimal_python", lambda: None)
     monkeypatch.setattr(
         appenv,
         "uv_cmd",
@@ -154,7 +143,7 @@ def test_update_lockfile_pyproject_calls_uv_lock(tmpdir, monkeypatch):
 
 
 def test_prepare_exits_without_project_files(tmpdir, monkeypatch, capsys):
-    """prepare() exits with error if no project files found."""
+    """prepare() exits with error if no pyproject.toml found."""
     monkeypatch.chdir(tmpdir)
     base = Path(tmpdir)
 
@@ -165,7 +154,7 @@ def test_prepare_exits_without_project_files(tmpdir, monkeypatch, capsys):
 
     assert err.value.code == 67
     captured = capsys.readouterr()
-    assert "pyproject.toml" in captured.out or "requirements.txt" in captured.out
+    assert "pyproject.toml" in captured.out
 
 
 def test_init_pyproject_uses_python_preference_from_requirements(

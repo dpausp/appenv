@@ -10,8 +10,7 @@ import appenv
 
 
 def mock_ensure_python(monkeypatch):
-    """Mock both ensure_best_python functions to prevent re-exec."""
-    monkeypatch.setattr(appenv, "ensure_best_python", lambda base: None)
+    """Mock ensure_best_python_for_pyproject to prevent re-exec."""
     monkeypatch.setattr(appenv, "ensure_best_python_for_pyproject", lambda base: None)
 
 
@@ -129,52 +128,6 @@ def test_get_uv_bin_uses_pip_fallback(monkeypatch, tmpdir):
     assert any("pip" in str(cmd) and "uv" in str(cmd) for cmd in pip_called)
 
 
-# ensure_best_python() tests
-
-
-def test_ensure_best_python_skips_when_env_set(monkeypatch, tmpdir):
-    monkeypatch.setenv("APPENV_BEST_PYTHON", "/usr/bin/python3")
-    monkeypatch.setattr("os.chdir", lambda p: None)
-
-    appenv.ensure_best_python(Path(tmpdir))
-
-
-def test_ensure_best_python_exits_when_no_python_found(monkeypatch, tmpdir, capsys):
-    monkeypatch.delenv("APPENV_BEST_PYTHON", raising=False)
-    monkeypatch.setattr("os.chdir", lambda p: None)
-    monkeypatch.setattr("shutil.which", lambda name: None)
-
-    with pytest.raises(SystemExit) as err:
-        appenv.ensure_best_python(Path(tmpdir))
-
-    assert err.value.code == 65
-    captured = capsys.readouterr()
-    assert "Could not find" in captured.out
-
-
-# ensure_minimal_python() tests
-
-
-def test_find_minimal_python_returns_none_when_no_preferences(monkeypatch, tmpdir):
-    monkeypatch.chdir(tmpdir)
-    (tmpdir / "requirements.txt").write("requests\n")
-
-    result = appenv.find_minimal_python()
-
-    assert result is None
-
-
-def test_find_minimal_python_exits_when_not_found(monkeypatch, capsys, tmpdir):
-    monkeypatch.chdir(tmpdir)
-    (tmpdir / "requirements.txt").write("# appenv-python-preference: 3.99\nrequests\n")
-    monkeypatch.setattr("shutil.which", lambda name: None)
-
-    with pytest.raises(SystemExit) as err:
-        appenv.find_minimal_python()
-
-    assert err.value.code == 66
-
-
 # meta() tests
 
 
@@ -264,83 +217,6 @@ def test_run_sets_env_and_execs(monkeypatch, tmpdir):
 
     assert len(execv_called) == 1
     assert "myapp" in execv_called[0][0]
-
-
-# _assert_requirements_lock() tests
-
-
-def test_assert_requirements_lock_hash_mismatch_exits(monkeypatch, tmpdir, capsys):
-    monkeypatch.chdir(tmpdir)
-
-    (tmpdir / "requirements.txt").write("requests==2.0.0\n")
-    (tmpdir / "requirements.lock").write(
-        "# appenv-requirements-hash: wronghash123\nrequests==1.0.0\n"
-    )
-
-    env = appenv.AppEnv(Path(tmpdir), Path.cwd())
-
-    with pytest.raises(SystemExit) as err:
-        env._assert_requirements_lock()
-
-    assert err.value.code == 67
-    captured = capsys.readouterr()
-    assert "out of date" in captured.out or "hash mismatch" in captured.out
-
-
-# update_lockfile() tests
-
-
-def test_update_lockfile_without_uv_installs_it(monkeypatch, tmpdir, capsys):
-    """When uv is not available, ensure_uv installs it via pip."""
-    monkeypatch.chdir(tmpdir)
-    monkeypatch.setattr("shutil.which", lambda name: None)  # no uv, no nix
-
-    pip_install_called = []
-    monkeypatch.setattr(
-        "subprocess.run",
-        lambda cmd, **kwargs: pip_install_called.append(cmd),
-    )
-
-    env = appenv.AppEnv(Path(tmpdir), Path.cwd())
-
-    # Reset uv cache
-    appenv._uv_bin_cache = None
-
-    # Mock uv_cmd to avoid actual execution
-    monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: None)
-    monkeypatch.setattr(appenv, "find_minimal_python", lambda: None)
-
-    (tmpdir / "requirements.txt").write("requests\n")
-
-    # This should try to install uv via pip
-    try:
-        env.update_lockfile()
-    except RuntimeError:
-        # Expected: uv not found (mocked)
-        pass
-
-    assert any("pip" in str(cmd) and "uv" in str(cmd) for cmd in pip_install_called)
-
-
-def test_update_lockfile_preserves_editable_installs(monkeypatch, tmpdir):
-    monkeypatch.chdir(tmpdir)
-    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
-    monkeypatch.setattr(appenv, "find_minimal_python", lambda: None)
-
-    (tmpdir / "requirements.txt").write("-e /path/to/local/pkg\nrequests\n")
-
-    def mock_uv_cmd(args, **kwargs):
-        with open("requirements.lock", "w") as f:
-            f.write("requests==2.28.0\n")
-
-    monkeypatch.setattr(appenv, "uv_cmd", mock_uv_cmd)
-
-    env = appenv.AppEnv(Path(tmpdir), Path.cwd())
-    env.update_lockfile()
-
-    with open("requirements.lock") as f:
-        content = f.read()
-    assert "-e /path/to/local/pkg" in content
 
 
 # python() method tests
@@ -563,23 +439,6 @@ def test_show_version(capsys):
     assert appenv.__version__ in captured.out
 
 
-def test_assert_requirements_lock_missing_exits(monkeypatch, tmpdir, capsys):
-    """_assert_requirements_lock exits with code 67 when lockfile missing."""
-    monkeypatch.chdir(tmpdir)
-
-    # Create requirements.txt but no lock file
-    (tmpdir / "requirements.txt").write("requests\n")
-
-    env = appenv.AppEnv(Path(tmpdir), Path.cwd())
-
-    with pytest.raises(SystemExit) as err:
-        env._assert_requirements_lock()
-
-    assert err.value.code == 67
-    captured = capsys.readouterr()
-    assert "No requirements.lock found" in captured.out
-
-
 def test_check_uv_version_not_found(monkeypatch):
     """check_uv_version raises RuntimeError when uv not in PATH."""
     monkeypatch.setattr("shutil.which", lambda name: None)
@@ -644,38 +503,6 @@ def test_parse_requires_python_with_upper_bound(tmpdir):
     # Format with spaces: >= 3.11, < 3.15
     pyproject.write_text('requires-python = ">= 3.11, < 3.15"\n')
     assert appenv.parse_requires_python(pyproject) == ("3.11", "3.15")
-
-
-def test_find_minimal_python_resolve_and_verify(monkeypatch, tmpdir, capsys):
-    """find_minimal_python resolves path and verifies Python works."""
-    monkeypatch.chdir(tmpdir)
-
-    # Create requirements with preference
-    (tmpdir / "requirements.txt").write(
-        "# appenv-python-preference: 3.11,3.10\nrequests\n"
-    )
-
-    # Mock shutil.which to return path
-    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/python3.11")
-
-    # Mock subprocess.check_call to simulate verification success
-    check_call_calls = []
-    monkeypatch.setattr(
-        "subprocess.check_call",
-        lambda cmd, **kwargs: check_call_calls.append(cmd),
-    )
-
-    # Mock Path.resolve to return consistent path
-    def mock_resolve(self):
-        return Path("/usr/bin/python3.11")
-
-    monkeypatch.setattr("pathlib.Path.resolve", mock_resolve)
-
-    result = appenv.find_minimal_python()
-
-    assert result == "/usr/bin/python3.11"
-    # Verify that check_call was called with the python
-    assert any("python3.11" in str(cmd) for cmd in check_call_calls)
 
 
 # Tier 3 tests

@@ -21,15 +21,12 @@ __all__ = [
     "AppEnv",
     "parse_editable_spec",
     "extract_package_name_from_path",
-    "parse_preferences",
     "detect_project_type",
-    "ensure_best_python",
     "ensure_best_python_for_pyproject",
 ]
 
 import argparse
 import difflib
-import hashlib
 import os
 import re
 import shutil
@@ -40,8 +37,6 @@ from pathlib import Path
 from typing import cast
 
 # Constants
-REQUIREMENTS_TXT = "requirements.txt"
-REQUIREMENTS_LOCK = "requirements.lock"
 PYPROJECT_TOML = "pyproject.toml"
 UV_LOCK = "uv.lock"
 
@@ -162,14 +157,10 @@ def ensure_best_python_for_pyproject(base):
 def detect_project_type(base):
     """Detect project type based on present files.
 
-    Priority: pyproject.toml > requirements.txt
-
-    Returns: "pyproject", "requirements", or None
+    Returns: "pyproject" or None
     """
     if (base / PYPROJECT_TOML).exists():
         return "pyproject"
-    if (base / REQUIREMENTS_TXT).exists():
-        return "requirements"
     return None
 
 
@@ -403,17 +394,6 @@ def ensure_venv(target, base=None):
     uv_cmd(["venv", "--python", sys.executable, str(target)])
 
 
-def parse_preferences():
-    req_file = Path(REQUIREMENTS_TXT)
-    if not req_file.exists():
-        return None
-    for line in req_file.read_text().splitlines():
-        if line.startswith("# appenv-python-preference: "):
-            raw = line.split(":")[1]
-            return [x.strip() for x in raw.split(",") if x.strip()]
-    return None
-
-
 def parse_editable_spec(spec):
     """Parse an editable install spec like '-e ./path' or '-e /absolute/path'.
 
@@ -482,86 +462,6 @@ def extract_package_name_from_path(path, base_dir):
             return match.group(1)
 
     return None
-
-
-def find_minimal_python():
-    """Find the minimal preferred Python version for lockfile generation.
-
-    Returns the path to the minimal Python, or None if no preference is set.
-    Exits with code 66 if a preference is set but the minimal version is not found.
-    """
-    preferences = parse_preferences()
-    if not preferences:
-        return None
-
-    # Sort to get minimal version first
-    preferences.sort(key=lambda s: [int(u) for u in s.split(".")])
-    minimal_version = preferences[0]
-
-    python_path = shutil.which(f"python{minimal_version}")
-    if not python_path:
-        print("Could not find the minimal preferred Python version.")
-        print(f"To ensure a working {REQUIREMENTS_LOCK} on all Python versions")
-        print(f"make Python {minimal_version} available on this system.")
-        sys.exit(66)
-
-    assert python_path is not None  # for type checker
-    python_path = str(Path(python_path).resolve())
-
-    # Verify it works
-    try:
-        subprocess.check_call(
-            [python_path, "-c", "print(1)"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-    except subprocess.CalledProcessError:
-        print(f"Python {minimal_version} found but not functional.")
-        sys.exit(66)
-
-    return python_path
-
-
-def ensure_best_python(base):
-    os.chdir(base)
-
-    if "APPENV_BEST_PYTHON" in os.environ:
-        # Don't do this twice to avoid being surprised with
-        # accidental infinite loops.
-        return
-
-    preferences = parse_preferences()
-
-    if preferences is None:
-        # use newest Python available if nothing else is requested
-        preferences = [f"3.{x}" for x in reversed(range(4, 20))]
-
-    current_python = str(Path(sys.executable).resolve())
-    for version in preferences:
-        python = shutil.which(f"python{version}")
-        if not python:
-            # not a usable python
-            continue
-        python = str(Path(python).resolve())
-        if python == current_python:
-            # found a preferred python and we're already running as it
-            break
-        # Try whether this Python works
-        try:
-            subprocess.check_call(
-                [python, "-c", "print(1)"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-        except subprocess.CalledProcessError:
-            continue
-        argv = [Path(python).name] + sys.argv
-        os.environ["APPENV_BEST_PYTHON"] = python
-        os.execv(python, argv)
-    else:
-        print("Could not find a preferred Python version.")
-        print("Preferences: {}".format(", ".join(preferences)))
-        sys.exit(65)
 
 
 class AppEnv:
@@ -638,33 +538,6 @@ class AppEnv:
         os.chdir(self.original_cwd)
         os.execv(str(cmd_path), argv)
 
-    def _assert_requirements_lock(self):
-        lock_file = Path(REQUIREMENTS_LOCK)
-        if not lock_file.exists():
-            print(
-                f"No {REQUIREMENTS_LOCK} found. "
-                "Generate it using ./appenv update-lockfile"
-            )
-            sys.exit(67)
-
-        locked_hash = next(
-            (
-                line.split(":")[1].strip()
-                for line in lock_file.read_text().splitlines()
-                if line.startswith("# appenv-requirements-hash: ")
-            ),
-            None,
-        )
-        if locked_hash != self._hash_requirements():
-            print(
-                f"{REQUIREMENTS_TXT} seems out of date (hash mismatch). "
-                "Regenerate using ./appenv update-lockfile"
-            )
-            sys.exit(67)
-
-    def _hash_requirements(self):
-        return hashlib.new("sha256", Path(REQUIREMENTS_TXT).read_bytes()).hexdigest()
-
     def prepare(self, args=None, remaining=None):
         os.chdir(self.base)
 
@@ -674,10 +547,8 @@ class AppEnv:
 
         if project_type == "pyproject":
             return self._prepare_pyproject()
-        elif project_type == "requirements":
-            return self._prepare_requirements()
         else:
-            print(f"No {PYPROJECT_TOML} or {REQUIREMENTS_TXT} found.")
+            print(f"No {PYPROJECT_TOML} found.")
             sys.exit(67)
 
     def _prepare_pyproject(self):
@@ -745,10 +616,9 @@ class AppEnv:
         if not venv_link.exists():
             venv_link.symlink_to(".appenv/venv")
 
-        # Cleanup old .appenv hash-based venvs if migration is complete
-        # (requirements.txt removed = user migrated intentionally)
-        # But keep .appenv/venv (the new venv location)
-        if old_appenv.exists() and not (self.base / REQUIREMENTS_TXT).exists():
+        # Cleanup old .appenv hash-based venvs
+        # But keep .appenv/venv (the current venv location) and .uv
+        if old_appenv.exists():
             for path in list(old_appenv.iterdir()):
                 if path.name != "venv" and path.name != ".uv":
                     verbose_print(f"Removing old .appenv entry: {path.name} ...")
@@ -758,76 +628,6 @@ class AppEnv:
                         path.unlink()
 
         return str(venv_real)
-
-    def _prepare_requirements(self):
-        """Prepare environment for requirements.txt using legacy workflow."""
-        verbose_print("Workflow: requirements.txt (legacy)")
-
-        self._assert_requirements_lock()
-
-        verbose_print(f"Project base: {self.base}")
-        verbose_print(f"Python: {Path(sys.executable).resolve()}")
-        verbose_print(f"uv binary: {get_uv_bin(self.base)}")
-
-        requirements = Path(REQUIREMENTS_LOCK).read_bytes()
-        hash_content = [
-            os.fsencode(Path(sys.executable).resolve()),
-            requirements,
-            Path(__file__).read_bytes(),
-        ]
-        env_hash = hashlib.new("sha256", b"".join(hash_content)).hexdigest()[:8]
-        env_dir = self.appenv_dir / env_hash
-
-        whitelist = {
-            str(env_dir),
-            str(self.appenv_dir / "unclean"),
-            str(self.appenv_dir / "current"),
-        }
-        if self.appenv_dir.exists():
-            for path in self.appenv_dir.iterdir():
-                if str(path) not in whitelist:
-                    verbose_print(f"Removing expired path: {path} ...")
-                    if path.is_dir():
-                        shutil.rmtree(path)
-                    else:
-                        path.unlink()
-        if env_dir.exists():
-            if not (env_dir / "appenv.ready").exists():
-                verbose_print("Existing envdir not consistent, deleting")
-                cmd(["rm", "-rf", str(env_dir)])
-
-        if not env_dir.exists():
-            ensure_venv(env_dir)
-
-            (env_dir / REQUIREMENTS_LOCK).write_bytes(requirements)
-
-            verbose_print("Installing dependencies (uv pip sync) ...")
-            uv_cmd(
-                [
-                    "pip",
-                    "sync",
-                    "--python",
-                    str(env_dir / "bin" / "python"),
-                    str(env_dir / REQUIREMENTS_LOCK),
-                ]
-            )
-
-            (env_dir / "appenv.ready").write_text(
-                "Ready or not, here I come, you can't hide\n"
-            )
-            current_path = self.appenv_dir / "current"
-            current_path.unlink(missing_ok=True)
-            current_path.symlink_to(env_hash)
-
-        # Show venv python info
-        env_python = env_dir / "bin" / "python"
-        if env_python.exists():
-            verbose_print(f"Venv Python: {env_python}")
-            verbose_print(f"Venv Python (realpath): {env_python.resolve()}")
-            result = cmd([str(env_python), "--version"], quiet=True)
-            verbose_print(f"Venv Python version: {result.decode().strip()}")
-
-        return str(env_dir)
 
     def init(self, args=None, remaining=None):
         """Create a new pyproject.toml project."""
@@ -876,7 +676,7 @@ class AppEnv:
     def migrate(self, args=None, remaining=None):
         """Migrate from requirements.txt to pyproject.toml."""
         target = self.original_cwd.resolve()
-        requirements_file = target / REQUIREMENTS_TXT
+        requirements_file = target / "requirements.txt"
         pyproject_file = target / PYPROJECT_TOML
 
         if pyproject_file.exists():
@@ -885,7 +685,7 @@ class AppEnv:
             return
 
         if not requirements_file.exists():
-            print(f"No {REQUIREMENTS_TXT} found in {target}.")
+            print(f"No requirements.txt found in {target}.")
             print("Use 'init' to create a new project.")
             return
 
@@ -943,16 +743,20 @@ class AppEnv:
 
         print(f"Found {len(dependencies)} dependency(ies): {', '.join(dependencies)}")
 
-        # Set python version from preferences
+        # Parse python preference from requirements.txt
         python_version = "3.8"
-        preferences = parse_preferences()
-        if preferences:
-            preferences_sorted = sorted(
-                preferences, key=lambda s: [int(u) for u in s.split(".")]
-            )
-            python_version = preferences_sorted[0]
-            print(f"Found python preference: {', '.join(preferences)}")
-            print(f"Using minimum version: {python_version}")
+        for line in deps_content.splitlines():
+            if line.startswith("# appenv-python-preference: "):
+                raw = line.split(":")[1]
+                preferences = [x.strip() for x in raw.split(",") if x.strip()]
+                if preferences:
+                    preferences_sorted = sorted(
+                        preferences, key=lambda s: [int(u) for u in s.split(".")]
+                    )
+                    python_version = preferences_sorted[0]
+                    print(f"Found python preference: {', '.join(preferences)}")
+                    print(f"Using minimum version: {python_version}")
+                break
 
         # Ask for project name
         default_name = target.name
@@ -1127,22 +931,11 @@ requires-python = ">={python_version}"
             verbose_print("Mode: pyproject.toml (native uv workflow)")
             verbose_print(f"Reading: {source_file}")
             verbose_print(f"Lockfile: {lock_file}")
-        elif project_type == "requirements":
-            source_file = self.base / REQUIREMENTS_TXT
-            lock_file = self.base / REQUIREMENTS_LOCK
-            verbose_print("Mode: requirements.txt (legacy uv pip compile)")
-            verbose_print(f"Reading: {source_file}")
-            verbose_print(f"Lockfile: {lock_file}")
-            if verbose and source_file.exists():
-                verbose_print(f"Requirements hash: {self._hash_requirements()}")
         else:
-            print(f"No {PYPROJECT_TOML} or {REQUIREMENTS_TXT} found.")
+            print(f"No {PYPROJECT_TOML} found.")
             sys.exit(67)
 
-        if project_type == "pyproject":
-            self._update_lockfile_pyproject(args, verbose)
-        elif project_type == "requirements":
-            self._update_lockfile_requirements(args, verbose)
+        self._update_lockfile_pyproject(args, verbose)
 
     def _update_lockfile_pyproject(self, args, verbose=False):
         """Update uv.lock using uv lock (native workflow)."""
@@ -1225,156 +1018,26 @@ requires-python = ">={python_version}"
                 str(self.base / PYPROJECT_TOML),
                 "--no-header",
                 "--output-file",
-                REQUIREMENTS_LOCK,
+                "requirements.lock",
             ]
-            minimal_python = find_minimal_python()
-            if minimal_python:
-                verbose_print(f"Using minimal Python: {minimal_python}")
-                compile_args.extend(["--python", minimal_python])
             verbose_print(f"Running: uv {' '.join(compile_args)}")
             # Note: pip compile doesn't need --project because input file is explicit
             uv_cmd(compile_args, verbose=verbose)
 
             # Prepend stable header (uv's header contains absolute paths)
-            lock_path = Path(REQUIREMENTS_LOCK)
+            lock_path = self.base / "requirements.lock"
             if lock_path.exists():
                 lock_content = lock_path.read_text()
                 stable_header = "# Generated by appenv from pyproject.toml\n"
                 lock_path.write_text(stable_header + lock_content)
-
-    def _update_lockfile_requirements(self, args, verbose=False):
-        """Update requirements.lock using uv pip compile (legacy workflow)."""
-        minimal_python = find_minimal_python()
-        if verbose and minimal_python:
-            print(f"Using minimal Python: {minimal_python}")
-
-        # Read existing lockfile for comparison
-        lock_file = Path(REQUIREMENTS_LOCK)
-        old_lines: set[str] = set()
-        if lock_file.exists():
-            if verbose:
-                print(f"Reading existing lockfile: {lock_file}")
-            old_lines = set(
-                stripped
-                for line in lock_file.read_text().splitlines()
-                if (stripped := line.strip()) and not stripped.startswith("#")
-            )
-
-        if args and args.diff:
-            print("Checking lockfile changes ...")
-        else:
-            print("Updating lockfile with uv ...")
-
-        # Separate editable installs from regular requirements
-        all_reqs = [
-            line.strip()
-            for line in Path(REQUIREMENTS_TXT).read_text().splitlines()
-            if line.strip() and not line.strip().startswith("#")
-        ]
-        editable_specs = [r for r in all_reqs if r.startswith("-e ")]
-        regular_lines = [r for r in all_reqs if not r.startswith("-e ")]
-
-        if verbose:
-            print(f"Regular requirements: {len(regular_lines)}")
-            print(f"Editable installs: {len(editable_specs)}")
-
-        # Create temp requirements without editables for uv
-        tmp_requirements = ""
-        tmp_lock = ""
-        try:
-            tmp_fd, tmp_requirements = tempfile.mkstemp(suffix=".txt", text=True)
-            with os.fdopen(tmp_fd, "w") as tmp:
-                tmp.write("\n".join(regular_lines) + "\n")
-
-            # Compile with uv to temp file
-            tmp_lock_fd, tmp_lock = tempfile.mkstemp(suffix=".lock", text=True)
-            os.close(tmp_lock_fd)
-
-            compile_args = [
-                "pip",
-                "compile",
-                tmp_requirements,
-                "--no-header",
-                "--output-file",
-                tmp_lock,
-            ]
-            if minimal_python:
-                compile_args.extend(["--python", minimal_python])
-            if verbose:
-                print(f"Running: uv {' '.join(compile_args)}")
-            # Note: pip compile doesn't need --project because input file is explicit
-            uv_cmd(compile_args, verbose=verbose)
-
-            # Read compiled content
-            compiled = Path(tmp_lock).read_text()
-
-            # Build new lockfile content
-            new_content = f"# appenv-requirements-hash: {self._hash_requirements()}\n"
-            if editable_specs:
-                new_content += "\n# Editable installs\n"
-                for spec in editable_specs:
-                    new_content += spec + "\n"
-            new_content += compiled
-
-            # Extract new lines for comparison
-            new_lines = set(
-                stripped
-                for line in new_content.splitlines()
-                if (stripped := line.strip()) and not stripped.startswith("#")
-            )
-
-            if args and args.diff:
-                # Show full diff with colors
-                old_content = lock_file.read_text() if lock_file.exists() else ""
-                print_colored_diff(
-                    old_content,
-                    new_content,
-                    REQUIREMENTS_LOCK,
-                    f"{REQUIREMENTS_LOCK} (new)",
-                )
-            else:
-                # Write lockfile
-                lock_file.write_text(new_content)
-
-                # Show summary with colors
-                added = new_lines - old_lines
-                removed = old_lines - new_lines
-                n_added = len(added)
-                n_removed = len(removed)
-
-                # ANSI colors
-                green = "\033[32m"
-                red = "\033[31m"
-                reset = "\033[0m"
-                check = green + "✓" + reset
-
-                is_new = len(old_lines) == 0
-                if n_added == 0 and n_removed == 0 and not is_new:
-                    print("No changes")
-                else:
-                    added_str = f"{green}+{n_added}{reset}"
-                    removed_str = f"{red}-{n_removed}{reset}"
-                    if is_new:
-                        print(f"{check} Created ({added_str} lines)")
-                    else:
-                        print(f"{check} Updated ({added_str} / {removed_str} lines)")
-        finally:
-            if tmp_requirements:
-                Path(tmp_requirements).unlink(missing_ok=True)
-            if tmp_lock:
-                Path(tmp_lock).unlink(missing_ok=True)
 
 
 def main():
     base = Path(__file__).parent
     original_cwd = Path.cwd()
 
-    # Select best Python based on project type
-    project_type = detect_project_type(base)
-    if project_type == "pyproject":
-        ensure_best_python_for_pyproject(base)
-    else:
-        ensure_best_python(base)
+    # Select best Python for pyproject.toml workflow
+    ensure_best_python_for_pyproject(base)
 
     # clear PYTHONPATH variable to get a defined environment
     # XXX this is a bit of history. not sure whether its still needed. keeping

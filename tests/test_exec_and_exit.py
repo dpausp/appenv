@@ -16,69 +16,6 @@ import appenv
 class TestExecvProcessReplacement:
     """Tests for os.execv() calls that replace the current process."""
 
-    def test_ensure_best_python_execv_called_with_correct_args(
-        self, monkeypatch, tmpdir
-    ):
-        """ensure_best_python calls os.execv with correct path and argv."""
-        monkeypatch.delenv("APPENV_BEST_PYTHON", raising=False)
-        monkeypatch.setattr("os.chdir", lambda p: None)
-
-        # Mock available python
-        monkeypatch.setattr(
-            "shutil.which",
-            lambda name: "/usr/bin/python3.12" if name == "python3.12" else None,
-        )
-
-        # Mock subprocess.check_call to simulate working Python
-        monkeypatch.setattr("subprocess.check_call", lambda cmd, **kwargs: None)
-
-        # Mock sys.executable to be different
-        monkeypatch.setattr("sys.executable", "/old/python")
-
-        # Track execv call
-        execv_called = []
-
-        def mock_execv(path, argv):
-            execv_called.append((path, argv))
-            raise SystemExit(0)  # Simulate execv not returning
-
-        monkeypatch.setattr("os.execv", mock_execv)
-        monkeypatch.setattr("os.environ", {})
-
-        with pytest.raises(SystemExit):
-            appenv.ensure_best_python(Path(tmpdir))
-
-        assert len(execv_called) == 1
-        assert execv_called[0][0] == "/usr/bin/python3.12"
-        # argv[0] should be the basename of the python
-        assert execv_called[0][1][0] == "python3.12"
-
-    def test_ensure_best_python_sets_env_before_execv(self, monkeypatch, tmpdir):
-        """ensure_best_python sets APPENV_BEST_PYTHON env var before execv."""
-        monkeypatch.delenv("APPENV_BEST_PYTHON", raising=False)
-        monkeypatch.setattr("os.chdir", lambda p: None)
-
-        monkeypatch.setattr(
-            "shutil.which",
-            lambda name: "/usr/bin/python3.12" if name == "python3.12" else None,
-        )
-        monkeypatch.setattr("subprocess.check_call", lambda cmd, **kwargs: None)
-        monkeypatch.setattr("sys.executable", "/old/python")
-
-        env_set = {}
-
-        def mock_execv(path, argv):
-            env_set["APPENV_BEST_PYTHON"] = os.environ.get("APPENV_BEST_PYTHON")
-            raise SystemExit(0)
-
-        monkeypatch.setattr("os.execv", mock_execv)
-        monkeypatch.setattr("os.environ", {})
-
-        with pytest.raises(SystemExit):
-            appenv.ensure_best_python(Path(tmpdir))
-
-        assert env_set.get("APPENV_BEST_PYTHON") == "/usr/bin/python3.12"
-
     def test_ensure_best_python_for_pyproject_execv_with_correct_args(
         self, monkeypatch, tmpdir
     ):
@@ -220,22 +157,6 @@ class TestSysExitErrorPaths:
 
     # Code 65: Python not found errors
 
-    def test_ensure_best_python_exits_65_no_python_found(
-        self, monkeypatch, tmpdir, capsys
-    ):
-        """ensure_best_python exits with code 65 when no Python found."""
-        monkeypatch.delenv("APPENV_BEST_PYTHON", raising=False)
-        monkeypatch.setattr("os.chdir", lambda p: None)
-        monkeypatch.setattr("shutil.which", lambda name: None)
-
-        with pytest.raises(SystemExit) as err:
-            appenv.ensure_best_python(Path(tmpdir))
-
-        assert err.value.code == 65
-        captured = capsys.readouterr()
-        assert "Could not find" in captured.out
-        assert "Preferences" in captured.out
-
     def test_ensure_best_python_for_pyproject_exits_65_no_python_found(
         self, monkeypatch, tmpdir, capsys
     ):
@@ -284,51 +205,10 @@ class TestSysExitErrorPaths:
         assert "3.99" in captured.out
         assert "<4.0" in captured.out
 
-    # Code 66: Invalid pyproject.toml / minimal Python not found
-
-    def test_find_minimal_python_exits_66_not_found(self, monkeypatch, tmpdir, capsys):
-        """find_minimal_python exits with code 66 when minimal version not found."""
-        monkeypatch.chdir(tmpdir)
-        (Path(tmpdir) / "requirements.txt").write_text(
-            "# appenv-python-preference: 3.99\nrequests\n"
-        )
-        monkeypatch.setattr("shutil.which", lambda name: None)
-
-        with pytest.raises(SystemExit) as err:
-            appenv.find_minimal_python()
-
-        assert err.value.code == 66
-        captured = capsys.readouterr()
-        assert "minimal preferred Python" in captured.out
-
-    def test_find_minimal_python_exits_66_broken_python(
-        self, monkeypatch, tmpdir, capsys
-    ):
-        """find_minimal_python exits 66 when Python found but not functional."""
-        monkeypatch.chdir(tmpdir)
-        (Path(tmpdir) / "requirements.txt").write_text(
-            "# appenv-python-preference: 3.11\nrequests\n"
-        )
-        monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/python3.11")
-
-        import subprocess
-
-        def fake_check_call(cmd, **kwargs):
-            raise subprocess.CalledProcessError(1, cmd)
-
-        monkeypatch.setattr("subprocess.check_call", fake_check_call)
-
-        with pytest.raises(SystemExit) as err:
-            appenv.find_minimal_python()
-
-        assert err.value.code == 66
-        captured = capsys.readouterr()
-        assert "not functional" in captured.out
-
-    # Code 67: Missing lock files / hash mismatch
+    # Code 67: Missing lock files
 
     def test_prepare_exits_67_no_project_files(self, monkeypatch, tmpdir, capsys):
-        """prepare exits with code 67 when no project files found."""
+        """prepare exits with code 67 when no pyproject.toml found."""
         monkeypatch.chdir(tmpdir)
 
         env = appenv.AppEnv(Path(tmpdir), Path.cwd())
@@ -338,7 +218,7 @@ class TestSysExitErrorPaths:
 
         assert err.value.code == 67
         captured = capsys.readouterr()
-        assert "pyproject.toml" in captured.out or "requirements.txt" in captured.out
+        assert "pyproject.toml" in captured.out
 
     def test_prepare_pyproject_exits_67_missing_uv_lock(
         self, monkeypatch, tmpdir, capsys
@@ -360,42 +240,6 @@ class TestSysExitErrorPaths:
         assert err.value.code == 67
         captured = capsys.readouterr()
         assert "uv.lock" in captured.out
-
-    def test_assert_requirements_lock_exits_67_missing(
-        self, monkeypatch, tmpdir, capsys
-    ):
-        """_assert_requirements_lock exits with code 67 when lock file missing."""
-        monkeypatch.chdir(tmpdir)
-        (Path(tmpdir) / "requirements.txt").write_text("requests\n")
-
-        env = appenv.AppEnv(Path(tmpdir), Path.cwd())
-
-        with pytest.raises(SystemExit) as err:
-            env._assert_requirements_lock()
-
-        assert err.value.code == 67
-        captured = capsys.readouterr()
-        assert "No requirements.lock found" in captured.out
-
-    def test_assert_requirements_lock_exits_67_hash_mismatch(
-        self, monkeypatch, tmpdir, capsys
-    ):
-        """_assert_requirements_lock exits with code 67 on hash mismatch."""
-        monkeypatch.chdir(tmpdir)
-
-        (Path(tmpdir) / "requirements.txt").write_text("requests==2.0.0\n")
-        (Path(tmpdir) / "requirements.lock").write_text(
-            "# appenv-requirements-hash: wronghash123\nrequests==1.0.0\n"
-        )
-
-        env = appenv.AppEnv(Path(tmpdir), Path.cwd())
-
-        with pytest.raises(SystemExit) as err:
-            env._assert_requirements_lock()
-
-        assert err.value.code == 67
-        captured = capsys.readouterr()
-        assert "out of date" in captured.out or "hash mismatch" in captured.out
 
     # Code 68: uv version too old
 
@@ -435,7 +279,7 @@ class TestSysExitErrorPaths:
         assert "too old" in captured.out
 
     def test_update_lockfile_exits_67_no_project(self, monkeypatch, tmpdir, capsys):
-        """update_lockfile exits with code 67 when no project files found."""
+        """update_lockfile exits with code 67 when no pyproject.toml found."""
         monkeypatch.chdir(tmpdir)
         monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
 
@@ -446,7 +290,7 @@ class TestSysExitErrorPaths:
 
         assert err.value.code == 67
         captured = capsys.readouterr()
-        assert "pyproject.toml" in captured.out or "requirements.txt" in captured.out
+        assert "pyproject.toml" in captured.out
 
 
 # ============================================================================

@@ -1,7 +1,6 @@
 """Tests specifically targeting coverage gaps."""
 
 import argparse
-import hashlib
 import os
 import subprocess
 import sys
@@ -222,264 +221,6 @@ def test_get_uv_bin_pip_fallback_success(tmpdir, monkeypatch):
 
 
 # ==============================================================================
-# Lines 467, 475-476: ensure_best_python branches
-# ==============================================================================
-
-
-def test_ensure_best_python_already_running_preferred(tmpdir, monkeypatch):
-    """Line 467: Breaks when already running a preferred Python version."""
-    base = Path(tmpdir)
-    (base / "requirements.txt").write_text("requests\n")
-
-    monkeypatch.delenv("APPENV_BEST_PYTHON", raising=False)
-    monkeypatch.setattr("os.chdir", lambda p: None)
-
-    which_calls = []
-
-    def mock_which(name):
-        which_calls.append(name)
-        if name == "python3.12":
-            return "/usr/bin/python3.12"
-        return None
-
-    monkeypatch.setattr("shutil.which", mock_which)
-
-    def mock_resolve(self):
-        return Path("/usr/bin/python3.12")
-
-    monkeypatch.setattr("pathlib.Path.resolve", mock_resolve)
-    monkeypatch.setattr("sys.executable", "/usr/bin/python3.12")
-
-    appenv.ensure_best_python(base)
-
-
-def test_ensure_best_python_broken_python_continues(tmpdir, monkeypatch, capsys):
-    """Lines 475-476: Continues to next Python when check_call fails."""
-    base = Path(tmpdir)
-    (base / "requirements.txt").write_text("requests\n")
-
-    monkeypatch.delenv("APPENV_BEST_PYTHON", raising=False)
-    monkeypatch.setattr("os.chdir", lambda p: None)
-
-    def mock_which(name):
-        if name == "python3.12":
-            return "/usr/bin/python3.12"
-        if name == "python3.11":
-            return "/usr/bin/python3.11"
-        return None
-
-    monkeypatch.setattr("shutil.which", mock_which)
-
-    check_call_count = []
-
-    def mock_check_call(cmd, **kwargs):
-        check_call_count.append(cmd)
-        if "python3.12" in str(cmd):
-            raise subprocess.CalledProcessError(1, cmd)
-
-    execv_called = []
-
-    def mock_execv(path, argv):
-        execv_called.append((path, argv))
-        raise SystemExit(0)
-
-    monkeypatch.setattr("subprocess.check_call", mock_check_call)
-    monkeypatch.setattr("os.execv", mock_execv)
-    monkeypatch.setattr("sys.executable", "/different/python")
-
-    with pytest.raises(SystemExit):
-        appenv.ensure_best_python(base)
-
-    assert "python3.11" in execv_called[0][0]
-
-
-# ==============================================================================
-# Lines 683, 685-687: _prepare_requirements cleanup branches
-# ==============================================================================
-
-
-def test_prepare_requirements_unlink_expired_file(workdir, monkeypatch, capsys):
-    """Line 683: Unlinks non-directory expired paths (files)."""
-    base = Path(workdir)
-    (base / "requirements.txt").write_text("requests==2.28.0\n")
-
-    req_content = (base / "requirements.txt").read_bytes()
-    correct_hash = hashlib.new("sha256", req_content).hexdigest()
-    (base / "requirements.lock").write_text(
-        f"# appenv-requirements-hash: {correct_hash}\nrequests==2.28.0\n"
-    )
-
-    appenv_dir = base / ".appenv"
-    appenv_dir.mkdir()
-
-    expired_file = appenv_dir / "expired_file.txt"
-    expired_file.write_text("expired")
-
-    (appenv_dir / "unclean").mkdir()
-    (appenv_dir / "current").symlink_to("nonexistent")
-
-    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
-    monkeypatch.setattr(appenv, "get_uv_bin", lambda base: "/usr/bin/uv")
-    monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: b"")
-
-    def mock_ensure_venv(target, base=None):
-        target.mkdir(parents=True, exist_ok=True)
-        (target / "bin").mkdir(exist_ok=True)
-        python = target / "bin" / "python"
-        python.write_text("#!/bin/sh\necho Python 3.12.0\n")
-        python.chmod(0o755)
-
-    monkeypatch.setattr(appenv, "ensure_venv", mock_ensure_venv)
-    monkeypatch.setattr(appenv, "cmd", lambda c, **kwargs: b"Python 3.12.0")
-
-    original_resolve = Path.resolve
-
-    def mock_resolve(self):
-        if "python" in str(self):
-            return Path("/python_path")
-        return original_resolve(self)
-
-    monkeypatch.setattr("pathlib.Path.resolve", mock_resolve)
-    monkeypatch.setenv("APPENV_VERBOSE", "1")
-
-    env = appenv.AppEnv(base, Path.cwd())
-    env._prepare_requirements()
-
-    assert not expired_file.exists()
-    captured = capsys.readouterr()
-    assert "Removing expired path" in captured.out
-
-
-def test_prepare_requirements_corrupted_envdir(workdir, monkeypatch, capsys):
-    """Lines 685-687: Removes envdir when ready file is missing."""
-    base = Path(workdir)
-    (base / "requirements.txt").write_text("requests==2.28.0\n")
-
-    req_content = (base / "requirements.txt").read_bytes()
-    correct_hash = hashlib.new("sha256", req_content).hexdigest()
-    (base / "requirements.lock").write_text(
-        f"# appenv-requirements-hash: {correct_hash}\nrequests==2.28.0\n"
-    )
-
-    appenv_dir = base / ".appenv"
-    appenv_dir.mkdir()
-
-    # Create corrupted env dir (without appenv.ready file) using a known hash
-    # that doesn't match the calculated hash
-    corrupted_hash = "deadbeef"
-    corrupted_dir = appenv_dir / corrupted_hash
-    corrupted_dir.mkdir()
-    (corrupted_dir / "incomplete.txt").write_text("incomplete install")
-    # NO appenv.ready file - this makes it "not consistent"
-
-    # Also create whitelist entries
-    (appenv_dir / "unclean").mkdir()
-    (appenv_dir / "current").symlink_to(corrupted_hash)
-
-    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
-    monkeypatch.setattr(appenv, "get_uv_bin", lambda base: "/usr/bin/uv")
-    monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: b"")
-
-    def mock_ensure_venv(target, base=None):
-        target.mkdir(parents=True, exist_ok=True)
-        (target / "bin").mkdir(exist_ok=True)
-        python = target / "bin" / "python"
-        python.write_text("#!/bin/sh\necho Python 3.12.0\n")
-        python.chmod(0o755)
-
-    monkeypatch.setattr(appenv, "ensure_venv", mock_ensure_venv)
-    monkeypatch.setattr(appenv, "cmd", lambda c, **kwargs: b"Python 3.12.0")
-
-    original_resolve = Path.resolve
-
-    def mock_resolve(self):
-        if "python" in str(self):
-            return Path("/python_path")
-        return original_resolve(self)
-
-    monkeypatch.setattr("pathlib.Path.resolve", mock_resolve)
-    monkeypatch.setenv("APPENV_VERBOSE", "1")
-
-    env = appenv.AppEnv(base, Path.cwd())
-    env._prepare_requirements()
-
-    # The corrupted dir should have been removed
-    assert not corrupted_dir.exists()
-    captured = capsys.readouterr()
-    # The "not consistent" message is only printed when an existing envdir
-    # doesn't have the ready file. But we're also removing it via rm -rf
-    # when it's expired, so let's check for either message
-    assert "not consistent" in captured.out or "Removing expired" in captured.out
-
-
-def test_prepare_requirements_inconsistent_envdir(workdir, monkeypatch, capsys):
-    """Lines 685-687: Removes envdir when ready file is missing (correct hash)."""
-    base = Path(workdir)
-    (base / "requirements.txt").write_text("requests==2.28.0\n")
-
-    req_content = (base / "requirements.txt").read_bytes()
-    correct_hash = hashlib.new("sha256", req_content).hexdigest()
-    (base / "requirements.lock").write_text(
-        f"# appenv-requirements-hash: {correct_hash}\nrequests==2.28.0\n"
-    )
-
-    appenv_dir = base / ".appenv"
-    appenv_dir.mkdir()
-
-    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
-    monkeypatch.setattr(appenv, "get_uv_bin", lambda base: "/usr/bin/uv")
-    monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: b"")
-
-    # Compute the actual env_hash that _prepare_requirements will use
-    def mock_ensure_venv(target, base=None):
-        target.mkdir(parents=True, exist_ok=True)
-        (target / "bin").mkdir(exist_ok=True)
-        python = target / "bin" / "python"
-        python.write_text("#!/bin/sh\necho Python 3.12.0\n")
-        python.chmod(0o755)
-
-    monkeypatch.setattr(appenv, "ensure_venv", mock_ensure_venv)
-    monkeypatch.setattr(appenv, "cmd", lambda c, **kwargs: b"Python 3.12.0")
-
-    original_resolve = Path.resolve
-
-    def mock_resolve(self):
-        if "python" in str(self):
-            return Path("/python_path")
-        return original_resolve(self)
-
-    monkeypatch.setattr("pathlib.Path.resolve", mock_resolve)
-    monkeypatch.setenv("APPENV_VERBOSE", "1")
-
-    # Pre-compute the hash to create the inconsistent env_dir
-    import os
-
-    requirements = (base / "requirements.lock").read_bytes()
-    hash_content = [
-        os.fsencode(Path("/python_path")),
-        requirements,
-        Path(appenv.__file__).read_bytes(),
-    ]
-    env_hash = hashlib.new("sha256", b"".join(hash_content)).hexdigest()[:8]
-
-    # Create the env_dir WITHOUT appenv.ready (inconsistent state)
-    env_dir = appenv_dir / env_hash
-    env_dir.mkdir(parents=True)
-    (env_dir / "some_file.txt").write_text("incomplete install")
-    # NO appenv.ready file
-
-    # Also create whitelist entries
-    (appenv_dir / "unclean").mkdir()
-    (appenv_dir / "current").symlink_to(env_hash)
-
-    env = appenv.AppEnv(base, Path.cwd())
-    env._prepare_requirements()
-
-    captured = capsys.readouterr()
-    assert "not consistent" in captured.out
-
-
-# ==============================================================================
 # Lines 818, 829: init_pyproject empty input defaults
 # ==============================================================================
 
@@ -612,7 +353,6 @@ def test_update_lockfile_pyproject_verbose(workdir, monkeypatch, capsys):
 
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
     monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
-    monkeypatch.setattr(appenv, "find_minimal_python", lambda: "/usr/bin/python3.11")
 
     def mock_uv_cmd(args, verbose=False, **kwargs):
         if "lock" in args and "pip" not in args:
@@ -633,7 +373,7 @@ def test_update_lockfile_pyproject_verbose(workdir, monkeypatch, capsys):
     env.update_lockfile(args=args, remaining=None)
 
     captured = capsys.readouterr()
-    assert "Using minimal Python" in captured.out
+    assert "Generating requirements.lock" in captured.out
 
 
 def test_update_lockfile_pyproject_no_changes(workdir, monkeypatch, capsys):
@@ -648,7 +388,6 @@ def test_update_lockfile_pyproject_no_changes(workdir, monkeypatch, capsys):
 
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
     monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
-    monkeypatch.setattr(appenv, "find_minimal_python", lambda: None)
 
     def mock_uv_cmd(args, verbose=False, **kwargs):
         return b""
@@ -675,7 +414,6 @@ def test_update_lockfile_pyproject_updated(workdir, monkeypatch, capsys):
 
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
     monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
-    monkeypatch.setattr(appenv, "find_minimal_python", lambda: None)
 
     def mock_uv_cmd(args, verbose=False, **kwargs):
         if "lock" in args and "pip" not in args:
@@ -758,109 +496,6 @@ def test_update_lockfile_pyproject_diff_no_changes(workdir, monkeypatch, capsys)
     assert "No changes" in captured.out
 
 
-def test_update_lockfile_requirements_verbose(workdir, monkeypatch, capsys):
-    """Test verbose output in requirements update_lockfile workflow."""
-    base = Path(workdir)
-    (base / "requirements.txt").write_text("requests\n")
-
-    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
-    monkeypatch.setattr(appenv, "find_minimal_python", lambda: "/usr/bin/python3.11")
-
-    def mock_uv_cmd(args, verbose=False, **kwargs):
-        if "compile" in args:
-            output_file = args[args.index("--output-file") + 1]
-            Path(output_file).write_text("requests==2.31.0\n")
-        return b""
-
-    monkeypatch.setattr(appenv, "uv_cmd", mock_uv_cmd)
-
-    env = appenv.AppEnv(base, Path.cwd())
-    args = argparse.Namespace(diff=False, verbose=True)
-
-    env.update_lockfile(args=args, remaining=None)
-
-    captured = capsys.readouterr()
-    assert "Using minimal Python" in captured.out
-
-
-def test_update_lockfile_requirements_verbose_existing_lockfile(
-    workdir, monkeypatch, capsys
-):
-    """Line 1081: Verbose output shows reading existing lockfile."""
-    base = Path(workdir)
-    (base / "requirements.txt").write_text("requests\n")
-    (base / "requirements.lock").write_text("requests==2.28.0\n")
-
-    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
-    monkeypatch.setattr(appenv, "find_minimal_python", lambda: "/usr/bin/python3.11")
-
-    def mock_uv_cmd(args, verbose=False, **kwargs):
-        if "compile" in args:
-            output_file = args[args.index("--output-file") + 1]
-            Path(output_file).write_text("requests==2.31.0\n")
-        return b""
-
-    monkeypatch.setattr(appenv, "uv_cmd", mock_uv_cmd)
-
-    env = appenv.AppEnv(base, Path.cwd())
-    args = argparse.Namespace(diff=False, verbose=True)
-
-    env.update_lockfile(args=args, remaining=None)
-
-    captured = capsys.readouterr()
-    assert "Reading existing lockfile" in captured.out
-
-
-def test_update_lockfile_requirements_no_changes(workdir, monkeypatch, capsys):
-    """Line 1176: 'No changes' output for requirements.lock."""
-    base = Path(workdir)
-    (base / "requirements.txt").write_text("requests\n")
-
-    (base / "requirements.lock").write_text("requests==2.31.0\n")
-
-    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
-    monkeypatch.setattr(appenv, "find_minimal_python", lambda: None)
-
-    def mock_uv_cmd(args, verbose=False, **kwargs):
-        if "compile" in args:
-            output_file = args[args.index("--output-file") + 1]
-            Path(output_file).write_text("requests==2.31.0\n")
-        return b""
-
-    monkeypatch.setattr(appenv, "uv_cmd", mock_uv_cmd)
-
-    env = appenv.AppEnv(base, Path.cwd())
-    env.update_lockfile()
-
-    captured = capsys.readouterr()
-    assert "No changes" in captured.out
-
-
-def test_update_lockfile_requirements_updated(workdir, monkeypatch, capsys):
-    """Line 1183: 'Updated' output for requirements.lock with changes."""
-    base = Path(workdir)
-    (base / "requirements.txt").write_text("requests\n")
-
-    (base / "requirements.lock").write_text("requests==2.28.0\n")
-
-    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
-    monkeypatch.setattr(appenv, "find_minimal_python", lambda: None)
-
-    def mock_uv_cmd(args, verbose=False, **kwargs):
-        if "compile" in args:
-            output_file = args[args.index("--output-file") + 1]
-            Path(output_file).write_text("requests==2.31.0\n")
-        return b""
-
-    monkeypatch.setattr(appenv, "uv_cmd", mock_uv_cmd)
-
-    env = appenv.AppEnv(base, Path.cwd())
-    env.update_lockfile()
-
-    captured = capsys.readouterr()
-    assert "Updated" in captured.out
-
-
 # ==============================================================================
 # Verbose output tests for prepare
 # ==============================================================================
@@ -896,48 +531,6 @@ def test_prepare_pyproject_verbose(workdir, monkeypatch, capsys):
 
     env = appenv.AppEnv(base, Path.cwd())
     env._prepare_pyproject()
-
-    captured = capsys.readouterr()
-    assert "Venv Python" in captured.out
-
-
-def test_prepare_requirements_verbose(workdir, monkeypatch, capsys):
-    """Verbose output in requirements prepare workflow."""
-    base = Path(workdir)
-    (base / "requirements.txt").write_text("requests==2.28.0\n")
-
-    req_content = (base / "requirements.txt").read_bytes()
-    correct_hash = hashlib.new("sha256", req_content).hexdigest()
-    (base / "requirements.lock").write_text(
-        f"# appenv-requirements-hash: {correct_hash}\nrequests==2.28.0\n"
-    )
-
-    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
-    monkeypatch.setattr(appenv, "get_uv_bin", lambda base: "/usr/bin/uv")
-    monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: b"")
-
-    def mock_ensure_venv(target, base=None):
-        target.mkdir(parents=True, exist_ok=True)
-        (target / "bin").mkdir(exist_ok=True)
-        python = target / "bin" / "python"
-        python.write_text("#!/bin/sh\necho Python 3.12.0\n")
-        python.chmod(0o755)
-
-    monkeypatch.setattr(appenv, "ensure_venv", mock_ensure_venv)
-    monkeypatch.setattr(appenv, "cmd", lambda c, **kwargs: b"Python 3.12.0")
-
-    original_resolve = Path.resolve
-
-    def mock_resolve(self):
-        if "python" in str(self):
-            return Path("/python_path")
-        return original_resolve(self)
-
-    monkeypatch.setattr("pathlib.Path.resolve", mock_resolve)
-    monkeypatch.setenv("APPENV_VERBOSE", "1")
-
-    env = appenv.AppEnv(base, Path.cwd())
-    env._prepare_requirements()
 
     captured = capsys.readouterr()
     assert "Venv Python" in captured.out
@@ -1011,54 +604,6 @@ def test_run_uv_sets_environment_and_execs(workdir, monkeypatch):
 
 
 # ==============================================================================
-# Line 678: prepare() calls _prepare_requirements for requirements.txt workflow
-# ==============================================================================
-
-
-def test_prepare_calls_prepare_requirements(workdir, monkeypatch, capsys):
-    """Line 678: prepare() calls _prepare_requirements for requirements.txt workflow."""
-    base = Path(workdir)
-    (base / "requirements.txt").write_text("requests==2.28.0\n")
-
-    req_content = (base / "requirements.txt").read_bytes()
-    correct_hash = hashlib.new("sha256", req_content).hexdigest()
-    (base / "requirements.lock").write_text(
-        f"# appenv-requirements-hash: {correct_hash}\nrequests==2.28.0\n"
-    )
-
-    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
-    monkeypatch.setattr(appenv, "get_uv_bin", lambda base: "/usr/bin/uv")
-    monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: b"")
-
-    def mock_ensure_venv(target, base=None):
-        target.mkdir(parents=True, exist_ok=True)
-        (target / "bin").mkdir(exist_ok=True)
-        python = target / "bin" / "python"
-        python.write_text("#!/bin/sh\necho Python 3.12.0\n")
-        python.chmod(0o755)
-
-    monkeypatch.setattr(appenv, "ensure_venv", mock_ensure_venv)
-    monkeypatch.setattr(appenv, "cmd", lambda c, **kwargs: b"Python 3.12.0")
-
-    original_resolve = Path.resolve
-
-    def mock_resolve(self):
-        if "python" in str(self):
-            return Path("/python_path")
-        return original_resolve(self)
-
-    monkeypatch.setattr("pathlib.Path.resolve", mock_resolve)
-    monkeypatch.setenv("APPENV_VERBOSE", "1")
-
-    env = appenv.AppEnv(base, Path.cwd())
-    result = env.prepare()
-
-    captured = capsys.readouterr()
-    assert "Mode: requirements" in captured.out
-    assert result is not None
-
-
-# ==============================================================================
 # Line 758: _prepare_pyproject unlinks non-directory files in .appenv
 # ==============================================================================
 
@@ -1067,7 +612,7 @@ def test_prepare_pyproject_unlink_file_in_appenv(workdir, monkeypatch, capsys):
     """Line 758: _prepare_pyproject unlinks non-directory files in .appenv."""
     base = Path(workdir)
 
-    # Create pyproject.toml and uv.lock (NO requirements.txt for cleanup)
+    # Create pyproject.toml and uv.lock
     (base / "pyproject.toml").write_text(
         '[project]\nname = "test"\ndependencies = []\n'
     )
@@ -1183,3 +728,59 @@ def test_reset_unlinks_file_in_appenv(workdir, monkeypatch, capsys):
     assert not old_file.exists()
     captured = capsys.readouterr()
     assert "Removing" in captured.out
+
+
+def test_reset_removes_venv_symlink(workdir, monkeypatch, capsys):
+    """reset() removes .venv symlink."""
+    base = Path(workdir)
+
+    # Create .appenv/venv and .venv symlink
+    appenv_dir = base / ".appenv"
+    appenv_dir.mkdir()
+    venv_real = appenv_dir / "venv"
+    venv_real.mkdir()
+    venv_link = base / ".venv"
+    venv_link.symlink_to(".appenv/venv")
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.reset()
+
+    assert not venv_link.exists()
+    captured = capsys.readouterr()
+    assert "Removing" in captured.out
+
+
+def test_reset_removes_real_venv(workdir, monkeypatch, capsys):
+    """reset() removes .appenv/venv directory."""
+    base = Path(workdir)
+
+    # Create .appenv/venv
+    appenv_dir = base / ".appenv"
+    appenv_dir.mkdir()
+    venv_real = appenv_dir / "venv"
+    venv_real.mkdir()
+    (venv_real / "bin").mkdir()
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.reset()
+
+    assert not venv_real.exists()
+    captured = capsys.readouterr()
+    assert "Removing" in captured.out
+
+
+def test_reset_removes_old_venv_directory(workdir, monkeypatch, capsys):
+    """reset() removes old .venv directory (not symlink)."""
+    base = Path(workdir)
+
+    # Create .venv as a real directory (legacy)
+    venv_dir = base / ".venv"
+    venv_dir.mkdir()
+    (venv_dir / "bin").mkdir()
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.reset()
+
+    assert not venv_dir.exists()
+    captured = capsys.readouterr()
+    assert "Removing old" in captured.out
