@@ -1,4 +1,3 @@
-import io
 import os.path
 import subprocess
 import sys
@@ -17,92 +16,100 @@ def test_bootstrap_lockfile_missing_dependency():
     pass
 
 
+def _setup_requirements_project(workdir):
+    """Setup a requirements.txt based project without calling init()."""
+    base = Path(workdir) / "ducker"
+    base.mkdir()
+    os.chdir(base)
+
+    # Copy appenv script
+    import shutil
+
+    src_appenv = Path(appenv.__file__)
+    dst_appenv = base / "appenv"
+    shutil.copy(src_appenv, dst_appenv)
+    dst_appenv.chmod(0o755)
+
+    # Create symlink
+    link = base / "ducker"
+    link.symlink_to("appenv")
+
+    # Create requirements.txt
+    (base / "requirements.txt").write_text("ducker==2.0.1\n")
+
+    return base
+
+
 def test_bootstrap_and_run_with_lockfile(workdir, monkeypatch):
-    monkeypatch.setattr("sys.stdin", io.StringIO("ducker\nducker==2.0.1\n\n"))
+    base = _setup_requirements_project(workdir)
 
-    env = appenv.AppEnv(Path(workdir) / "ducker", Path.cwd())
-
-    env.init()
+    env = appenv.AppEnv(base, Path.cwd())
     env.update_lockfile()
 
-    os.chdir(os.path.join(workdir, "ducker"))
-    with open("ducker") as f:
-        # Ensure we're called with the Python-interpreter-under-test.
+    with open(base / "ducker") as f:
         script = f"#!{sys.executable}\n{f.read()}"
-    with open("ducker", "w") as f:
+    with open(base / "ducker", "w") as f:
         f.write(script)
 
-    output = subprocess.check_output("./ducker --help", shell=True)
+    output = subprocess.check_output("./ducker --help", shell=True, cwd=base)
     assert output.startswith(b"usage: Ducker")
 
 
 def test_bootstrap_and_run_python_with_lockfile(workdir, monkeypatch):
-    monkeypatch.setattr("sys.stdin", io.StringIO("ducker\nducker==2.0.1\n\n"))
+    base = _setup_requirements_project(workdir)
 
-    env = appenv.AppEnv(Path(workdir) / "ducker", Path.cwd())
-
-    env.init()
+    env = appenv.AppEnv(base, Path.cwd())
     env.update_lockfile()
-    os.chdir(os.path.join(workdir, "ducker"))
-    with open("ducker") as f:
-        # Ensure we're called with the Python-interpreter-under-test.
-        script = f"#!{sys.executable}\n{f.read()}"
-    with open("ducker", "w") as f:
-        f.write(script)
 
-    output = subprocess.check_output('./appenv python -c "print(1)"', shell=True)
+    output = subprocess.check_output(
+        './appenv python -c "print(1)"', shell=True, cwd=base
+    )
     assert output == b"1\n"
 
 
 def test_bootstrap_and_run_without_lockfile(workdir, monkeypatch):
-    """It raises as error if no requirements.lock is present."""
-    monkeypatch.setattr("sys.stdin", io.StringIO("ducker\nducker==2.0.1\n\n"))
+    """It raises an error if no requirements.lock is present."""
+    base = _setup_requirements_project(workdir)
 
-    env = appenv.AppEnv(Path(workdir) / "ducker", Path.cwd())
-
-    env.init()
-
-    os.chdir(os.path.join(workdir, "ducker"))
-    with open("ducker") as f:
-        # Ensure we're called with the Python-interpreter-under-test.
+    with open(base / "ducker") as f:
         script = f"#!{sys.executable}\n{f.read()}"
-    with open("ducker", "w") as f:
+    with open(base / "ducker", "w") as f:
         f.write(script)
 
     with pytest.raises(subprocess.CalledProcessError) as err:
-        subprocess.check_output(["./ducker", "--help"])
+        subprocess.check_output(["./ducker", "--help"], cwd=base)
     assert b"No requirements.lock found" in err.value.output
     assert b"update-lockfile" in err.value.output
 
 
 def test_bootstrap_and_run_with_outdated_lockfile(workdir, monkeypatch):
-    monkeypatch.setattr("sys.stdin", io.StringIO("ducker\nducker==2.0.1\n\n"))
+    base = _setup_requirements_project(workdir)
 
-    env = appenv.AppEnv(Path(workdir) / "ducker", Path.cwd())
-
-    env.init()
+    env = appenv.AppEnv(base, Path.cwd())
     env.update_lockfile()
-    os.chdir(os.path.join(workdir, "ducker"))
-    with open("ducker") as f:
-        # Ensure we're called with the Python-interpreter-under-test.
-        script = f"#!{sys.executable}\n{f.read()}"
-    with open("ducker", "w") as f:
-        f.write(script)
 
-    output = subprocess.check_output('./appenv python -c "print(1)"', shell=True)
+    output = subprocess.check_output(
+        './appenv python -c "print(1)"', shell=True, cwd=base
+    )
     assert output == b"1\n"
 
-    with open("requirements.txt", "w") as f:
-        f.write("ducker==2.0.1")
+    # Modify requirements.txt to make lockfile outdated (add a new dependency)
+    with open(base / "requirements.txt", "a") as f:
+        f.write("\nclick\n")
 
     s = subprocess.Popen(
-        './appenv python -c "print(1)"', shell=True, stdout=subprocess.PIPE
+        './appenv python -c "print(1)"',
+        shell=True,
+        stdout=subprocess.PIPE,
+        cwd=base,
     )
     stdout, stderr = s.communicate()
     assert b"requirements.txt seems out of date" in stdout
     assert b"update-lockfile" in stdout
 
-    subprocess.check_call("./appenv update-lockfile", shell=True)
+    subprocess.check_call("./appenv update-lockfile", shell=True, cwd=base)
 
-    output = subprocess.check_output('./appenv python -c "print(1)"', shell=True)
+    output = subprocess.check_output(
+        './appenv python -c "print(1)"', shell=True, cwd=base
+    )
     assert output == b"1\n"

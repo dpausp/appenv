@@ -166,7 +166,7 @@ def test_prepare_exits_without_project_files(tmpdir, monkeypatch, capsys):
 def test_init_pyproject_uses_python_preference_from_requirements(
     tmpdir, monkeypatch, capsys
 ):
-    """init-pyproject migration reads python preference from requirements.txt."""
+    """migrate reads python preference from requirements.txt."""
     monkeypatch.chdir(tmpdir)
     base = Path(tmpdir)
 
@@ -180,7 +180,7 @@ def test_init_pyproject_uses_python_preference_from_requirements(
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
     env = appenv.AppEnv(base, Path.cwd())
-    env.init_pyproject()
+    env.migrate()
 
     # Check that pyproject.toml has the correct python version
     pyproject = (base / "pyproject.toml").read_text()
@@ -252,7 +252,7 @@ def test_prepare_pyproject_corrupted_venv(tmpdir, monkeypatch):
 
 
 def test_init_pyproject_editable_warnings(tmpdir, monkeypatch, capsys):
-    """init_pyproject warns about editable installs during migration."""
+    """migrate warns about editable installs during migration."""
     monkeypatch.chdir(tmpdir)
     base = Path(tmpdir)
 
@@ -266,7 +266,7 @@ def test_init_pyproject_editable_warnings(tmpdir, monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
     env = appenv.AppEnv(base, Path.cwd())
-    env.init_pyproject()
+    env.migrate()
 
     # Check output mentions editable installs warning
     captured = capsys.readouterr()
@@ -339,8 +339,8 @@ def test_ensure_best_python_for_pyproject_respects_upper_bound(
     assert "python3.13" in execv_called[0][0]
 
 
-def test_init_pyproject_already_exists(tmpdir, monkeypatch, capsys):
-    """init_pyproject returns early when pyproject.toml already exists."""
+def test_migrate_already_exists(tmpdir, monkeypatch, capsys):
+    """migrate returns early when pyproject.toml already exists."""
     monkeypatch.chdir(tmpdir)
     base = Path(tmpdir)
 
@@ -350,7 +350,7 @@ def test_init_pyproject_already_exists(tmpdir, monkeypatch, capsys):
     )
 
     env = appenv.AppEnv(base, Path.cwd())
-    env.init_pyproject()
+    env.migrate()
 
     # Check output mentions "already exists" message
     captured = capsys.readouterr()
@@ -358,8 +358,8 @@ def test_init_pyproject_already_exists(tmpdir, monkeypatch, capsys):
     assert "Nothing to do" in captured.out
 
 
-def test_init_pyproject_existing_symlinks(tmpdir, monkeypatch, capsys):
-    """init_pyproject detects and preserves existing symlinks during migration."""
+def test_migrate_existing_symlinks(tmpdir, monkeypatch, capsys):
+    """migrate detects and preserves existing symlinks during migration."""
     monkeypatch.chdir(tmpdir)
     base = Path(tmpdir)
 
@@ -378,7 +378,7 @@ def test_init_pyproject_existing_symlinks(tmpdir, monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
     env = appenv.AppEnv(base, Path.cwd())
-    env.init_pyproject()
+    env.migrate()
 
     # Check output mentions existing symlink
     captured = capsys.readouterr()
@@ -391,8 +391,8 @@ def test_init_pyproject_existing_symlinks(tmpdir, monkeypatch, capsys):
     assert myapp_link.resolve() == appenv_script.resolve()
 
 
-def test_init_pyproject_empty_dependencies(tmpdir, monkeypatch, capsys):
-    """init_pyproject handles requirements.txt with only comments (no dependencies)."""
+def test_migrate_empty_dependencies(tmpdir, monkeypatch, capsys):
+    """migrate handles requirements.txt with only comments (no dependencies)."""
     monkeypatch.chdir(tmpdir)
     base = Path(tmpdir)
 
@@ -406,7 +406,7 @@ def test_init_pyproject_empty_dependencies(tmpdir, monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
     env = appenv.AppEnv(base, Path.cwd())
-    env.init_pyproject()
+    env.migrate()
 
     # Check pyproject.toml was created with empty dependencies
     pyproject = (base / "pyproject.toml").read_text()
@@ -417,8 +417,8 @@ def test_init_pyproject_empty_dependencies(tmpdir, monkeypatch, capsys):
     assert "0 dependency" in captured.out or "Found 0" in captured.out
 
 
-def test_init_pyproject_fresh_start_interactive(tmpdir, monkeypatch, capsys):
-    """init_pyproject fresh start flow with interactive inputs."""
+def test_init_fresh_start_interactive(tmpdir, monkeypatch, capsys):
+    """init fresh start flow with interactive inputs."""
     monkeypatch.chdir(tmpdir)
     base = Path(tmpdir)
 
@@ -437,7 +437,7 @@ def test_init_pyproject_fresh_start_interactive(tmpdir, monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
     env = appenv.AppEnv(base, Path.cwd())
-    env.init_pyproject()
+    env.init()
 
     # Verify pyproject.toml was created
     pyproject = (base / "pyproject.toml").read_text()
@@ -453,8 +453,8 @@ def test_init_pyproject_fresh_start_interactive(tmpdir, monkeypatch, capsys):
     assert (base / "myapp").is_symlink()
 
 
-def test_init_pyproject_fresh_start_default_dependencies(tmpdir, monkeypatch, capsys):
-    """init_pyproject fresh start uses command name as default dependency when empty."""
+def test_init_fresh_start_default_dependencies(tmpdir, monkeypatch, capsys):
+    """init fresh start uses command name as default dependency when empty."""
     monkeypatch.chdir(tmpdir)
     base = Path(tmpdir)
 
@@ -471,7 +471,7 @@ def test_init_pyproject_fresh_start_default_dependencies(tmpdir, monkeypatch, ca
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
     env = appenv.AppEnv(base, Path.cwd())
-    env.init_pyproject()
+    env.init()
 
     # Verify pyproject.toml was created with command name as dependency
     pyproject = (base / "pyproject.toml").read_text()
@@ -480,8 +480,8 @@ def test_init_pyproject_fresh_start_default_dependencies(tmpdir, monkeypatch, ca
     assert 'requires-python = ">=3.8"' in pyproject  # default version
 
 
-def test_init_pyproject_migration_interactive_project_name(tmpdir, monkeypatch, capsys):
-    """init_pyproject migration asks for project name interactively."""
+def test_migrate_interactive_project_name(tmpdir, monkeypatch, capsys):
+    """migrate asks for project name interactively."""
     monkeypatch.chdir(tmpdir)
     base = Path(tmpdir)
 
@@ -493,7 +493,7 @@ def test_init_pyproject_migration_interactive_project_name(tmpdir, monkeypatch, 
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
     env = appenv.AppEnv(base, Path.cwd())
-    env.init_pyproject()
+    env.migrate()
 
     # Verify pyproject.toml uses custom project name
     pyproject = (base / "pyproject.toml").read_text()
@@ -528,7 +528,7 @@ def test_init_pyproject_migration_interactive_project_name(tmpdir, monkeypatch, 
 def test_parse_editable_spec(spec, expected):
     """parse_editable_spec handles various editable spec formats."""
     # Use direct attribute access - ty can't resolve __all__ for single-file modules
-    parse_editable_spec = getattr(appenv, "parse_editable_spec")
+    parse_editable_spec = appenv.parse_editable_spec
     result = parse_editable_spec(spec)
     assert result == expected
 
@@ -538,7 +538,7 @@ def test_parse_editable_spec(spec, expected):
 
 def test_extract_package_name_from_pyproject(tmpdir):
     """extract_package_name_from_path reads name from pyproject.toml."""
-    extract_package_name_from_path = getattr(appenv, "extract_package_name_from_path")
+    extract_package_name_from_path = appenv.extract_package_name_from_path
     base = Path(tmpdir)
     pkg_dir = base / "mypackage"
     pkg_dir.mkdir()
@@ -553,7 +553,7 @@ def test_extract_package_name_from_pyproject(tmpdir):
 
 def test_extract_package_name_from_setup_py(tmpdir):
     """extract_package_name_from_path reads name from setup.py."""
-    extract_package_name_from_path = getattr(appenv, "extract_package_name_from_path")
+    extract_package_name_from_path = appenv.extract_package_name_from_path
     base = Path(tmpdir)
     pkg_dir = base / "legacy-pkg"
     pkg_dir.mkdir()
@@ -568,7 +568,7 @@ def test_extract_package_name_from_setup_py(tmpdir):
 
 def test_extract_package_name_from_path_relative(tmpdir):
     """extract_package_name_from_path handles relative paths."""
-    extract_package_name_from_path = getattr(appenv, "extract_package_name_from_path")
+    extract_package_name_from_path = appenv.extract_package_name_from_path
     base = Path(tmpdir)
     pkg_dir = base / "packages" / "subpkg"
     pkg_dir.mkdir(parents=True)
@@ -581,7 +581,7 @@ def test_extract_package_name_from_path_relative(tmpdir):
 
 def test_extract_package_name_from_path_not_found(tmpdir):
     """extract_package_name_from_path returns None when no package metadata found."""
-    extract_package_name_from_path = getattr(appenv, "extract_package_name_from_path")
+    extract_package_name_from_path = appenv.extract_package_name_from_path
     base = Path(tmpdir)
     empty_dir = base / "empty"
     empty_dir.mkdir()
@@ -592,7 +592,7 @@ def test_extract_package_name_from_path_not_found(tmpdir):
 
 def test_extract_package_name_from_path_missing_dir(tmpdir):
     """extract_package_name_from_path returns None when directory doesn't exist."""
-    extract_package_name_from_path = getattr(appenv, "extract_package_name_from_path")
+    extract_package_name_from_path = appenv.extract_package_name_from_path
     base = Path(tmpdir)
 
     result = extract_package_name_from_path("nonexistent", base)
@@ -622,7 +622,7 @@ def test_init_pyproject_editable_with_valid_local_package(tmpdir, monkeypatch, c
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
     env = appenv.AppEnv(base, Path.cwd())
-    env.init_pyproject()
+    env.migrate()
 
     # Check pyproject.toml has both dependencies
     pyproject = (base / "pyproject.toml").read_text()
@@ -658,7 +658,7 @@ def test_init_pyproject_editable_with_setup_py(tmpdir, monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
     env = appenv.AppEnv(base, Path.cwd())
-    env.init_pyproject()
+    env.migrate()
 
     pyproject = (base / "pyproject.toml").read_text()
     assert '"legacy-lib"' in pyproject
@@ -685,7 +685,7 @@ def test_init_pyproject_editable_only_dependencies(tmpdir, monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
     env = appenv.AppEnv(base, Path.cwd())
-    env.init_pyproject()
+    env.migrate()
 
     pyproject = (base / "pyproject.toml").read_text()
 
@@ -720,7 +720,7 @@ def test_init_pyproject_multiple_editables(tmpdir, monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
     env = appenv.AppEnv(base, Path.cwd())
-    env.init_pyproject()
+    env.migrate()
 
     pyproject = (base / "pyproject.toml").read_text()
 
@@ -756,7 +756,7 @@ def test_init_pyproject_editable_with_extras(tmpdir, monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
     env = appenv.AppEnv(base, Path.cwd())
-    env.init_pyproject()
+    env.migrate()
 
     pyproject = (base / "pyproject.toml").read_text()
 
@@ -781,7 +781,7 @@ def test_init_pyproject_editable_missing_package_warns(tmpdir, monkeypatch, caps
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
     env = appenv.AppEnv(base, Path.cwd())
-    env.init_pyproject()
+    env.migrate()
 
     # Check warning in output
     captured = capsys.readouterr()
@@ -808,7 +808,7 @@ def test_init_pyproject_editable_git_url_warns(tmpdir, monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
     env = appenv.AppEnv(base, Path.cwd())
-    env.init_pyproject()
+    env.migrate()
 
     # Check warning
     captured = capsys.readouterr()
@@ -844,7 +844,7 @@ def test_init_pyproject_editable_relative_parent_path(tmpdir, monkeypatch, capsy
 
     # AppEnv uses original_cwd as target, so pass project_dir as original_cwd
     env = appenv.AppEnv(project_dir, project_dir)
-    env.init_pyproject()
+    env.migrate()
 
     pyproject = (project_dir / "pyproject.toml").read_text()
     assert '"sibling-lib"' in pyproject
@@ -871,7 +871,7 @@ def test_init_pyproject_editable_bare_path_gets_prefix(tmpdir, monkeypatch, caps
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
     env = appenv.AppEnv(base, Path.cwd())
-    env.init_pyproject()
+    env.migrate()
 
     pyproject = (base / "pyproject.toml").read_text()
     assert '"bare-pkg"' in pyproject
@@ -902,7 +902,7 @@ def test_init_pyproject_editable_mixed_valid_and_invalid(tmpdir, monkeypatch, ca
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
     env = appenv.AppEnv(base, Path.cwd())
-    env.init_pyproject()
+    env.migrate()
 
     pyproject = (base / "pyproject.toml").read_text()
 
@@ -936,7 +936,7 @@ def test_init_pyproject_editable_warnings_updated(tmpdir, monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
     env = appenv.AppEnv(base, Path.cwd())
-    env.init_pyproject()
+    env.migrate()
 
     # Check output mentions editable installs warning
     captured = capsys.readouterr()

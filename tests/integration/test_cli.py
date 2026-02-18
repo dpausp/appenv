@@ -24,15 +24,15 @@ def setup_isolated_appenv(tmpdir):
     return dst_appenv
 
 
-def test_init_pyproject_fresh_start_cli(tmpdir):
-    """Integration test: appenv init-pyproject fresh start via CLI."""
+def test_init_cli(tmpdir):
+    """Integration test: appenv init fresh start via CLI."""
     base = Path(tmpdir)
     appenv_script = setup_isolated_appenv(tmpdir)
 
     # Spawn the appenv process - it will detect no pyproject.toml
     child = pexpect.spawn(
         sys.executable,
-        [str(appenv_script), "init-pyproject"],
+        [str(appenv_script), "init"],
         cwd=str(tmpdir),
         timeout=10,
     )
@@ -81,8 +81,8 @@ def test_init_pyproject_fresh_start_cli(tmpdir):
     assert (base / "mycli").is_symlink()
 
 
-def test_init_pyproject_migration_cli(tmpdir):
-    """Integration test: appenv init-pyproject migration via CLI."""
+def test_migrate_cli(tmpdir):
+    """Integration test: appenv migrate via CLI."""
     base = Path(tmpdir)
     appenv_script = setup_isolated_appenv(tmpdir)
 
@@ -91,7 +91,7 @@ def test_init_pyproject_migration_cli(tmpdir):
 
     child = pexpect.spawn(
         sys.executable,
-        [str(appenv_script), "init-pyproject"],
+        [str(appenv_script), "migrate"],
         cwd=str(tmpdir),
         timeout=10,
     )

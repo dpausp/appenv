@@ -1,5 +1,4 @@
 import hashlib
-import io
 import os
 from pathlib import Path
 
@@ -7,30 +6,69 @@ import appenv
 
 
 def test_prepare_creates_envdir(workdir, monkeypatch):
-    monkeypatch.setattr("sys.stdin", io.StringIO("ducker\nducker<2.0.2\n\n"))
-    os.makedirs(os.path.join(workdir, "ducker"))
+    """Test prepare creates venv for pyproject workflow."""
+    base = Path(workdir) / "ducker"
+    base.mkdir()
+    os.chdir(base)
 
-    env = appenv.AppEnv(Path(workdir) / "ducker", Path.cwd())
-    env.init()
-    assert not os.path.exists(env.appenv_dir)
-    env.update_lockfile()
+    # Create pyproject.toml and uv.lock
+    (base / "pyproject.toml").write_text(
+        '[project]\nname = "ducker"\ndependencies = ["requests"]\n'
+    )
+    (base / "uv.lock").write_text("version = 1\n")
+
+    # Mock uv commands - uv_cmd should create venv structure
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
+    monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
+
+    def mock_uv_cmd(args, **kwargs):
+        if "venv" in args:
+            venv = base / ".venv"
+            venv.mkdir(exist_ok=True)
+            (venv / "bin").mkdir(exist_ok=True)
+            (venv / "bin" / "python").write_text("#!/bin/sh\n")
+        return b""
+
+    monkeypatch.setattr(appenv, "uv_cmd", mock_uv_cmd)
+
+    # Mock cmd to avoid executing the fake python
+    monkeypatch.setattr(appenv, "cmd", lambda c, **kwargs: b"Python 3.12.0")
+
+    env = appenv.AppEnv(base, Path.cwd())
     env.prepare()
-    assert os.path.exists(env.appenv_dir)
+
+    assert (base / ".venv").exists()
 
 
 def test_prepare_creates_venv_symlink(workdir, monkeypatch):
-    # asserts that appenv_dir / "current" -> env_dir
-    monkeypatch.setattr("sys.stdin", io.StringIO("ducker\nducker<2.0.2\n\n"))
-    os.makedirs(os.path.join(workdir, "ducker"))
+    """Test prepare creates .venv for pyproject workflow."""
+    base = Path(workdir) / "ducker"
+    base.mkdir()
+    os.chdir(base)
 
-    env = appenv.AppEnv(Path(workdir) / "ducker", Path.cwd())
-    env.init()
-    env.update_lockfile()
+    (base / "pyproject.toml").write_text(
+        '[project]\nname = "ducker"\ndependencies = ["requests"]\n'
+    )
+    (base / "uv.lock").write_text("version = 1\n")
+
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
+    monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
+
+    def mock_uv_cmd(args, **kwargs):
+        if "venv" in args:
+            venv = base / ".venv"
+            venv.mkdir(exist_ok=True)
+            (venv / "bin").mkdir(exist_ok=True)
+            (venv / "bin" / "python").write_text("#!/bin/sh\n")
+        return b""
+
+    monkeypatch.setattr(appenv, "uv_cmd", mock_uv_cmd)
+    monkeypatch.setattr(appenv, "cmd", lambda c, **kwargs: b"Python 3.12.0")
+
+    env = appenv.AppEnv(base, Path.cwd())
     env_dir = env.prepare()
-    assert os.path.islink(os.path.join(env.appenv_dir, "current"))
-    assert os.path.realpath(
-        os.path.join(env.appenv_dir, "current")
-    ) == os.path.realpath(env_dir)
+
+    assert env_dir == str(base / ".venv")
 
 
 # Tier 2 tests

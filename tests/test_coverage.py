@@ -2,11 +2,8 @@
 
 import argparse
 import hashlib
-import io
-import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -482,36 +479,12 @@ def test_prepare_requirements_inconsistent_envdir(workdir, monkeypatch, capsys):
 
 
 # ==============================================================================
-# Line 755-756: init relative_to ValueError
-# ==============================================================================
-
-
-def test_init_relative_to_value_error(tmpdir, monkeypatch, capsys):
-    """Lines 755-756: Handles ValueError when target is outside original_cwd."""
-    outside_dir = Path(tempfile.gettempdir()) / "outside_appenv_test_unique_xyz"
-    outside_dir.mkdir(exist_ok=True)
-
-    try:
-        monkeypatch.setattr(
-            "sys.stdin", io.StringIO(f"testcmd\ntestdep\n{outside_dir}\n")
-        )
-
-        env = appenv.AppEnv(Path(tmpdir), Path.cwd())
-        env.init()
-
-        captured = capsys.readouterr()
-        assert str(outside_dir) in captured.out
-    finally:
-        shutil.rmtree(outside_dir, ignore_errors=True)
-
-
-# ==============================================================================
 # Lines 818, 829: init_pyproject empty input defaults
 # ==============================================================================
 
 
-def test_init_pyproject_empty_project_name_uses_default(workdir, monkeypatch, capsys):
-    """Line 818: Empty project name input uses default name during migration."""
+def test_migrate_empty_project_name_uses_default(workdir, monkeypatch, capsys):
+    """Empty project name input uses default name during migration."""
     base = Path(workdir)
     (base / "requirements.txt").write_text("requests\n")
 
@@ -519,19 +492,14 @@ def test_init_pyproject_empty_project_name_uses_default(workdir, monkeypatch, ca
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
     env = appenv.AppEnv(base, Path.cwd())
-    env.init_pyproject()
+    env.migrate()
 
     pyproject = (base / "pyproject.toml").read_text()
     assert f'name = "{base.name}"' in pyproject
 
 
-def test_init_pyproject_empty_command_name_uses_app(workdir, monkeypatch, capsys):
-    """Test fresh start with default command name and dependencies.
-
-    Note: Line 829 (empty command defaults to 'app') is actually dead code
-    because the while loop at line 824 requires non-empty input.
-    This test exercises the fresh start path with explicit input.
-    """
+def test_init_empty_command_name_uses_app(workdir, monkeypatch, capsys):
+    """Test fresh start with default command name and dependencies."""
     base = Path(workdir)
 
     inputs = iter(
@@ -545,7 +513,7 @@ def test_init_pyproject_empty_command_name_uses_app(workdir, monkeypatch, capsys
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
     env = appenv.AppEnv(base, Path.cwd())
-    env.init_pyproject()
+    env.init()
 
     pyproject = (base / "pyproject.toml").read_text()
     assert 'name = "app"' in pyproject
@@ -553,12 +521,12 @@ def test_init_pyproject_empty_command_name_uses_app(workdir, monkeypatch, capsys
 
 
 # ==============================================================================
-# Line 898: init_pyproject unlink broken symlink
+# init unlink broken symlink
 # ==============================================================================
 
 
-def test_init_pyproject_unlink_broken_symlink(workdir, monkeypatch, capsys):
-    """Line 898: Unlinks broken symlink before creating new one."""
+def test_init_unlink_broken_symlink(workdir, monkeypatch, capsys):
+    """Unlinks broken symlink before creating new one."""
     base = Path(workdir)
 
     broken_link = base / "myapp"
@@ -577,7 +545,7 @@ def test_init_pyproject_unlink_broken_symlink(workdir, monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
     env = appenv.AppEnv(base, Path.cwd())
-    env.init_pyproject()
+    env.init()
 
     assert (base / "myapp").is_symlink()
     assert (base / "myapp").exists()

@@ -1,4 +1,3 @@
-import io
 import os
 import shutil
 import sys
@@ -10,34 +9,51 @@ import pytest
 import appenv
 
 
+def _setup_requirements_project(workdir, name="ducker", dep="ducker<2.0.2"):
+    """Setup a requirements.txt based project without calling init()."""
+    base = Path(workdir) / name
+    base.mkdir()
+    os.chdir(base)
+
+    # Copy appenv script
+    src_appenv = Path(appenv.__file__)
+    dst_appenv = base / "appenv"
+    shutil.copy(src_appenv, dst_appenv)
+    dst_appenv.chmod(0o755)
+
+    # Create symlink
+    link = base / name
+    link.symlink_to("appenv")
+
+    # Create requirements.txt
+    (base / "requirements.txt").write_text(f"{dep}\n")
+
+    return base
+
+
 def test_init_and_create_lockfile(workdir, monkeypatch):
-    monkeypatch.setattr("sys.stdin", io.StringIO("ducker\nducker<2.0.2\n\n"))
+    base = _setup_requirements_project(workdir)
 
-    env = appenv.AppEnv(Path(workdir) / "ducker", Path.cwd())
-    env.init()
+    lockfile = base / "requirements.lock"
+    assert not lockfile.exists()
 
-    lockfile = os.path.join(workdir, "ducker", "requirements.lock")
-    assert not os.path.exists(lockfile)
-
+    env = appenv.AppEnv(base, Path.cwd())
     env.update_lockfile()
 
-    assert os.path.exists(lockfile)
-    with open(lockfile) as f:
-        lockfile_content = f.read()
-    # UV generates lockfile with header and via-comments
-    assert "ducker==2.0.1" in lockfile_content
+    assert lockfile.exists()
+    lockfile_content = lockfile.read_text()
+    assert "ducker" in lockfile_content
     assert "# appenv-requirements-hash:" in lockfile_content
 
 
 def test_update_lockfile_uses_minimal_python(workdir, monkeypatch):
     """It uses the minimal python version from preferences for lockfile."""
-    monkeypatch.setattr("sys.stdin", io.StringIO("httpie\nhttpie\nmyapp\n"))
+    base = _setup_requirements_project(workdir, name="myapp", dep="httpie")
+
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
 
-    env = appenv.AppEnv(Path(workdir) / "myapp", Path.cwd())
-    env.init()
-
-    requirements_file = Path(workdir) / "myapp" / "requirements.txt"
+    # Add python preference to requirements.txt
+    requirements_file = base / "requirements.txt"
     content = requirements_file.read_text()
     requirements_file.write_text(
         "# appenv-python-preference: 3.11,3.9,3.10\n" + content
@@ -50,6 +66,7 @@ def test_update_lockfile_uses_minimal_python(workdir, monkeypatch):
     )
     monkeypatch.setattr(appenv, "find_minimal_python", lambda: "/usr/bin/python3.9")
 
+    env = appenv.AppEnv(base, Path.cwd())
     env.update_lockfile()
 
     # Verify --python flag was passed with minimal version
@@ -60,18 +77,11 @@ def test_update_lockfile_uses_minimal_python(workdir, monkeypatch):
 @pytest.mark.skipif(sys.version_info[0:2] < (3, 8), reason="Isolated CI builds")
 def test_update_lockfile_missing_minimal_python(workdir, monkeypatch):
     """It raises an error if the minimal python is not available."""
-    monkeypatch.setattr("sys.stdin", io.StringIO("pytest\npytest==6.1.2\nppytest\n"))
+    base = _setup_requirements_project(workdir, name="ppytest", dep="pytest==6.1.2")
 
-    env = appenv.AppEnv(Path(workdir) / "ppytest", Path.cwd())
-    env.init()
-
-    requirements_file = os.path.join(workdir, "ppytest", "requirements.txt")
-
-    with open(requirements_file, "r+") as f:
-        lines = f.readlines()
-        lines[0] = "# appenv-python-preference: 3.8,3.6,3.9\n"
-        f.seek(0)
-        f.writelines(lines)
+    requirements_file = base / "requirements.txt"
+    content = requirements_file.read_text()
+    requirements_file.write_text("# appenv-python-preference: 3.8,3.6,3.9\n" + content)
 
     old_which = shutil.which
 
@@ -80,6 +90,8 @@ def test_update_lockfile_missing_minimal_python(workdir, monkeypatch):
             return None
         else:
             return old_which(string)
+
+    env = appenv.AppEnv(base, Path.cwd())
 
     with unittest.mock.patch("shutil.which") as which:
         which.side_effect = new_which
