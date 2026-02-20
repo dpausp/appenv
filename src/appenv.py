@@ -5,14 +5,9 @@
 # Assumptions:
 #
 #   - the appenv file is placed in a repo with the name of the application
-#   - the name of the application/file is an entrypoint XXX
+#   - the name of the application/file becomes the CLI entrypoint via symlink
 #   - uv will be installed via pip or nix if not available
 #   - pyproject.toml (preferred) or requirements.txt next to the appenv file
-
-# TODO
-#
-#   - provide a `clone` meta command to create a new project based on this one
-#     maybe use an entry point to allow further initialisation of the clone.
 
 __version__ = "2026.2.0"
 
@@ -129,6 +124,8 @@ def ensure_best_python_for_pyproject(base):
             return
 
         # Try whether this Python works
+        # SPEC: SRS-F001-python-detection - Skip non-functional Python binaries
+        # Action: Continue to next candidate if this Python fails basic execution
         try:
             subprocess.check_call(
                 [path, "-c", "print(1)"],
@@ -174,6 +171,8 @@ class TColors:
 
 
 def cmd(c, merge_stderr=True, quiet=False, cwd=None):
+    # SPEC: SRS-F002-command-execution - Provide actionable error context for failures
+    # Action: Print command output then raise ValueError with full context
     try:
         is_shell = isinstance(c, str)
         cmd_list = cast("list[str]", [c] if is_shell else c)
@@ -182,7 +181,7 @@ def cmd(c, merge_stderr=True, quiet=False, cwd=None):
     except subprocess.CalledProcessError as e:
         print(f"{c} returned with exit code {e.returncode}")
         print(e.output.decode("utf-8", "replace"))
-        raise ValueError(e.output.decode("utf-8", "replace")) from None
+        raise ValueError(e.output.decode("utf-8", "replace")) from e
 
 
 def has_nix():
@@ -242,6 +241,8 @@ def parse_uv_version(version_str):
     # Remove leading 'v' if present
     version_str = version_str.lstrip("v")
     parts = version_str.split(".")
+    # SPEC: SRS-F003-uv-version-parsing - Graceful fallback for malformed versions
+    # Action: Return (0, 0, 0) sentinel that fails comparison, triggering warning
     try:
         return (int(parts[0]), int(parts[1]), int(parts[2]) if len(parts) > 2 else 0)
     except (ValueError, IndexError):
@@ -257,6 +258,9 @@ def check_uv_version():
     if not uv_bin:
         raise RuntimeError("uv not found")
 
+    # SPEC: SRS-F004-uv-version-check - Validate uv meets minimum requirements
+    # Action: Exit with actionable upgrade instructions if version too old;
+    # warn but proceed with degraded functionality if version cannot be determined.
     try:
         result = subprocess.run(
             [uv_bin, "--version"],
@@ -285,11 +289,20 @@ def check_uv_version():
             sys.exit(68)
 
         return version
+    # SPEC: SRS-F004-uv-version-check - Handle uv executable failures
+    # Action: Warn and return sentinel (0,0,0) which fails comparison, allowing
+    # operation to proceed with potential version issues visible to user
     except subprocess.CalledProcessError as e:
         print(f"Warning: Could not determine uv version: {e}")
+        print(f"  uv binary: {uv_bin}")
+        print("  Proceeding anyway - sync operations may fail if uv is too old")
         return (0, 0, 0)
+    # SPEC: SRS-F004-uv-version-check - Handle unexpected uv --version output format
+    # Action: Warn and return sentinel (0,0,0) allowing degraded operation
     except (IndexError, ValueError) as e:
         print(f"Warning: Could not parse uv version: {e}")
+        print(f"  uv binary: {uv_bin}")
+        print("  Proceeding anyway - sync operations may fail if uv is too old")
         return (0, 0, 0)
 
 
@@ -1039,9 +1052,9 @@ def main():
     # Select best Python for pyproject.toml workflow
     ensure_best_python_for_pyproject(base)
 
-    # clear PYTHONPATH variable to get a defined environment
-    # XXX this is a bit of history. not sure whether its still needed. keeping
-    # it for good measure
+    # Clear PYTHONPATH to ensure clean isolated environment.
+    # Historical note: Some systems set PYTHONPATH globally which can interfere
+    # with venv isolation. Clearing it ensures the venv's site-packages take precedence.
     os.environ.pop("PYTHONPATH", None)
 
     # Determine whether we're being called as appenv or as an application name
