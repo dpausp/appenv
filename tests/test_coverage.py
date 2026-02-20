@@ -11,11 +11,11 @@ import pytest
 import appenv
 
 # ==============================================================================
-# Lines 92, 99, 123, 132-133: ensure_best_python_for_pyproject branches
+# Lines 92, 99, 123, 132-133: ensure_best_python branches
 # ==============================================================================
 
 
-def test_ensure_best_python_for_pyproject_skips_when_env_set(tmpdir, monkeypatch):
+def test_ensure_best_python_skips_when_env_set(tmpdir, monkeypatch):
     """Line 92: Returns early when APPENV_BEST_PYTHON is set."""
     base = Path(tmpdir)
     (base / "pyproject.toml").write_text('[project]\nname = "test"\n')
@@ -23,10 +23,10 @@ def test_ensure_best_python_for_pyproject_skips_when_env_set(tmpdir, monkeypatch
     monkeypatch.setenv("APPENV_BEST_PYTHON", "/usr/bin/python3")
     monkeypatch.setattr("os.chdir", lambda p: None)
 
-    appenv.ensure_best_python_for_pyproject(base)
+    appenv.ensure_best_python(base)
 
 
-def test_ensure_best_python_for_pyproject_default_min_version(tmpdir, monkeypatch):
+def test_ensure_best_python_default_min_version(tmpdir, monkeypatch):
     """Line 99: Uses 3.8 as default when no requires-python specified."""
     base = Path(tmpdir)
     (base / "pyproject.toml").write_text('[project]\nname = "test"\n')
@@ -55,12 +55,12 @@ def test_ensure_best_python_for_pyproject_default_min_version(tmpdir, monkeypatc
     monkeypatch.setattr("sys.executable", "/different/python")
 
     with pytest.raises(SystemExit):
-        appenv.ensure_best_python_for_pyproject(base)
+        appenv.ensure_best_python(base)
 
     assert "python3.12" in execv_called[0][0]
 
 
-def test_ensure_best_python_for_pyproject_already_running_best(tmpdir, monkeypatch):
+def test_ensure_best_python_already_running_best(tmpdir, monkeypatch):
     """Line 123: Returns early when already running the best Python."""
     base = Path(tmpdir)
     (base / "pyproject.toml").write_text('[project]\nname = "test"\n')
@@ -80,10 +80,10 @@ def test_ensure_best_python_for_pyproject_already_running_best(tmpdir, monkeypat
     monkeypatch.setattr("pathlib.Path.resolve", mock_resolve)
     monkeypatch.setattr("sys.executable", "/usr/bin/python3.12")
 
-    appenv.ensure_best_python_for_pyproject(base)
+    appenv.ensure_best_python(base)
 
 
-def test_ensure_best_python_for_pyproject_broken_python(tmpdir, monkeypatch):
+def test_ensure_best_python_broken_python(tmpdir, monkeypatch):
     """Lines 132-133: Continues to next Python when subprocess fails."""
     base = Path(tmpdir)
     (base / "pyproject.toml").write_text('[project]\nname = "test"\n')
@@ -118,7 +118,7 @@ def test_ensure_best_python_for_pyproject_broken_python(tmpdir, monkeypatch):
     monkeypatch.setattr("sys.executable", "/different/python")
 
     with pytest.raises(SystemExit):
-        appenv.ensure_best_python_for_pyproject(base)
+        appenv.ensure_best_python(base)
 
     assert len(check_call_count) == 2
     assert "python3.11" in execv_called[0][0]
@@ -295,12 +295,11 @@ def test_init_unlink_broken_symlink(workdir, monkeypatch, capsys):
 
 
 # ==============================================================================
-# Lines 1196: main() calls ensure_best_python_for_pyproject
-# ==============================================================================
-
-
-def test_main_calls_ensure_best_python_for_pyproject(monkeypatch, workdir):
-    """Line 1196: main() calls ensure_best_python_for_pyproject."""
+# Lines 1196: main() calls ensure_best_python
+#
+#
+def test_main_calls_ensure_best_python(monkeypatch, workdir):
+    """Line 1196: main() calls ensure_best_python."""
     base = Path(workdir)
     (base / "pyproject.toml").write_text('[project]\nname = "test"\n')
     (base / "appenv").write_text("#!/usr/bin/env python3\npass\n")
@@ -309,7 +308,7 @@ def test_main_calls_ensure_best_python_for_pyproject(monkeypatch, workdir):
     called = []
     monkeypatch.setattr(
         appenv,
-        "ensure_best_python_for_pyproject",
+        "ensure_best_python",
         lambda b: called.append("pyproject"),
     )
     monkeypatch.setattr(appenv.AppEnv, "meta", lambda self: None)

@@ -278,10 +278,8 @@ def test_init_pyproject_editable_warnings(tmpdir, monkeypatch, capsys):
 # Tier 3 tests
 
 
-def test_ensure_best_python_for_pyproject_respects_upper_bound(
-    tmpdir, monkeypatch, capsys
-):
-    """ensure_best_python_for_pyproject respects upper bound in requires-python."""
+def test_ensure_best_python_respects_upper_bound(tmpdir, monkeypatch, capsys):
+    """ensure_best_python respects upper bound in requires-python."""
     monkeypatch.chdir(tmpdir)
     base = Path(tmpdir)
 
@@ -323,7 +321,7 @@ def test_ensure_best_python_for_pyproject_respects_upper_bound(
 
     # Call the function - it should call execv and then SystemExit(0)
     with pytest.raises(SystemExit) as exc_info:
-        appenv.ensure_best_python_for_pyproject(base)
+        appenv.ensure_best_python(base)
 
     # Should have exited via our mock (code 0), not the error path (code 65)
     assert exc_info.value.code == 0

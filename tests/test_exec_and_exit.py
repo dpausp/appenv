@@ -16,10 +16,8 @@ import appenv
 class TestExecvProcessReplacement:
     """Tests for os.execv() calls that replace the current process."""
 
-    def test_ensure_best_python_for_pyproject_execv_with_correct_args(
-        self, monkeypatch, tmpdir
-    ):
-        """ensure_best_python_for_pyproject calls os.execv with correct args."""
+    def test_ensure_best_python_execv_with_correct_args(self, monkeypatch, tmpdir):
+        """ensure_best_python calls os.execv with correct args."""
         monkeypatch.delenv("APPENV_BEST_PYTHON", raising=False)
         monkeypatch.setattr("os.chdir", lambda p: None)
 
@@ -48,16 +46,14 @@ class TestExecvProcessReplacement:
         monkeypatch.setattr("os.environ", {})
 
         with pytest.raises(SystemExit):
-            appenv.ensure_best_python_for_pyproject(base)
+            appenv.ensure_best_python(base)
 
         assert len(execv_called) == 1
         # Should pick 3.12 (newest that satisfies >=3.11)
         assert "python3.12" in execv_called[0][0]
 
-    def test_ensure_best_python_for_pyproject_skips_too_new_python(
-        self, monkeypatch, tmpdir
-    ):
-        """ensure_best_python_for_pyproject skips versions exceeding bound."""
+    def test_ensure_best_python_skips_too_new_python(self, monkeypatch, tmpdir):
+        """ensure_best_python skips versions exceeding bound."""
         monkeypatch.delenv("APPENV_BEST_PYTHON", raising=False)
         monkeypatch.setattr("os.chdir", lambda p: None)
 
@@ -89,7 +85,7 @@ class TestExecvProcessReplacement:
         monkeypatch.setattr("os.environ", {})
 
         with pytest.raises(SystemExit):
-            appenv.ensure_best_python_for_pyproject(base)
+            appenv.ensure_best_python(base)
 
         # Should pick 3.13 (newest that satisfies >=3.11,<3.14)
         assert len(execv_called) == 1
@@ -157,10 +153,10 @@ class TestSysExitErrorPaths:
 
     # Code 65: Python not found errors
 
-    def test_ensure_best_python_for_pyproject_exits_65_no_python_found(
+    def test_ensure_best_python_exits_65_no_python_found(
         self, monkeypatch, tmpdir, capsys
     ):
-        """ensure_best_python_for_pyproject exits with code 65 when no Python found."""
+        """ensure_best_python exits with code 65 when no Python found."""
         monkeypatch.delenv("APPENV_BEST_PYTHON", raising=False)
         monkeypatch.setattr("os.chdir", lambda p: None)
 
@@ -171,16 +167,16 @@ class TestSysExitErrorPaths:
         monkeypatch.setattr(appenv, "find_available_pythons", lambda: [])
 
         with pytest.raises(SystemExit) as err:
-            appenv.ensure_best_python_for_pyproject(base)
+            appenv.ensure_best_python(base)
 
         assert err.value.code == 65
         captured = capsys.readouterr()
         assert "Could not find Python" in captured.out
 
-    def test_ensure_best_python_for_pyproject_exits_65_with_upper_bound(
+    def test_ensure_best_python_exits_65_with_upper_bound(
         self, monkeypatch, tmpdir, capsys
     ):
-        """ensure_best_python_for_pyproject shows upper bound in error message."""
+        """ensure_best_python shows upper bound in error message."""
         monkeypatch.delenv("APPENV_BEST_PYTHON", raising=False)
         monkeypatch.setattr("os.chdir", lambda p: None)
 
@@ -197,7 +193,7 @@ class TestSysExitErrorPaths:
         )
 
         with pytest.raises(SystemExit) as err:
-            appenv.ensure_best_python_for_pyproject(base)
+            appenv.ensure_best_python(base)
 
         assert err.value.code == 65
         captured = capsys.readouterr()

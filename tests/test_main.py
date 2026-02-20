@@ -10,8 +10,8 @@ import appenv
 
 
 def mock_ensure_python(monkeypatch):
-    """Mock ensure_best_python_for_pyproject to prevent re-exec."""
-    monkeypatch.setattr(appenv, "ensure_best_python_for_pyproject", lambda base: None)
+    """Mock ensure_best_python to prevent re-exec."""
+    monkeypatch.setattr(appenv, "ensure_best_python", lambda base: None)
 
 
 # main() tests

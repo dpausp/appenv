@@ -6,19 +6,9 @@
 #
 #   - the appenv file is placed in a repo with the name of the application
 #   - the name of the application/file becomes the CLI entrypoint via symlink
-#   - uv will be installed via pip or nix if not available
-#   - pyproject.toml (preferred) or requirements.txt next to the appenv file
+#   - pyproject.toml next to the appenv file
 
 __version__ = "2026.2.0"
-
-__all__ = [
-    "main",
-    "AppEnv",
-    "parse_editable_spec",
-    "extract_package_name_from_path",
-    "detect_project_type",
-    "ensure_best_python_for_pyproject",
-]
 
 import argparse
 import difflib
@@ -86,7 +76,7 @@ def find_available_pythons():
     return pythons
 
 
-def ensure_best_python_for_pyproject(base):
+def ensure_best_python(base):
     """Ensure best Python for pyproject.toml workflow.
 
     Reads requires-python from pyproject.toml and selects the newest
@@ -601,7 +591,7 @@ class AppEnv:
                 verbose_print("Corrupted venv detected, removing ...")
                 shutil.rmtree(venv_real)
             verbose_print("Creating venv with uv ...")
-            # Use current Python (already selected by ensure_best_python_for_pyproject)
+            # Use current Python (already selected by ensure_best_python)
             # Explicit path avoids uv downloading its own (breaks on NixOS)
             uv_cmd(["venv", "--python", sys.executable, str(venv_real)])
 
@@ -1046,7 +1036,7 @@ def main():
     original_cwd = Path.cwd()
 
     # Select best Python for pyproject.toml workflow
-    ensure_best_python_for_pyproject(base)
+    ensure_best_python(base)
 
     # Clear PYTHONPATH to ensure clean isolated environment.
     # Historical note: Some systems set PYTHONPATH globally which can interfere
