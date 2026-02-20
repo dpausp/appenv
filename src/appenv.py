@@ -35,6 +35,11 @@ from typing import cast
 PYPROJECT_TOML = "pyproject.toml"
 UV_LOCK = "uv.lock"
 
+# Exit codes (BSD sysexits.h conventions)
+EXIT_CODE_DATAERR = 65  # Input data issue (Python version not found)
+EXIT_CODE_NOINPUT = 67  # Missing input file (pyproject.toml/uv.lock not found)
+EXIT_CODE_UNAVAILABLE = 68  # Resource unavailable (uv too old)
+
 
 def parse_requires_python(pyproject_path):
     """Parse requires-python from pyproject.toml.
@@ -148,7 +153,7 @@ def ensure_best_python_for_pyproject(base):
     print("Available versions:")
     for version, path in available:
         print(f"  python{version}: {path}")
-    sys.exit(65)
+    sys.exit(EXIT_CODE_DATAERR)
 
 
 def detect_project_type(base):
@@ -159,15 +164,6 @@ def detect_project_type(base):
     if (base / PYPROJECT_TOML).exists():
         return "pyproject"
     return None
-
-
-class TColors:
-    """Terminal colors for pretty output."""
-
-    RED = "\033[91m"
-    GREEN = "\033[92m"
-    YELLOW = "\033[93m"
-    RESET = "\033[0m"
 
 
 def cmd(c, merge_stderr=True, quiet=False, cwd=None):
@@ -286,7 +282,7 @@ def check_uv_version():
             print()
             print("Or remove outdated local uv:")
             print("  rm -rf .appenv/.uv")
-            sys.exit(68)
+            sys.exit(EXIT_CODE_UNAVAILABLE)
 
         return version
     # SPEC: SRS-F004-uv-version-check - Handle uv executable failures
@@ -562,7 +558,7 @@ class AppEnv:
             return self._prepare_pyproject()
         else:
             print(f"No {PYPROJECT_TOML} found.")
-            sys.exit(67)
+            sys.exit(EXIT_CODE_NOINPUT)
 
     def _prepare_pyproject(self):
         """Prepare environment for pyproject.toml using uv native workflow."""
@@ -579,7 +575,7 @@ class AppEnv:
         # Ensure uv.lock exists
         if not lock_file.exists():
             print(f"No {UV_LOCK} found. Run: ./appenv update-lockfile")
-            sys.exit(67)
+            sys.exit(EXIT_CODE_NOINPUT)
 
         ensure_uv(self.base)
         ensure_uv_version()
@@ -946,7 +942,7 @@ requires-python = ">={python_version}"
             verbose_print(f"Lockfile: {lock_file}")
         else:
             print(f"No {PYPROJECT_TOML} found.")
-            sys.exit(67)
+            sys.exit(EXIT_CODE_NOINPUT)
 
         self._update_lockfile_pyproject(args, verbose)
 

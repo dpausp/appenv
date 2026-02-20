@@ -11,15 +11,12 @@ REQUIREMENTS_LOCK: str
 PYPROJECT_TOML: str
 UV_LOCK: str
 
+# Exit codes (BSD sysexits.h conventions)
+EXIT_CODE_DATAERR: int  # Input data issue (Python version not found)
+EXIT_CODE_NOINPUT: int  # Missing input file (pyproject.toml/uv.lock not found)
+EXIT_CODE_UNAVAILABLE: int  # Resource unavailable (uv too old)
+
 _uv_bin_cache: str | None
-
-class TColors:
-    """Terminal colors for pretty output."""
-
-    RED: str
-    GREEN: str
-    YELLOW: str
-    RESET: str
 
 def cmd(
     c: str | list[str],
