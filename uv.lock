@@ -18,6 +18,7 @@ dev = [
     { name = "pytest", version = "8.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "pytest", version = "9.0.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
     { name = "pytest-cov" },
+    { name = "pytest-patterns" },
     { name = "ruff" },
     { name = "tox", version = "4.30.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "tox", version = "4.35.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
@@ -34,6 +35,7 @@ test = [
     { name = "pytest", version = "8.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "pytest", version = "9.0.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
     { name = "pytest-cov" },
+    { name = "pytest-patterns" },
 ]
 
 [package.metadata]
@@ -43,6 +45,7 @@ dev = [
     { name = "pexpect" },
     { name = "pytest" },
     { name = "pytest-cov" },
+    { name = "pytest-patterns", specifier = ">=0.3.0" },
     { name = "ruff" },
     { name = "tox" },
     { name = "tox-uv" },
@@ -56,6 +59,7 @@ test = [
     { name = "pexpect" },
     { name = "pytest" },
     { name = "pytest-cov" },
+    { name = "pytest-patterns", specifier = ">=0.3.0" },
 ]
 
 [[package]]
@@ -583,6 +587,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/5e/f7/c933acc76f5208b3b00089573cf6a2bc26dc80a8aece8f52bb7d6b1855ca/pytest_cov-7.0.0.tar.gz", hash = "sha256:33c97eda2e049a0c5298e91f519302a1334c26ac65c1a483d6206fd458361af1", size = 54328, upload-time = "2025-09-09T10:57:02.113Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ee/49/1377b49de7d0c1ce41292161ea0f721913fa8722c19fb9c1e3aa0367eecb/pytest_cov-7.0.0-py3-none-any.whl", hash = "sha256:3b8e9558b16cc1479da72058bdecf8073661c7f57f7d3c5f22a1c23507f2d861", size = 22424, upload-time = "2025-09-09T10:57:00.695Z" },
+]
+
+[[package]]
+name = "pytest-patterns"
+version = "0.3.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pytest", version = "8.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
+    { name = "pytest", version = "9.0.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/79/d7/39a6e4d25c411b3bf5b88807b5a40e251fd218f4829863e8b631dbae1238/pytest_patterns-0.3.0.tar.gz", hash = "sha256:5660426a2e73052cdad34310ba06c45dcbc4b70de44215e7cccec20de7a1d364", size = 52905, upload-time = "2024-10-22T16:06:09.933Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/52/a0/5c37db5c48ca428b53fbe93bd0d930eaca2346ae5ae88b9e35456bcd2322/pytest_patterns-0.3.0-py3-none-any.whl", hash = "sha256:399973a325a561f6f6f26149f0f073e0a02939935e3ad3f168b427fe920d2f3d", size = 9389, upload-time = "2024-10-22T16:06:07.891Z" },
 ]
 
 [[package]]
