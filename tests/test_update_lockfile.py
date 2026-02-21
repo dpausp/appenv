@@ -93,12 +93,97 @@ dependencies = ["click"]
     assert len(lock_calls) >= 1, "Expected at least one uv lock call"
 
 
+def test_update_lockfile_verbose_output(workdir, monkeypatch, capsys, patterns):
+    """Verbose mode shows structured output with paths and mode info."""
+    app_dir = Path(workdir) / "verboseapp"
+    app_dir.mkdir()
+    (app_dir / "pyproject.toml").write_text(
+        '[project]\nname = "verboseapp"\ndependencies = ["click"]\n'
+    )
+    (app_dir / "appenv").write_text("#!/usr/bin/env python3\npass\n")
+    (app_dir / "appenv").chmod(0o755)
+
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
+    monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
+
+    def mock_uv_cmd(args, verbose=False, **kwargs):
+        if "lock" in args and "pip" not in args:
+            (app_dir / "uv.lock").write_text("version = 1\n")
+        return b""
+
+    monkeypatch.setattr(appenv, "uv_cmd", mock_uv_cmd)
+    monkeypatch.setenv("APPENV_VERBOSE", "1")
+
+    env = appenv.AppEnv(app_dir, Path.cwd())
+    env.update_lockfile()
+
+    out = capsys.readouterr().out
+
+    # Strip ANSI codes for cleaner pattern matching
+    import re
+
+    out_clean = re.sub(r"\x1b\[[0-9;]*m", "", out)
+
+    # Use patterns for structured verbose output
+    patterns.any.optional("...")
+    patterns.main.merge("any")
+    patterns.main.in_order(
+        """\
+Base directory: ...
+Mode: pyproject.toml (native uv workflow)
+Reading: .../pyproject.toml
+Lockfile: .../uv.lock
+..."""
+    )
+    assert patterns.main == out_clean
+
+
+def test_update_lockfile_no_changes_output(workdir, monkeypatch, capsys, patterns):
+    """update_lockfile shows 'No changes' when lockfile is up to date."""
+    app_dir = Path(workdir) / "nochange"
+    app_dir.mkdir()
+    (app_dir / "pyproject.toml").write_text(
+        '[project]\nname = "nochange"\ndependencies = ["click"]\n'
+    )
+    (app_dir / "appenv").write_text("#!/usr/bin/env python3\npass\n")
+    (app_dir / "appenv").chmod(0o755)
+
+    # Pre-create uv.lock so diff check finds no changes
+    (app_dir / "uv.lock").write_text("version = 1\n")
+
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
+    monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
+
+    def mock_uv_cmd(args, verbose=False, **kwargs):
+        cwd = kwargs.get("cwd")
+        if cwd and "lock" in args and "pip" not in args:
+            # Same content = no changes
+            Path(cwd, "uv.lock").write_text("version = 1\n")
+        return b""
+
+    monkeypatch.setattr(appenv, "uv_cmd", mock_uv_cmd)
+
+    env = appenv.AppEnv(app_dir, Path.cwd())
+    env.update_lockfile()
+
+    out = capsys.readouterr().out
+
+    # Simple pattern: just check the key message appears
+    patterns.any.optional("...")
+    patterns.main.merge("any")
+    patterns.main.in_order("No changes")
+    assert patterns.main == out
+
+
 # Tier 2 tests
 
 
-def test_update_lockfile_pyproject_diff_mode(workdir, monkeypatch, capsys, tmp_path):
+def test_update_lockfile_pyproject_diff_mode(
+    workdir, monkeypatch, capsys, tmp_path, patterns
+):
     """update_lockfile with --diff shows changes without modifying uv.lock."""
     import argparse
+    import re
 
     # Create directory with pyproject.toml and uv.lock
     app_dir = Path(workdir) / "diffapp"
@@ -139,8 +224,24 @@ dependencies = ["click"]
     env.update_lockfile(args=args, remaining=None)
 
     # Verify diff output was shown
-    captured = capsys.readouterr()
-    assert "Checking lockfile changes" in captured.out
+    out = capsys.readouterr().out
+
+    # Strip ANSI codes for cleaner pattern matching
+    out_clean = re.sub(r"\x1b\[[0-9;]*m", "", out)
+
+    # Use patterns for diff mode output - check for unified diff format
+    patterns.any.optional("...")
+    patterns.main.merge("any")
+    patterns.main.in_order(
+        """\
+Checking lockfile changes ...
+--- uv.lock
++++ uv.lock (new)
+...
+-version = '8.0.0'
++version = '8.1.0'"""
+    )
+    assert patterns.main == out_clean
 
     # Verify original uv.lock was NOT modified
     assert (app_dir / "uv.lock").read_text() == old_lock_content
