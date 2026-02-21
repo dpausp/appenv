@@ -56,7 +56,7 @@ dev = [
 ]
 
 [tool.tox]
-env_list = ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14", "fix"]
+env_list = ["fix", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
 skip_missing_interpreters = true
 
 [tool.tox.env_run_base]
@@ -79,6 +79,15 @@ commands = [
     ["ty", "check", "."],
 ]
 
+[tool.tox.env.cov]
+base_python = ["3.14"]
+package = "wheel"
+runner = "uv-venv-lock-runner"
+setenv = {APPENV_BEST_PYTHON = "{envpython}"}
+dependency_groups = ["test"]
+description = "Tests with coverage"
+commands = [["pytest", "--cov=appenv", "--cov-report=term-missing", "--cov-report=html"]]
+
 [tool.ty.environment]
 python-version = "3.14"
 
@@ -92,9 +101,6 @@ select = ["E", "F", "I", "N", "W", "UP", "B"]
 addopts = [
     "-W", "error",
     "--tb=native",
-    "--cov=appenv",
-    "--cov-report=term-missing",
-    "--cov-report=html",
     "-v",
 ]
 testpaths = ["tests"]
