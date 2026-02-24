@@ -615,6 +615,11 @@ class AppEnv:
         if not venv_link.exists():
             venv_link.symlink_to(".appenv/venv")
 
+        # Cleanup old .appenv/current symlink first (Python 3.14 rmtree doesn't like symlinks)
+        current_link = old_appenv / "current"
+        if current_link.is_symlink():
+            current_link.unlink()
+
         # Cleanup old .appenv hash-based venvs
         # But keep .appenv/venv (the current venv location) and .uv
         if old_appenv.exists():
