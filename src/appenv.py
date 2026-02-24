@@ -757,11 +757,8 @@ class AppEnv:
                     print(f"Using minimum version: {python_version}")
                 break
 
-        # Ask for project name
-        default_name = target.name
-        project_name = input(f"\nProject name [{default_name}]: ").strip()
-        if not project_name:
-            project_name = default_name
+        # Use directory name as project name
+        project_name = target.name
 
         self._create_pyproject(
             target=target,

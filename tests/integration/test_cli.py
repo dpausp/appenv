@@ -82,7 +82,7 @@ def test_init_cli(tmpdir):
 
 
 def test_migrate_cli(tmpdir):
-    """Integration test: appenv migrate via CLI."""
+    """Integration test: appenv migrate via CLI (non-interactive)."""
     base = Path(tmpdir)
     appenv_script = setup_isolated_appenv(tmpdir)
 
@@ -102,18 +102,14 @@ def test_migrate_cli(tmpdir):
     # Should find dependencies
     child.expect(r"Found 2 dependenc")
 
-    # Wait for project name prompt
-    child.expect(r"Project name.*")
-    child.sendline("migrated-app")
-
-    # Wait for completion
+    # Wait for completion (no interactive prompt anymore)
     child.expect(pexpect.EOF)
     child.close()
 
     assert child.exitstatus == 0
 
-    # Verify pyproject.toml has migrated dependencies
+    # Verify pyproject.toml uses directory name and has migrated dependencies
     pyproject = (base / "pyproject.toml").read_text()
-    assert 'name = "migrated-app"' in pyproject
+    assert f'name = "{base.name}"' in pyproject
     assert '"requests>=2.28"' in pyproject
     assert '"urllib3"' in pyproject

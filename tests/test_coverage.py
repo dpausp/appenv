@@ -225,21 +225,6 @@ def test_get_uv_bin_pip_fallback_success(tmpdir, monkeypatch):
 # ==============================================================================
 
 
-def test_migrate_empty_project_name_uses_default(workdir, monkeypatch, capsys):
-    """Empty project name input uses default name during migration."""
-    base = Path(workdir)
-    (base / "requirements.txt").write_text("requests\n")
-
-    inputs = iter([""])
-    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
-
-    env = appenv.AppEnv(base, Path.cwd())
-    env.migrate()
-
-    pyproject = (base / "pyproject.toml").read_text()
-    assert f'name = "{base.name}"' in pyproject
-
-
 def test_init_empty_command_name_uses_app(workdir, monkeypatch, capsys):
     """Test fresh start with default command name and dependencies."""
     base = Path(workdir)

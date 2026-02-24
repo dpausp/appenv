@@ -473,24 +473,20 @@ def test_init_fresh_start_default_dependencies(tmpdir, monkeypatch, capsys):
     assert 'requires-python = ">=3.8"' in pyproject  # default version
 
 
-def test_migrate_interactive_project_name(tmpdir, monkeypatch, capsys):
-    """migrate asks for project name interactively."""
+def test_migrate_uses_directory_name(tmpdir, monkeypatch, capsys):
+    """migrate uses directory name as project name (non-interactive)."""
     monkeypatch.chdir(tmpdir)
     base = Path(tmpdir)
 
     # Create requirements.txt to trigger migration
     (base / "requirements.txt").write_text("requests>=2.0\n")
 
-    # Input: custom project name
-    inputs = iter(["custom-project"])
-    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
-
     env = appenv.AppEnv(base, Path.cwd())
     env.migrate()
 
-    # Verify pyproject.toml uses custom project name
+    # Verify pyproject.toml uses directory name as project name
     pyproject = (base / "pyproject.toml").read_text()
-    assert 'name = "custom-project"' in pyproject
+    assert f'name = "{base.name}"' in pyproject
     assert '"requests>=2.0"' in pyproject
 
     captured = capsys.readouterr()
