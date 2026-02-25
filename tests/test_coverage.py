@@ -327,39 +327,6 @@ def test_main_entry_point_subprocess():
 # ==============================================================================
 
 
-def test_update_lockfile_pyproject_verbose(workdir, monkeypatch, capsys):
-    """Test verbose output in pyproject update_lockfile workflow."""
-    base = Path(workdir)
-    (base / "pyproject.toml").write_text(
-        '[project]\nname = "test"\ndependencies = ["click"]\n'
-    )
-    (base / "uv.lock").write_text("version = 1\n")
-
-    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
-    monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
-
-    def mock_uv_cmd(args, verbose=False, **kwargs):
-        if "lock" in args and "pip" not in args:
-            pass
-        elif "compile" in args:
-            output_file = args[args.index("--output-file") + 1]
-            Path(output_file).write_text("click==8.1.0\n")
-        return b""
-
-    monkeypatch.setattr(appenv, "uv_cmd", mock_uv_cmd)
-
-    # Enable verbose mode via environment variable
-    monkeypatch.setenv("APPENV_VERBOSE", "1")
-
-    env = appenv.AppEnv(base, Path.cwd())
-    args = argparse.Namespace(diff=False, verbose=True)
-
-    env.update_lockfile(args=args, remaining=None)
-
-    captured = capsys.readouterr()
-    assert "Generating requirements.lock" in captured.out
-
-
 def test_update_lockfile_pyproject_no_changes(workdir, monkeypatch, capsys):
     """Lines 1005, 1033: 'No changes' output when lockfile unchanged."""
     base = Path(workdir)

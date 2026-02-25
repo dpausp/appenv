@@ -329,13 +329,23 @@ class TestNixBuildPaths:
         uv_bin_dir = uv_out / "bin"
         uv_bin_dir.mkdir(parents=True)
         uv_bin = uv_bin_dir / "uv"
-        uv_bin.write_text("#!/bin/sh\necho uv\n")
+        uv_bin.write_text("#!/bin/sh\necho 'uv 0.6.0'\n")
+
+        class MockResult:
+            def __init__(self, returncode=0, stdout=""):
+                self.returncode = returncode
+                self.stdout = stdout
 
         nix_calls = []
-        monkeypatch.setattr(
-            "subprocess.run",
-            lambda cmd, **kwargs: nix_calls.append(cmd),
-        )
+
+        def mock_run(cmd, **kwargs):
+            nix_calls.append(cmd)
+            # Return version output for uv --version calls
+            if "--version" in cmd:
+                return MockResult(stdout="uv 0.6.0\n")
+            return MockResult()
+
+        monkeypatch.setattr("subprocess.run", mock_run)
 
         result = appenv.get_uv_bin(base)
 

@@ -116,7 +116,7 @@ def test_prepare_pyproject_keeps_appenv_if_requirements_exists(tmpdir, monkeypat
 
 
 def test_update_lockfile_pyproject_calls_uv_lock(tmpdir, monkeypatch):
-    """_update_lockfile_pyproject calls uv lock and pip compile for fallback."""
+    """_update_lockfile_pyproject calls uv lock."""
     monkeypatch.chdir(tmpdir)
     base = Path(tmpdir)
 
@@ -138,8 +138,6 @@ def test_update_lockfile_pyproject_calls_uv_lock(tmpdir, monkeypatch):
 
     # Should call uv lock
     assert any("lock" in str(c) for c in uv_calls)
-    # Should also call pip compile for fallback requirements.lock
-    assert any("compile" in str(c) for c in uv_calls)
 
 
 def test_prepare_exits_without_project_files(tmpdir, monkeypatch, capsys):
