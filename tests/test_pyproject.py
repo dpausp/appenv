@@ -414,14 +414,15 @@ def test_init_fresh_start_interactive(tmpdir, monkeypatch, capsys):
     base = Path(tmpdir)
 
     # No requirements.txt - triggers fresh start flow
-    # Inputs: command name, description, dependencies (2), empty, python version
+    # Inputs: command name, deps (2), empty, project name, desc, py version
     inputs = iter(
         [
             "myapp",  # command name
-            "My test app",  # description
             "requests",  # dependency 1
             "click",  # dependency 2
             "",  # empty line to finish dependencies
+            "myapp-project",  # project name
+            "My test app",  # description
             "3.10",  # python version
         ]
     )
@@ -432,7 +433,7 @@ def test_init_fresh_start_interactive(tmpdir, monkeypatch, capsys):
 
     # Verify pyproject.toml was created
     pyproject = (base / "pyproject.toml").read_text()
-    assert 'name = "myapp"' in pyproject
+    assert 'name = "myapp-project"' in pyproject
     assert 'description = "My test app"' in pyproject
     assert '"requests"' in pyproject
     assert '"click"' in pyproject
@@ -450,12 +451,14 @@ def test_init_fresh_start_default_dependencies(tmpdir, monkeypatch, capsys):
     base = Path(tmpdir)
 
     # No requirements.txt - triggers fresh start flow
-    # Immediately empty line for dependencies - should default to command name
+    # Use a real package name that exists on PyPI
     inputs = iter(
         [
-            "defaultapp",  # command name
+            "requests",  # command name (real package)
+            # empty line immediately - deps default to "requests"
+            "",
+            "",  # project name (use default: requests-app)
             "",  # empty description
-            "",  # empty line immediately - no dependencies entered
             "",  # python version (use default 3.8)
         ]
     )
@@ -466,8 +469,8 @@ def test_init_fresh_start_default_dependencies(tmpdir, monkeypatch, capsys):
 
     # Verify pyproject.toml was created with command name as dependency
     pyproject = (base / "pyproject.toml").read_text()
-    assert 'name = "defaultapp"' in pyproject
-    assert '"defaultapp"' in pyproject  # dependency defaults to command name
+    assert 'name = "requests-app"' in pyproject
+    assert '"requests"' in pyproject  # dependency defaults to command name
     assert 'requires-python = ">=3.8"' in pyproject  # default version
 
 
@@ -1116,3 +1119,117 @@ def test_prepare_pyproject_keeps_dot_uv_dir(tmpdir, monkeypatch):
     assert (uv_dir / "uv_binary").exists()
     # old hash venv should be removed
     assert not old_venv.exists()
+
+
+# ==============================================================================
+# init tests (from test_coverage.py)
+# ==============================================================================
+
+
+def test_init_empty_command_name_uses_app(workdir, monkeypatch, capsys):
+    """Test fresh start with default command name and dependencies."""
+    base = Path(workdir)
+
+    inputs = iter(
+        [
+            "app",  # command name (explicitly "app")
+            "",  # empty dependencies -> defaults to "app"
+            "",  # project name (default: app-app)
+            "test description",
+            "",  # python version (default)
+        ]
+    )
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.init()
+
+    pyproject = (base / "pyproject.toml").read_text()
+    assert 'name = "app-app"' in pyproject
+    assert '"app"' in pyproject  # dependency defaults to command name
+
+
+def test_init_unlink_broken_symlink(workdir, monkeypatch, capsys):
+    """Unlinks broken symlink before creating new one."""
+    base = Path(workdir)
+
+    broken_link = base / "myapp"
+    broken_link.symlink_to("nonexistent_target")
+    assert broken_link.is_symlink()
+    assert not broken_link.exists()
+
+    inputs = iter(
+        [
+            "myapp",  # command name
+            "",  # empty dependencies -> defaults to "myapp"
+            "",  # project name (default: myapp-app)
+            "",  # description
+            "",  # python version
+        ]
+    )
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.init()
+
+    assert (base / "myapp").is_symlink()
+    assert (base / "myapp").exists()
+    assert (base / "myapp").resolve() == (base / "appenv").resolve()
+
+
+def test_init_pyproject_already_exists(workdir, monkeypatch, capsys):
+    """Lines 838-841: init() returns early when pyproject.toml exists."""
+    base = Path(workdir)
+
+    (base / "pyproject.toml").write_text(
+        '[project]\nname = "existing"\ndependencies = []\n'
+    )
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.init()
+
+    captured = capsys.readouterr()
+    assert "already exists" in captured.out
+    assert "Nothing to do" in captured.out
+
+
+def test_init_empty_command_name_defaults_to_app(workdir, monkeypatch, capsys):
+    """Line 847: init() uses 'app' as default when command name is empty."""
+    base = Path(workdir)
+
+    # Empty command name -> defaults to "app"
+    inputs = iter(
+        [
+            "",  # empty command name -> default "app"
+            "",  # no dependencies -> defaults to "app"
+            "",  # project name (default: app-app)
+            "test description",
+            "",  # python version default
+        ]
+    )
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.init()
+
+    pyproject = (base / "pyproject.toml").read_text()
+    assert 'name = "app-app"' in pyproject
+    assert '"app"' in pyproject  # dependency also defaults to app
+
+
+# ==============================================================================
+# migrate tests (from test_coverage.py)
+# ==============================================================================
+
+
+def test_migrate_no_requirements_txt(workdir, monkeypatch, capsys):
+    """Lines 888-890: migrate() returns early when requirements.txt not found."""
+    base = Path(workdir)
+
+    # No requirements.txt, no pyproject.toml
+    env = appenv.AppEnv(base, Path.cwd())
+    env.migrate()
+
+    captured = capsys.readouterr()
+    assert "No requirements.txt found" in captured.out
+    assert "Use 'init' to create" in captured.out
