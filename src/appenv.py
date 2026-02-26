@@ -684,8 +684,6 @@ class AppEnv:
         if not command_name:
             command_name = "app"
 
-        description = input("Description []: ").strip()
-
         print("\nEnter dependencies (one per line, empty line to finish):")
         print(f"  Default: {command_name}")
         dependencies = []
@@ -697,13 +695,19 @@ class AppEnv:
         if not dependencies:
             dependencies = [command_name]
 
-        python_version = input("\nMinimum Python version [3.8]: ").strip()
+        project_name = input(f"\nProject name [{command_name}-app]: ").strip()
+        if not project_name:
+            project_name = f"{command_name}-app"
+
+        description = input("Description []: ").strip()
+
+        python_version = input("Minimum Python version [3.8]: ").strip()
         if not python_version:
             python_version = "3.8"
 
         self._create_pyproject(
             target=target,
-            project_name=command_name,
+            project_name=project_name,
             description=description,
             dependencies=dependencies,
             editable_sources={},

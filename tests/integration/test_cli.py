@@ -41,10 +41,6 @@ def test_init_cli(tmpdir):
     child.expect(r"What should the command be named\?.*")
     child.sendline("mycli")
 
-    # Wait for description prompt
-    child.expect(r"Description.*")
-    child.sendline("My CLI tool")
-
     # Wait for dependency prompts - enter two, then empty line
     child.expect(r"Dependency:.*")
     child.sendline("click")
@@ -54,6 +50,14 @@ def test_init_cli(tmpdir):
 
     child.expect(r"Dependency:.*")
     child.sendline("")  # Empty to finish
+
+    # Wait for project name prompt
+    child.expect(r"Project name.*")
+    child.sendline("mycli-project")
+
+    # Wait for description prompt
+    child.expect(r"Description.*")
+    child.sendline("My CLI tool")
 
     # Wait for Python version prompt
     child.expect(r"Minimum Python version.*")
@@ -67,7 +71,7 @@ def test_init_cli(tmpdir):
 
     # Verify pyproject.toml was created with correct content
     pyproject = (base / "pyproject.toml").read_text()
-    assert 'name = "mycli"' in pyproject
+    assert 'name = "mycli-project"' in pyproject
     assert 'description = "My CLI tool"' in pyproject
     assert '"click"' in pyproject
     assert '"rich"' in pyproject
