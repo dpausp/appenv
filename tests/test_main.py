@@ -2,8 +2,10 @@
 
 import argparse
 import os
+import re
 import subprocess
 import sys
+from importlib.metadata import version as get_metadata_version
 from pathlib import Path
 
 import pytest
@@ -98,6 +100,7 @@ def test_cmd_with_list_no_shell():
 
 
 def test_uv_cmd_raises_when_uv_not_found(monkeypatch):
+    appenv._uv_bin_cache = None  # Reset cache
     monkeypatch.setattr("shutil.which", lambda name: None)
 
     with pytest.raises(RuntimeError, match="uv not found"):
@@ -785,3 +788,192 @@ def test_main_entry_point_subprocess():
     )
     assert result.returncode == 0
     assert "usage" in result.stdout.lower() or "usage" in result.stderr.lower()
+
+
+# ==============================================================================
+# Version consistency tests (from test_version.py)
+# ==============================================================================
+
+
+def get_source_version():
+    """Get version from src/appenv.py __version__."""
+    appenv_py = Path(__file__).parent.parent / "src" / "appenv.py"
+    content = appenv_py.read_text()
+    match = re.search(r'^__version__\s*=\s*"([^"]+)"', content, re.MULTILINE)
+    if not match:
+        raise ValueError("Could not find __version__ in src/appenv.py")
+    return match.group(1)
+
+
+def get_appenv_version():
+    """Get version from ./appenv version command."""
+    result = subprocess.run(
+        ["./appenv", "version"],
+        capture_output=True,
+        text=True,
+        cwd=Path(__file__).parent.parent,
+    )
+    # Output is "appenv X.Y.Z"
+    return result.stdout.strip().split()[-1]
+
+
+def test_version_consistency():
+    """Ensure __version__, importlib.metadata and ./appenv version match."""
+    source_version = get_source_version()
+    metadata_version = get_metadata_version("appenv")
+    appenv_version = get_appenv_version()
+
+    assert source_version == metadata_version == appenv_version, (
+        f"Version mismatch: __version__={source_version}, "
+        f"metadata={metadata_version}, appenv={appenv_version}"
+    )
+
+
+# ==============================================================================
+# reset tests (from test_reset.py)
+# ==============================================================================
+
+
+def test_reset_nonexisting_envdir_silent(tmpdir):
+    env = appenv.AppEnv(Path(tmpdir) / "ducker", Path.cwd())
+    assert not os.path.exists(env.appenv_dir)
+    env.reset()
+    assert not os.path.exists(env.appenv_dir)
+    assert os.path.exists(str(tmpdir))
+
+
+def test_reset_removes_envdir_with_subdirs(tmpdir):
+    """reset() cleans up contents in .appenv."""
+    env = appenv.AppEnv(Path(tmpdir) / "ducker", Path.cwd())
+    os.makedirs(env.appenv_dir)
+    # Create some subdirectories
+    (env.appenv_dir / "subdir1").mkdir()
+    (env.appenv_dir / "subdir2").mkdir()
+    assert os.path.exists(env.appenv_dir)
+    env.reset()
+    # .appenv should still exist but be empty (or only contain .uv)
+    assert os.path.exists(env.appenv_dir)
+    # No subdirectories left (except possibly .uv)
+    remaining = list(env.appenv_dir.iterdir())
+    assert all(p.name == ".uv" for p in remaining)
+
+
+def test_reset_removes_venv(tmpdir, capsys):
+    """reset() also removes .venv for pyproject workflow."""
+    base = Path(tmpdir) / "myproject"
+    base.mkdir()
+    venv = base / ".venv"
+    venv.mkdir()
+    (venv / "bin").mkdir()
+    (venv / "bin" / "python").write_text("#!/bin/sh\necho python")
+
+    assert venv.exists()
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.reset()
+
+    assert not venv.exists()
+    captured = capsys.readouterr()
+    assert "Removing" in captured.out and ".venv" in captured.out
+
+
+def test_reset_removes_both_venv_and_appenv(tmpdir, capsys):
+    """reset() removes .venv symlink and cleans .appenv contents."""
+    base = Path(tmpdir) / "myproject"
+    base.mkdir()
+
+    # Create .venv (as symlink to .appenv/venv)
+    appenv_dir = base / ".appenv"
+    appenv_dir.mkdir()
+    venv_real = appenv_dir / "venv"
+    venv_real.mkdir()
+    venv_link = base / ".venv"
+    venv_link.symlink_to(".appenv/venv")
+
+    assert venv_link.exists()
+    assert appenv_dir.exists()
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.reset()
+
+    # Symlink should be removed
+    assert not venv_link.exists()
+    # .appenv should still exist but venv should be gone
+    assert appenv_dir.exists()
+    assert not venv_real.exists()
+
+
+def test_reset_unlinks_file_in_appenv(workdir, monkeypatch, capsys):
+    """Line 1108: reset() unlinks non-directory files in .appenv."""
+    base = Path(workdir)
+
+    # Create .appenv with a file (not directory)
+    appenv_dir = base / ".appenv"
+    appenv_dir.mkdir()
+    old_file = appenv_dir / "old_file.txt"
+    old_file.write_text("old content")
+
+    monkeypatch.setenv("APPENV_VERBOSE", "1")
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.reset()
+
+    assert not old_file.exists()
+    captured = capsys.readouterr()
+    assert "Removing" in captured.out
+
+
+def test_reset_removes_venv_symlink(workdir, monkeypatch, capsys):
+    """reset() removes .venv symlink."""
+    base = Path(workdir)
+
+    # Create .appenv/venv and .venv symlink
+    appenv_dir = base / ".appenv"
+    appenv_dir.mkdir()
+    venv_real = appenv_dir / "venv"
+    venv_real.mkdir()
+    venv_link = base / ".venv"
+    venv_link.symlink_to(".appenv/venv")
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.reset()
+
+    assert not venv_link.exists()
+    captured = capsys.readouterr()
+    assert "Removing" in captured.out
+
+
+def test_reset_removes_real_venv(workdir, monkeypatch, capsys):
+    """reset() removes .appenv/venv directory."""
+    base = Path(workdir)
+
+    # Create .appenv/venv
+    appenv_dir = base / ".appenv"
+    appenv_dir.mkdir()
+    venv_real = appenv_dir / "venv"
+    venv_real.mkdir()
+    (venv_real / "bin").mkdir()
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.reset()
+
+    assert not venv_real.exists()
+    captured = capsys.readouterr()
+    assert "Removing" in captured.out
+
+
+def test_reset_removes_old_venv_directory(workdir, monkeypatch, capsys):
+    """reset() removes old .venv directory (not symlink)."""
+    base = Path(workdir)
+
+    # Create .venv as a real directory (legacy)
+    venv_dir = base / ".venv"
+    venv_dir.mkdir()
+    (venv_dir / "bin").mkdir()
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.reset()
+
+    assert not venv_dir.exists()
+    captured = capsys.readouterr()
+    assert "Removing old" in captured.out

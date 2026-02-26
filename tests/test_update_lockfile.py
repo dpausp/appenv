@@ -371,3 +371,28 @@ def test_update_lockfile_pyproject_diff_no_changes(workdir, monkeypatch, capsys)
 
     captured = capsys.readouterr()
     assert "No changes" in captured.out
+
+
+def test_update_lockfile_pyproject_calls_uv_lock(tmpdir, monkeypatch):
+    """_update_lockfile_pyproject calls uv lock."""
+    monkeypatch.chdir(tmpdir)
+    base = Path(tmpdir)
+
+    (base / "pyproject.toml").write_text(
+        "[project]\nname = 'test'\ndependencies = []\n"
+    )
+
+    uv_calls = []
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
+    monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
+    monkeypatch.setattr(
+        appenv,
+        "uv_cmd",
+        lambda args, **kwargs: uv_calls.append(args),
+    )
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env._update_lockfile_pyproject(None)
+
+    # Should call uv lock
+    assert any("lock" in str(c) for c in uv_calls)
