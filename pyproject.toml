@@ -51,6 +51,7 @@ test = [
 lint = ["ruff", "ty"]
 dedup = [
     "pytest-deduplicate>=0.1.6",
+    "pytest-patterns>=0.3.0",
     "vulture",
 ]
 dev = [
