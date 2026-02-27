@@ -48,6 +48,7 @@ test = [
     "pexpect",
     "pytest-patterns",
     "pytest-deduplicate",
+    "pytest-timeout",
 ]
 lint = ["ruff", "ty", "vulture"]
 dev = [
@@ -104,10 +105,11 @@ select = ["E", "F", "I", "N", "W", "UP", "B"]
 
 [tool.pytest.ini_options]
 addopts = [
+    "--timeout=25",
     "-W", "error",
     "--tb=native",
     "-v",
-    "-m", "not slow",  # Skip slow tests by default
+    "-m", "not slow",
 ]
 testpaths = ["tests"]
 markers = [
