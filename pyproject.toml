@@ -48,6 +48,9 @@ test = [
     "pytest-patterns",
     "pytest-deduplicate",
     "pytest-timeout",
+    "pytest-ty>=0.1.5",
+    "pytest-ruff>=0.5",
+    "pytest-xdist>=3.8.0",
 ]
 lint = ["ruff", "ty", "vulture"]
 dev = [
