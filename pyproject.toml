@@ -77,8 +77,8 @@ commands = [
     ["ruff", "check", "--fix", "."],
     ["ruff", "format", "."],
     ["python", "scripts/fix_whitespace.py", "."],
-    ["ty", "check", ".", "--exclude", ".vulture_whitelist.py"],
-    ["vulture", "src/", "tests/", ".vulture_whitelist.py", "--min-confidence=80"],
+    ["ty", "check", ".", "--exclude", ".vulture_exclude"],
+    ["vulture", "src/", "tests/", ".vulture_exclude", "--min-confidence=80"],
 ]
 
 [tool.tox.env.cov]

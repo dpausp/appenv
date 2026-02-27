@@ -1,5 +1,5 @@
 # Vulture whitelist for false positives
-# Run: vulture src/ tests/ .vulture_whitelist.py --min-confidence=80
+# Run: vulture src/ tests/ .vulture_exclude --min-confidence=80
 
 # src/appenv.py:159 - 'quiet' param in cmd() not implemented (API compat)
 quiet  # noqa
