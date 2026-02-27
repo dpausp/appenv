@@ -165,8 +165,9 @@ def cmd(c, merge_stderr=True, quiet=False, cwd=None):
         stderr = subprocess.STDOUT if merge_stderr else None
         return subprocess.check_output(cmd_list, shell=is_shell, stderr=stderr, cwd=cwd)
     except subprocess.CalledProcessError as e:
-        print(f"{c} returned with exit code {e.returncode}")
-        print(e.output.decode("utf-8", "replace"))
+        if not quiet:
+            print(f"{c} returned with exit code {e.returncode}")
+            print(e.output.decode("utf-8", "replace"))
         raise ValueError(e.output.decode("utf-8", "replace")) from e
 
 
@@ -326,6 +327,7 @@ def get_uv_bin(base=None):
 
         # Check if version is recent enough (>= 0.5)
         if result.returncode == 0 and uv_local.exists():
+            # SPEC: SRS-F004-uv-version-check - Handle nix-built uv check failures
             try:
                 version_result = subprocess.run(
                     [str(uv_local), "--version"],
