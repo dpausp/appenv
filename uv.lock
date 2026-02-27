@@ -13,10 +13,6 @@ name = "appenv"
 source = { editable = "." }
 
 [package.dev-dependencies]
-dedup = [
-    { name = "pytest-deduplicate" },
-    { name = "vulture" },
-]
 dev = [
     { name = "pexpect" },
     { name = "pytest", version = "8.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
@@ -35,28 +31,26 @@ dev = [
 lint = [
     { name = "ruff" },
     { name = "ty" },
+    { name = "vulture" },
 ]
 test = [
     { name = "pexpect" },
     { name = "pytest", version = "8.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "pytest", version = "9.0.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
     { name = "pytest-cov" },
+    { name = "pytest-deduplicate" },
     { name = "pytest-patterns" },
 ]
 
 [package.metadata]
 
 [package.metadata.requires-dev]
-dedup = [
-    { name = "pytest-deduplicate", specifier = ">=0.1.6" },
-    { name = "vulture" },
-]
 dev = [
     { name = "pexpect" },
     { name = "pytest" },
     { name = "pytest-cov" },
-    { name = "pytest-deduplicate", specifier = ">=0.1.6" },
-    { name = "pytest-patterns", specifier = ">=0.3.0" },
+    { name = "pytest-deduplicate" },
+    { name = "pytest-patterns" },
     { name = "ruff" },
     { name = "tox" },
     { name = "tox-uv" },
@@ -66,12 +60,14 @@ dev = [
 lint = [
     { name = "ruff" },
     { name = "ty" },
+    { name = "vulture" },
 ]
 test = [
     { name = "pexpect" },
     { name = "pytest" },
     { name = "pytest-cov" },
-    { name = "pytest-patterns", specifier = ">=0.3.0" },
+    { name = "pytest-deduplicate" },
+    { name = "pytest-patterns" },
 ]
 
 [[package]]

@@ -1,5 +1,7 @@
 import argparse
 import os
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -484,6 +486,33 @@ def test_prepare_pyproject_cleanup_old_appenv(tmpdir, monkeypatch):
     assert (base / ".appenv").exists()
 
 
+def test_prepare_pyproject_removes_old_current_symlink(tmpdir, monkeypatch):
+    """_prepare_pyproject removes old .appenv/current symlink (Python 3.14 compat)."""
+    monkeypatch.chdir(tmpdir)
+    base = Path(tmpdir)
+
+    (base / "pyproject.toml").write_text(
+        "[project]\nname = 'test'\ndependencies = []\n"
+    )
+    (base / "uv.lock").write_text("version = 1\n")
+
+    # Create old .appenv/current symlink (legacy structure)
+    old_appenv = base / ".appenv"
+    old_appenv.mkdir(parents=True)
+    current_link = old_appenv / "current"
+    current_link.symlink_to("/nonexistent/old/venv")
+
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
+    monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
+    monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: None)
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env._prepare_pyproject()
+
+    # Old current symlink should be removed
+    assert not current_link.exists()
+
+
 def test_prepare_pyproject_keeps_appenv_if_requirements_exists(tmpdir, monkeypatch):
     """_prepare_pyproject keeps .appenv if requirements.txt still exists."""
     monkeypatch.chdir(tmpdir)
@@ -784,3 +813,171 @@ def test_detect_project_type_none(tmpdir, monkeypatch):
     monkeypatch.chdir(tmpdir)
     result = appenv.detect_project_type(Path(tmpdir))
     assert result is None
+
+
+# ==============================================================================
+# Nix tests
+# ==============================================================================
+
+
+def test_ensure_uv_builds_with_nix(tmpdir, monkeypatch):
+    """ensure_uv builds uv with nix when uv not in PATH and nix available."""
+    monkeypatch.chdir(tmpdir)
+    base = Path(tmpdir)
+
+    (base / "pyproject.toml").write_text("[project]\nname = 'test'\n")
+
+    # Reset cache
+    appenv._uv_bin_cache = None
+
+    # Pre-create the uv binary at the expected location
+    uv_out = base / ".appenv" / ".uv"
+    uv_bin = uv_out / "bin" / "uv"
+    uv_bin.parent.mkdir(parents=True, exist_ok=True)
+    uv_bin.write_text("#!/bin/bash\necho 'uv 0.5.0'")
+    uv_bin.chmod(0o755)
+
+    # Mock: uv not in PATH, nix available
+    def mock_which(cmd):
+        if cmd == "uv":
+            return None
+        if cmd == "nix":
+            return "/usr/bin/nix"
+        return shutil.which(cmd)
+
+    monkeypatch.setattr(shutil, "which", mock_which)
+
+    # Track subprocess calls
+    run_calls = []
+
+    def mock_run(cmd, **kwargs):
+        run_calls.append(cmd)
+        # Simulate nix-build success (creates symlink)
+        if "nix-build" in cmd:
+            return subprocess.CompletedProcess(cmd, 0, b"", b"")
+        # Simulate uv --version check (returns text when text=True in kwargs)
+        if str(uv_bin) in cmd:
+            text_mode = kwargs.get("text", False)
+            stdout = "uv 0.5.0\n" if text_mode else b"uv 0.5.0\n"
+            return subprocess.CompletedProcess(cmd, 0, stdout, b"")
+        return subprocess.CompletedProcess(cmd, 0, b"", b"")
+
+    monkeypatch.setattr(subprocess, "run", mock_run)
+
+    result = appenv.get_uv_bin(base)
+
+    assert result == str(uv_bin)
+    assert any("nix-build" in c for c in run_calls)
+
+    # Reset cache
+    appenv._uv_bin_cache = None
+
+
+def test_ensure_uv_nix_version_too_old_fallback(tmpdir, monkeypatch):
+    """get_uv_bin falls back to nix build when nix-build version too old."""
+    monkeypatch.chdir(tmpdir)
+    base = Path(tmpdir)
+
+    (base / "pyproject.toml").write_text("[project]\nname = 'test'\n")
+
+    # Reset cache
+    appenv._uv_bin_cache = None
+
+    # Pre-create the uv binary at the expected location
+    uv_out = base / ".appenv" / ".uv"
+    uv_bin = uv_out / "bin" / "uv"
+    uv_bin.parent.mkdir(parents=True, exist_ok=True)
+    uv_bin.write_text("#!/bin/bash\necho 'uv 0.5.0'")
+    uv_bin.chmod(0o755)
+
+    def mock_which(cmd):
+        if cmd == "uv":
+            return None
+        if cmd == "nix":
+            return "/usr/bin/nix"
+        return shutil.which(cmd)
+
+    monkeypatch.setattr(shutil, "which", mock_which)
+
+    run_calls = []
+    version_checked = [False]
+
+    def mock_run(cmd, **kwargs):
+        run_calls.append(list(cmd))
+        if "nix-build" in cmd:
+            return subprocess.CompletedProcess(cmd, 0, b"", b"")
+        # First uv --version call (from nix-build check) - return old version
+        if str(uv_bin) in cmd and not version_checked[0]:
+            version_checked[0] = True
+            text_mode = kwargs.get("text", False)
+            stdout = "uv 0.4.0\n" if text_mode else b"uv 0.4.0\n"
+            return subprocess.CompletedProcess(cmd, 0, stdout, b"")
+        # Simulate nix build success
+        if "nix" in cmd and "build" in cmd:
+            return subprocess.CompletedProcess(cmd, 0, b"", b"")
+        return subprocess.CompletedProcess(cmd, 0, b"", b"")
+
+    monkeypatch.setattr(subprocess, "run", mock_run)
+
+    result = appenv.get_uv_bin(base)
+
+    assert result == str(uv_bin)
+    # Should have tried nix-build first, then fallen back to nix build
+    assert any("nix-build" in str(c) for c in run_calls)
+    assert any("nix" in str(c) and "build" in str(c) for c in run_calls)
+
+    # Reset cache
+    appenv._uv_bin_cache = None
+
+
+def test_ensure_uv_nix_version_parse_error_fallback(tmpdir, monkeypatch):
+    """get_uv_bin falls back to nix build when version cannot be parsed."""
+    monkeypatch.chdir(tmpdir)
+    base = Path(tmpdir)
+
+    (base / "pyproject.toml").write_text("[project]\nname = 'test'\n")
+
+    # Reset cache
+    appenv._uv_bin_cache = None
+
+    # Pre-create the uv binary at the expected location
+    uv_out = base / ".appenv" / ".uv"
+    uv_bin = uv_out / "bin" / "uv"
+    uv_bin.parent.mkdir(parents=True, exist_ok=True)
+    uv_bin.write_text("#!/bin/bash\necho 'uv 0.5.0'")
+    uv_bin.chmod(0o755)
+
+    def mock_which(cmd):
+        if cmd == "uv":
+            return None
+        if cmd == "nix":
+            return "/usr/bin/nix"
+        return shutil.which(cmd)
+
+    monkeypatch.setattr(shutil, "which", mock_which)
+
+    run_calls = []
+
+    def mock_run(cmd, **kwargs):
+        run_calls.append(list(cmd))
+        if "nix-build" in cmd:
+            return subprocess.CompletedProcess(cmd, 0, b"", b"")
+        # Return unparseable version
+        if str(uv_bin) in cmd:
+            text_mode = kwargs.get("text", False)
+            stdout = "invalid-output\n" if text_mode else b"invalid-output\n"
+            return subprocess.CompletedProcess(cmd, 0, stdout, b"")
+        if "nix" in cmd and "build" in cmd:
+            return subprocess.CompletedProcess(cmd, 0, b"", b"")
+        return subprocess.CompletedProcess(cmd, 0, b"", b"")
+
+    monkeypatch.setattr(subprocess, "run", mock_run)
+
+    result = appenv.get_uv_bin(base)
+
+    assert result == str(uv_bin)
+    # Should have tried nix-build, failed to parse version, then fallen back
+    assert any("nix" in str(c) and "build" in str(c) for c in run_calls)
+
+    # Reset cache
+    appenv._uv_bin_cache = None

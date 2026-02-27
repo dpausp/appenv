@@ -46,24 +46,19 @@ test = [
     "pytest",
     "pytest-cov",
     "pexpect",
-    "pytest-patterns>=0.3.0",
+    "pytest-patterns",
+    "pytest-deduplicate",
 ]
-lint = ["ruff", "ty"]
-dedup = [
-    "pytest-deduplicate>=0.1.6",
-    "pytest-patterns>=0.3.0",
-    "vulture",
-]
+lint = ["ruff", "ty", "vulture"]
 dev = [
     {include-group = "test"},
     {include-group = "lint"},
-    {include-group = "dedup"},
     "tox",
     "tox-uv",
 ]
 
 [tool.tox]
-env_list = ["fix", "dedup", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+env_list = ["fix", "cov", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
 skip_missing_interpreters = true
 
 [tool.tox.env_run_base]
@@ -77,13 +72,14 @@ commands = [["pytest"]]
 [tool.tox.env.fix]
 skip_install = true
 depends = []
-description = "Format, lint, fix whitespace, type-check"
+description = "Format, lint, fix whitespace, type-check, dead code"
 dependency_groups = ["test", "lint"]
 commands = [
     ["ruff", "check", "--fix", "."],
     ["ruff", "format", "."],
     ["python", "scripts/fix_whitespace.py", "."],
     ["ty", "check", ".", "--exclude", ".vulture_whitelist.py"],
+    ["vulture", "src/", "tests/", ".vulture_whitelist.py", "--min-confidence=80"],
 ]
 
 [tool.tox.env.cov]
@@ -92,16 +88,10 @@ package = "wheel"
 runner = "uv-venv-lock-runner"
 setenv = {APPENV_BEST_PYTHON = "{envpython}"}
 dependency_groups = ["test"]
-description = "Tests with coverage"
-commands = [["pytest", "--cov=appenv", "--cov-report=term-missing", "--cov-report=html"]]
-
-[tool.tox.env.dedup]
-skip_install = true
-description = "Check for duplicate tests and dead code"
-dependency_groups = ["dedup"]
+description = "Tests with coverage and test deduplication check"
 commands = [
+    ["pytest", "--cov=appenv", "--cov-report=term-missing", "--cov-report=html"],
     ["python", "-m", "pytest_deduplicate", "tests/", "--ignore=tests/integration"],
-    ["vulture", "src/", "tests/", ".vulture_whitelist.py", "--min-confidence=80"],
 ]
 
 [tool.ty.environment]

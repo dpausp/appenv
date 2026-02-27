@@ -396,3 +396,24 @@ def test_update_lockfile_pyproject_calls_uv_lock(tmpdir, monkeypatch):
 
     # Should call uv lock
     assert any("lock" in str(c) for c in uv_calls)
+
+
+def test_update_lockfile_verbose_shows_running_uv_lock(tmpdir, monkeypatch, capsys):
+    """_update_lockfile_pyproject shows 'Running: uv lock' in verbose mode."""
+    monkeypatch.chdir(tmpdir)
+    base = Path(tmpdir)
+
+    (base / "pyproject.toml").write_text(
+        "[project]\nname = 'test'\ndependencies = []\n"
+    )
+
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
+    monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
+    monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: None)
+
+    env = appenv.AppEnv(base, Path.cwd())
+    args = argparse.Namespace(diff=False)
+    env._update_lockfile_pyproject(args, verbose=True)
+
+    captured = capsys.readouterr()
+    assert "Running: uv lock" in captured.out
