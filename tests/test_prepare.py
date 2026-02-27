@@ -320,21 +320,21 @@ def test_run_uv_sets_environment_and_execs(workdir, monkeypatch):
 # ==============================================================================
 
 
-def test_new_venv(tmpdir):
-    tmpdir = str(tmpdir)
-    appenv.ensure_venv(Path(tmpdir) / "venv")
+def test_new_venv(tmp_path):
+    tmpdir = str(tmp_path)
+    appenv.ensure_venv(tmp_path / "venv")
     assert os.path.exists(os.path.join(tmpdir, "venv", "bin", "python"))
     assert os.path.exists(os.path.join(tmpdir, "venv", "lib"))
 
     # doesn't break things
-    appenv.ensure_venv(Path(tmpdir) / "venv")
+    appenv.ensure_venv(tmp_path / "venv")
     assert os.path.exists(os.path.join(tmpdir, "venv", "bin", "python"))
     assert os.path.exists(os.path.join(tmpdir, "venv", "lib"))
 
 
-def test_new_broken_venv_recreated(tmpdir):
-    tmpdir = str(tmpdir)
-    appenv.ensure_venv(Path(tmpdir) / "venv")
+def test_new_broken_venv_recreated(tmp_path):
+    tmpdir = str(tmp_path)
+    appenv.ensure_venv(tmp_path / "venv")
     assert os.path.exists(os.path.join(tmpdir, "venv", "bin", "python"))
     assert os.path.exists(os.path.join(tmpdir, "venv", "lib"))
 
@@ -344,7 +344,7 @@ def test_new_broken_venv_recreated(tmpdir):
     assert os.path.exists(os.path.join(tmpdir, "venv", "asdf"))
 
     # re-creates the venv
-    appenv.ensure_venv(Path(tmpdir) / "venv")
+    appenv.ensure_venv(tmp_path / "venv")
     assert os.path.exists(os.path.join(tmpdir, "venv", "bin", "python"))
     assert os.path.exists(os.path.join(tmpdir, "venv", "lib"))
     assert not os.path.exists(os.path.join(tmpdir, "venv", "asdf"))
@@ -355,12 +355,12 @@ def test_new_broken_venv_recreated(tmpdir):
 # ==============================================================================
 
 
-def test_ensure_best_python_execv_with_correct_args(monkeypatch, tmpdir):
+def test_ensure_best_python_execv_with_correct_args(monkeypatch, tmp_path):
     """ensure_best_python calls os.execv with correct args."""
     monkeypatch.delenv("APPENV_BEST_PYTHON", raising=False)
     monkeypatch.setattr("os.chdir", lambda p: None)
 
-    base = Path(tmpdir)
+    base = tmp_path
     (base / "pyproject.toml").write_text('[project]\nrequires-python = ">=3.11"\n')
 
     # Mock available pythons
@@ -392,12 +392,12 @@ def test_ensure_best_python_execv_with_correct_args(monkeypatch, tmpdir):
     assert "python3.12" in execv_called[0][0]
 
 
-def test_ensure_best_python_exits_65_no_python_found(monkeypatch, tmpdir, capsys):
+def test_ensure_best_python_exits_65_no_python_found(monkeypatch, tmp_path, capsys):
     """ensure_best_python exits with code 65 when no Python found."""
     monkeypatch.delenv("APPENV_BEST_PYTHON", raising=False)
     monkeypatch.setattr("os.chdir", lambda p: None)
 
-    base = Path(tmpdir)
+    base = tmp_path
     (base / "pyproject.toml").write_text('[project]\nrequires-python = ">=3.99"\n')
 
     # No Python available
@@ -411,12 +411,12 @@ def test_ensure_best_python_exits_65_no_python_found(monkeypatch, tmpdir, capsys
     assert "Could not find Python" in captured.out
 
 
-def test_ensure_best_python_exits_65_with_upper_bound(monkeypatch, tmpdir, capsys):
+def test_ensure_best_python_exits_65_with_upper_bound(monkeypatch, tmp_path, capsys):
     """ensure_best_python shows upper bound in error message."""
     monkeypatch.delenv("APPENV_BEST_PYTHON", raising=False)
     monkeypatch.setattr("os.chdir", lambda p: None)
 
-    base = Path(tmpdir)
+    base = tmp_path
     (base / "pyproject.toml").write_text('[project]\nrequires-python = ">=3.99,<4.0"\n')
 
     # Only have old Python
@@ -436,12 +436,12 @@ def test_ensure_best_python_exits_65_with_upper_bound(monkeypatch, tmpdir, capsy
     assert "<4.0" in captured.out
 
 
-def test_update_lockfile_exits_67_no_project(monkeypatch, tmpdir, capsys):
+def test_update_lockfile_exits_67_no_project(monkeypatch, tmp_path, capsys):
     """update_lockfile exits with code 67 when no pyproject.toml found."""
-    monkeypatch.chdir(tmpdir)
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
 
-    env = appenv.AppEnv(Path(tmpdir), Path.cwd())
+    env = appenv.AppEnv(tmp_path, Path.cwd())
 
     with pytest.raises(SystemExit) as err:
         env.update_lockfile()
@@ -456,10 +456,10 @@ def test_update_lockfile_exits_67_no_project(monkeypatch, tmpdir, capsys):
 # ==============================================================================
 
 
-def test_prepare_pyproject_cleanup_old_appenv(tmpdir, monkeypatch):
+def test_prepare_pyproject_cleanup_old_appenv(tmp_path, monkeypatch):
     """_prepare_pyproject removes old hash-based venvs but keeps .appenv."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     # Create pyproject.toml and uv.lock (NO requirements.txt = migration)
     (base / "pyproject.toml").write_text(
@@ -486,10 +486,10 @@ def test_prepare_pyproject_cleanup_old_appenv(tmpdir, monkeypatch):
     assert (base / ".appenv").exists()
 
 
-def test_prepare_pyproject_removes_old_current_symlink(tmpdir, monkeypatch):
+def test_prepare_pyproject_removes_old_current_symlink(tmp_path, monkeypatch):
     """_prepare_pyproject removes old .appenv/current symlink (Python 3.14 compat)."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     (base / "pyproject.toml").write_text(
         "[project]\nname = 'test'\ndependencies = []\n"
@@ -513,10 +513,10 @@ def test_prepare_pyproject_removes_old_current_symlink(tmpdir, monkeypatch):
     assert not current_link.exists()
 
 
-def test_prepare_pyproject_keeps_appenv_if_requirements_exists(tmpdir, monkeypatch):
+def test_prepare_pyproject_keeps_appenv_if_requirements_exists(tmp_path, monkeypatch):
     """_prepare_pyproject keeps .appenv if requirements.txt still exists."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     # Create BOTH pyproject.toml and requirements.txt
     (base / "pyproject.toml").write_text(
@@ -542,10 +542,10 @@ def test_prepare_pyproject_keeps_appenv_if_requirements_exists(tmpdir, monkeypat
     assert (base / ".appenv").exists()
 
 
-def test_prepare_exits_without_project_files(tmpdir, monkeypatch, capsys):
+def test_prepare_exits_without_project_files(tmp_path, monkeypatch, capsys):
     """prepare() exits with error if no pyproject.toml found."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     env = appenv.AppEnv(base, Path.cwd())
 
@@ -557,10 +557,10 @@ def test_prepare_exits_without_project_files(tmpdir, monkeypatch, capsys):
     assert "pyproject.toml" in captured.out
 
 
-def test_prepare_pyproject_missing_uv_lock(tmpdir, monkeypatch, capsys):
+def test_prepare_pyproject_missing_uv_lock(tmp_path, monkeypatch, capsys):
     """_prepare_pyproject exits with code 67 when uv.lock is missing."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     # Create pyproject.toml but NO uv.lock
     (base / "pyproject.toml").write_text(
@@ -577,10 +577,10 @@ def test_prepare_pyproject_missing_uv_lock(tmpdir, monkeypatch, capsys):
     assert "uv.lock" in captured.out
 
 
-def test_prepare_pyproject_corrupted_venv(tmpdir, monkeypatch):
+def test_prepare_pyproject_corrupted_venv(tmp_path, monkeypatch):
     """_prepare_pyproject removes corrupted venv and recreates it."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     # Create pyproject.toml and uv.lock
     (base / "pyproject.toml").write_text(
@@ -614,10 +614,10 @@ def test_prepare_pyproject_corrupted_venv(tmpdir, monkeypatch):
     assert any("venv" in c for c in uv_calls), f"Expected venv call, got {uv_calls}"
 
 
-def test_ensure_best_python_respects_upper_bound(tmpdir, monkeypatch, capsys):
+def test_ensure_best_python_respects_upper_bound(tmp_path, monkeypatch, capsys):
     """ensure_best_python respects upper bound in requires-python."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     # Ensure APPENV_BEST_PYTHON is not set (causes early return if set)
     monkeypatch.delenv("APPENV_BEST_PYTHON", raising=False)
@@ -668,10 +668,10 @@ def test_ensure_best_python_respects_upper_bound(tmpdir, monkeypatch, capsys):
     assert "python3.13" in execv_called[0][0]
 
 
-def test_prepare_pyproject_sets_uv_project_environment(tmpdir, monkeypatch):
+def test_prepare_pyproject_sets_uv_project_environment(tmp_path, monkeypatch):
     """_prepare_pyproject sets UV_PROJECT_ENVIRONMENT to .appenv/venv."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     (base / "pyproject.toml").write_text(
         "[project]\nname = 'test'\ndependencies = []\n"
@@ -688,10 +688,10 @@ def test_prepare_pyproject_sets_uv_project_environment(tmpdir, monkeypatch):
     assert os.environ.get("UV_PROJECT_ENVIRONMENT") == str(base / ".appenv" / "venv")
 
 
-def test_prepare_pyproject_updates_broken_symlink(tmpdir, monkeypatch):
+def test_prepare_pyproject_updates_broken_symlink(tmp_path, monkeypatch):
     """_prepare_pyproject updates broken .venv symlink to point to .appenv/venv."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     (base / "pyproject.toml").write_text(
         "[project]\nname = 'test'\ndependencies = []\n"
@@ -714,10 +714,10 @@ def test_prepare_pyproject_updates_broken_symlink(tmpdir, monkeypatch):
     assert os.readlink(venv_link) == ".appenv/venv"
 
 
-def test_prepare_pyproject_keeps_real_venv_directory(tmpdir, monkeypatch):
+def test_prepare_pyproject_keeps_real_venv_directory(tmp_path, monkeypatch):
     """_prepare_pyproject does not touch .venv if it's a real directory."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     (base / "pyproject.toml").write_text(
         "[project]\nname = 'test'\ndependencies = []\n"
@@ -742,10 +742,10 @@ def test_prepare_pyproject_keeps_real_venv_directory(tmpdir, monkeypatch):
     assert (venv_dir / "marker.txt").exists()
 
 
-def test_prepare_pyproject_keeps_dot_uv_dir(tmpdir, monkeypatch):
+def test_prepare_pyproject_keeps_dot_uv_dir(tmp_path, monkeypatch):
     """_prepare_pyproject does not delete .appenv/.uv during cleanup."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     (base / "pyproject.toml").write_text(
         "[project]\nname = 'test'\ndependencies = []\n"
@@ -780,10 +780,10 @@ def test_prepare_pyproject_keeps_dot_uv_dir(tmpdir, monkeypatch):
 # ==============================================================================
 
 
-def test_reset_keeps_uv_binary(tmpdir, monkeypatch, capsys):
+def test_reset_keeps_uv_binary(tmp_path, monkeypatch, capsys):
     """reset keeps .appenv/.uv directory (uv binary cache)."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     # Create .appenv/.uv
     uv_dir = base / ".appenv" / ".uv"
@@ -799,19 +799,19 @@ def test_reset_keeps_uv_binary(tmpdir, monkeypatch, capsys):
     assert (uv_dir / "bin" / "uv").exists()
 
 
-def test_detect_project_type_pyproject(tmpdir, monkeypatch):
+def test_detect_project_type_pyproject(tmp_path, monkeypatch):
     """pyproject.toml is detected."""
-    monkeypatch.chdir(tmpdir)
-    (Path(tmpdir) / "pyproject.toml").write_text("[project]\nname = 'test'\n")
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
 
-    result = appenv.detect_project_type(Path(tmpdir))
+    result = appenv.detect_project_type(tmp_path)
     assert result == "pyproject"
 
 
-def test_detect_project_type_none(tmpdir, monkeypatch):
+def test_detect_project_type_none(tmp_path, monkeypatch):
     """Returns None when no pyproject.toml exists."""
-    monkeypatch.chdir(tmpdir)
-    result = appenv.detect_project_type(Path(tmpdir))
+    monkeypatch.chdir(tmp_path)
+    result = appenv.detect_project_type(tmp_path)
     assert result is None
 
 
@@ -820,10 +820,10 @@ def test_detect_project_type_none(tmpdir, monkeypatch):
 # ==============================================================================
 
 
-def test_ensure_uv_builds_with_nix(tmpdir, monkeypatch):
+def test_ensure_uv_builds_with_nix(tmp_path, monkeypatch):
     """ensure_uv builds uv with nix when uv not in PATH and nix available."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     (base / "pyproject.toml").write_text("[project]\nname = 'test'\n")
 
@@ -873,10 +873,10 @@ def test_ensure_uv_builds_with_nix(tmpdir, monkeypatch):
     appenv._uv_bin_cache = None
 
 
-def test_ensure_uv_nix_version_too_old_fallback(tmpdir, monkeypatch):
+def test_ensure_uv_nix_version_too_old_fallback(tmp_path, monkeypatch):
     """get_uv_bin falls back to nix build when nix-build version too old."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     (base / "pyproject.toml").write_text("[project]\nname = 'test'\n")
 
@@ -930,10 +930,10 @@ def test_ensure_uv_nix_version_too_old_fallback(tmpdir, monkeypatch):
     appenv._uv_bin_cache = None
 
 
-def test_ensure_uv_nix_version_parse_error_fallback(tmpdir, monkeypatch):
+def test_ensure_uv_nix_version_parse_error_fallback(tmp_path, monkeypatch):
     """get_uv_bin falls back to nix build when version cannot be parsed."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     (base / "pyproject.toml").write_text("[project]\nname = 'test'\n")
 

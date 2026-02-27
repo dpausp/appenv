@@ -43,11 +43,11 @@ def test_main_clears_pythonpath(monkeypatch):
     assert "PYTHONPATH" not in os.environ
 
 
-def test_main_calls_run_when_not_appenv(monkeypatch, tmpdir):
+def test_main_calls_run_when_not_appenv(monkeypatch, tmp_path):
     mock_ensure_python(monkeypatch)
 
-    app_file = tmpdir / "myapp"
-    app_file.write("#!/usr/bin/env python3\nprint('test')\n")
+    app_file = tmp_path / "myapp"
+    app_file.write_text("#!/usr/bin/env python3\nprint('test')\n")
 
     run_called = []
     monkeypatch.setattr(
@@ -116,7 +116,7 @@ def test_get_uv_bin_uses_path(monkeypatch):
     assert appenv.get_uv_bin() == "/usr/bin/uv"
 
 
-def test_get_uv_bin_uses_pip_fallback(monkeypatch, tmpdir):
+def test_get_uv_bin_uses_pip_fallback(monkeypatch, tmp_path):
     """get_uv_bin installs uv via pip if not in PATH and no nix."""
     appenv._uv_bin_cache = None  # Reset cache
     monkeypatch.setattr("shutil.which", lambda name: None)  # no uv, no nix
@@ -128,7 +128,7 @@ def test_get_uv_bin_uses_pip_fallback(monkeypatch, tmpdir):
     )
 
     with pytest.raises(RuntimeError, match="uv not found"):
-        appenv.get_uv_bin(Path(tmpdir))
+        appenv.get_uv_bin(tmp_path)
 
     assert any("pip" in str(cmd) and "uv" in str(cmd) for cmd in pip_called)
 
@@ -136,8 +136,8 @@ def test_get_uv_bin_uses_pip_fallback(monkeypatch, tmpdir):
 # meta() tests
 
 
-def test_meta_calls_reset(monkeypatch, tmpdir):
-    env = appenv.AppEnv(Path(tmpdir), Path.cwd())
+def test_meta_calls_reset(monkeypatch, tmp_path):
+    env = appenv.AppEnv(tmp_path, Path.cwd())
     monkeypatch.setattr("sys.argv", ["appenv", "reset"])
 
     reset_called = []
@@ -150,8 +150,8 @@ def test_meta_calls_reset(monkeypatch, tmpdir):
     assert reset_called == [True]
 
 
-def test_meta_calls_prepare(monkeypatch, tmpdir):
-    env = appenv.AppEnv(Path(tmpdir), Path.cwd())
+def test_meta_calls_prepare(monkeypatch, tmp_path):
+    env = appenv.AppEnv(tmp_path, Path.cwd())
     monkeypatch.setattr("sys.argv", ["appenv", "prepare"])
 
     prepare_called = []
@@ -166,8 +166,8 @@ def test_meta_calls_prepare(monkeypatch, tmpdir):
     assert prepare_called == [True]
 
 
-def test_meta_calls_python(monkeypatch, tmpdir):
-    env = appenv.AppEnv(Path(tmpdir), Path.cwd())
+def test_meta_calls_python(monkeypatch, tmp_path):
+    env = appenv.AppEnv(tmp_path, Path.cwd())
     monkeypatch.setattr("sys.argv", ["appenv", "python"])
 
     python_called = []
@@ -182,8 +182,8 @@ def test_meta_calls_python(monkeypatch, tmpdir):
     assert len(python_called) == 1
 
 
-def test_meta_calls_run_script(monkeypatch, tmpdir):
-    env = appenv.AppEnv(Path(tmpdir), Path.cwd())
+def test_meta_calls_run_script(monkeypatch, tmp_path):
+    env = appenv.AppEnv(tmp_path, Path.cwd())
     monkeypatch.setattr("sys.argv", ["appenv", "run", "myscript"])
 
     run_called = []
@@ -201,12 +201,14 @@ def test_meta_calls_run_script(monkeypatch, tmpdir):
 # run() tests
 
 
-def test_run_sets_env_and_execs(monkeypatch, tmpdir):
-    env = appenv.AppEnv(Path(tmpdir), Path.cwd())
+def test_run_sets_env_and_execs(monkeypatch, tmp_path):
+    env = appenv.AppEnv(tmp_path, Path.cwd())
 
-    env_dir = tmpdir.mkdir(".appenv").mkdir("abc123")
-    bin_dir = env_dir.mkdir("bin")
-    bin_dir.join("myapp").write("#!/bin/sh\necho hello\n")
+    env_dir = tmp_path / ".appenv" / "abc123"
+    env_dir.mkdir(parents=True)
+    bin_dir = env_dir / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "myapp").write_text("#!/bin/sh\necho hello\n")
 
     monkeypatch.setattr(env, "prepare", lambda: str(env_dir))
 
@@ -227,8 +229,8 @@ def test_run_sets_env_and_execs(monkeypatch, tmpdir):
 # python() method tests
 
 
-def test_python_method_calls_run(monkeypatch, tmpdir):
-    env = appenv.AppEnv(Path(tmpdir), Path.cwd())
+def test_python_method_calls_run(monkeypatch, tmp_path):
+    env = appenv.AppEnv(tmp_path, Path.cwd())
 
     run_called = []
     monkeypatch.setattr(env, "run", lambda cmd, argv: run_called.append((cmd, argv)))
@@ -405,7 +407,7 @@ def test_verbose_print_without_env(monkeypatch, capsys):
     assert captured.out == ""
 
 
-def test_python_function_delegates(monkeypatch, tmpdir):
+def test_python_function_delegates(monkeypatch, tmp_path):
     """python() function delegates to cmd() with correct arguments."""
     cmd_called = []
 
@@ -415,16 +417,16 @@ def test_python_function_delegates(monkeypatch, tmpdir):
 
     monkeypatch.setattr(appenv, "cmd", mock_cmd)
 
-    path = Path(tmpdir)
+    path = tmp_path
     result = appenv.python(path, ["--version"])
 
     assert cmd_called[0][0] == [str(path / "bin" / "python"), "--version"]
     assert result == b"Python 3.12.0"
 
 
-def test_run_script_delegates(monkeypatch, tmpdir):
+def test_run_script_delegates(monkeypatch, tmp_path):
     """run_script() delegates to AppEnv.run() with script name."""
-    env = appenv.AppEnv(Path(tmpdir), Path.cwd())
+    env = appenv.AppEnv(tmp_path, Path.cwd())
 
     run_called = []
     monkeypatch.setattr(env, "run", lambda cmd, argv: run_called.append((cmd, argv)))
@@ -457,9 +459,9 @@ def test_check_uv_version_not_found(monkeypatch):
 # Tier 2: Moderate Effort
 
 
-def test_parse_requires_python_edge_cases(tmpdir):
+def test_parse_requires_python_edge_cases(tmp_path):
     """parse_requires_python handles non-existent file and various regex formats."""
-    base = Path(tmpdir)
+    base = tmp_path
 
     # Non-existent file returns (None, None)
     result = appenv.parse_requires_python(base / "nonexistent.toml")
@@ -488,9 +490,9 @@ def test_parse_requires_python_edge_cases(tmpdir):
     assert appenv.parse_requires_python(pyproject) == (None, None)
 
 
-def test_parse_requires_python_with_upper_bound(tmpdir):
+def test_parse_requires_python_with_upper_bound(tmp_path):
     """parse_requires_python handles upper bounds like >=3.11,<3.15."""
-    base = Path(tmpdir)
+    base = tmp_path
     pyproject = base / "pyproject.toml"
 
     # Format: >=3.11,<3.15
@@ -546,9 +548,9 @@ def test_uv_cmd_verbose_flag_and_output(monkeypatch, capsys):
 # ==============================================================================
 
 
-def test_ensure_best_python_skips_when_env_set(tmpdir, monkeypatch):
+def test_ensure_best_python_skips_when_env_set(tmp_path, monkeypatch):
     """Line 92: Returns early when APPENV_BEST_PYTHON is set."""
-    base = Path(tmpdir)
+    base = tmp_path
     (base / "pyproject.toml").write_text('[project]\nname = "test"\n')
 
     monkeypatch.setenv("APPENV_BEST_PYTHON", "/usr/bin/python3")
@@ -557,9 +559,9 @@ def test_ensure_best_python_skips_when_env_set(tmpdir, monkeypatch):
     appenv.ensure_best_python(base)
 
 
-def test_ensure_best_python_default_min_version(tmpdir, monkeypatch):
+def test_ensure_best_python_default_min_version(tmp_path, monkeypatch):
     """Line 99: Uses 3.8 as default when no requires-python specified."""
-    base = Path(tmpdir)
+    base = tmp_path
     (base / "pyproject.toml").write_text('[project]\nname = "test"\n')
 
     monkeypatch.delenv("APPENV_BEST_PYTHON", raising=False)
@@ -591,9 +593,9 @@ def test_ensure_best_python_default_min_version(tmpdir, monkeypatch):
     assert "python3.12" in execv_called[0][0]
 
 
-def test_ensure_best_python_already_running_best(tmpdir, monkeypatch):
+def test_ensure_best_python_already_running_best(tmp_path, monkeypatch):
     """Line 123: Returns early when already running the best Python."""
-    base = Path(tmpdir)
+    base = tmp_path
     (base / "pyproject.toml").write_text('[project]\nname = "test"\n')
 
     monkeypatch.delenv("APPENV_BEST_PYTHON", raising=False)
@@ -614,9 +616,9 @@ def test_ensure_best_python_already_running_best(tmpdir, monkeypatch):
     appenv.ensure_best_python(base)
 
 
-def test_ensure_best_python_broken_python(tmpdir, monkeypatch):
+def test_ensure_best_python_broken_python(tmp_path, monkeypatch):
     """Lines 132-133: Continues to next Python when subprocess fails."""
-    base = Path(tmpdir)
+    base = tmp_path
     (base / "pyproject.toml").write_text('[project]\nname = "test"\n')
 
     monkeypatch.delenv("APPENV_BEST_PYTHON", raising=False)
@@ -660,7 +662,7 @@ def test_ensure_best_python_broken_python(tmpdir, monkeypatch):
 # ==============================================================================
 
 
-def test_check_uv_version_returns_version_on_success(tmpdir, monkeypatch):
+def test_check_uv_version_returns_version_on_success(tmp_path, monkeypatch):
     """Line 285: Returns version tuple on successful version check."""
     monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/uv")
     appenv._uv_bin_cache = "/usr/bin/uv"
@@ -677,7 +679,7 @@ def test_check_uv_version_returns_version_on_success(tmpdir, monkeypatch):
     appenv._uv_bin_cache = None
 
 
-def test_check_uv_version_handles_parse_error(tmpdir, monkeypatch, capsys):
+def test_check_uv_version_handles_parse_error(tmp_path, monkeypatch, capsys):
     """Lines 290-291: Handles IndexError/ValueError during version parse."""
     monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/uv")
     appenv._uv_bin_cache = "/usr/bin/uv"
@@ -723,7 +725,7 @@ def test_check_uv_version_index_error_on_split(monkeypatch, capsys):
 # ==============================================================================
 
 
-def test_get_uv_bin_pip_fallback_success(tmpdir, monkeypatch):
+def test_get_uv_bin_pip_fallback_success(tmp_path, monkeypatch):
     """Lines 333-334: pip install fallback returns uv path."""
     appenv._uv_bin_cache = None
 
@@ -744,7 +746,7 @@ def test_get_uv_bin_pip_fallback_success(tmpdir, monkeypatch):
 
     monkeypatch.setattr("subprocess.run", mock_run)
 
-    result = appenv.get_uv_bin(Path(tmpdir))
+    result = appenv.get_uv_bin(tmp_path)
 
     assert result == "/usr/local/bin/uv"
     assert any("pip" in str(cmd) and "uv" in str(cmd) for cmd in pip_called)
@@ -834,17 +836,17 @@ def test_version_consistency():
 # ==============================================================================
 
 
-def test_reset_nonexisting_envdir_silent(tmpdir):
-    env = appenv.AppEnv(Path(tmpdir) / "ducker", Path.cwd())
+def test_reset_nonexisting_envdir_silent(tmp_path):
+    env = appenv.AppEnv(tmp_path / "ducker", Path.cwd())
     assert not os.path.exists(env.appenv_dir)
     env.reset()
     assert not os.path.exists(env.appenv_dir)
-    assert os.path.exists(str(tmpdir))
+    assert os.path.exists(str(tmp_path))
 
 
-def test_reset_removes_envdir_with_subdirs(tmpdir):
+def test_reset_removes_envdir_with_subdirs(tmp_path):
     """reset() cleans up contents in .appenv."""
-    env = appenv.AppEnv(Path(tmpdir) / "ducker", Path.cwd())
+    env = appenv.AppEnv(tmp_path / "ducker", Path.cwd())
     os.makedirs(env.appenv_dir)
     # Create some subdirectories
     (env.appenv_dir / "subdir1").mkdir()
@@ -858,9 +860,9 @@ def test_reset_removes_envdir_with_subdirs(tmpdir):
     assert all(p.name == ".uv" for p in remaining)
 
 
-def test_reset_removes_venv(tmpdir, capsys):
+def test_reset_removes_venv(tmp_path, capsys):
     """reset() also removes .venv for pyproject workflow."""
-    base = Path(tmpdir) / "myproject"
+    base = tmp_path / "myproject"
     base.mkdir()
     venv = base / ".venv"
     venv.mkdir()
@@ -877,9 +879,9 @@ def test_reset_removes_venv(tmpdir, capsys):
     assert "Removing" in captured.out and ".venv" in captured.out
 
 
-def test_reset_removes_both_venv_and_appenv(tmpdir, capsys):
+def test_reset_removes_both_venv_and_appenv(tmp_path, capsys):
     """reset() removes .venv symlink and cleans .appenv contents."""
-    base = Path(tmpdir) / "myproject"
+    base = tmp_path / "myproject"
     base.mkdir()
 
     # Create .venv (as symlink to .appenv/venv)

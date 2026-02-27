@@ -7,10 +7,12 @@ import pytest
 import appenv
 
 
-def test_migrate_uses_python_preference_from_requirements(tmpdir, monkeypatch, capsys):
+def test_migrate_uses_python_preference_from_requirements(
+    tmp_path, monkeypatch, capsys
+):
     """migrate reads python preference from requirements.txt."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     # Create requirements.txt with python preference
     (base / "requirements.txt").write_text(
@@ -34,10 +36,10 @@ def test_migrate_uses_python_preference_from_requirements(tmpdir, monkeypatch, c
     assert "3.12" in captured.out
 
 
-def test_migrate_editable_warnings(tmpdir, monkeypatch, capsys):
+def test_migrate_editable_warnings(tmp_path, monkeypatch, capsys):
     """migrate warns about editable installs during migration."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     # Create requirements.txt with editable installs
     (base / "requirements.txt").write_text(
@@ -63,10 +65,10 @@ def test_migrate_editable_warnings(tmpdir, monkeypatch, capsys):
     assert "click" in pyproject
 
 
-def test_migrate_already_exists(tmpdir, monkeypatch, capsys):
+def test_migrate_already_exists(tmp_path, monkeypatch, capsys):
     """migrate returns early when pyproject.toml already exists."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     # Create existing pyproject.toml
     (base / "pyproject.toml").write_text(
@@ -82,10 +84,10 @@ def test_migrate_already_exists(tmpdir, monkeypatch, capsys):
     assert "Nothing to do" in captured.out
 
 
-def test_migrate_existing_symlinks(tmpdir, monkeypatch, capsys):
+def test_migrate_existing_symlinks(tmp_path, monkeypatch, capsys):
     """migrate detects and preserves existing symlinks during migration."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     # Create requirements.txt and appenv script
     (base / "requirements.txt").write_text("requests\n")
@@ -115,10 +117,10 @@ def test_migrate_existing_symlinks(tmpdir, monkeypatch, capsys):
     assert myapp_link.resolve() == appenv_script.resolve()
 
 
-def test_migrate_empty_dependencies(tmpdir, monkeypatch, capsys):
+def test_migrate_empty_dependencies(tmp_path, monkeypatch, capsys):
     """migrate handles requirements.txt with only comments (no dependencies)."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     # Create requirements.txt with only comments
     (base / "requirements.txt").write_text(
@@ -141,10 +143,10 @@ def test_migrate_empty_dependencies(tmpdir, monkeypatch, capsys):
     assert "0 dependency" in captured.out or "Found 0" in captured.out
 
 
-def test_migrate_uses_directory_name(tmpdir, monkeypatch, capsys):
+def test_migrate_uses_directory_name(tmp_path, monkeypatch, capsys):
     """migrate uses directory name as project name (non-interactive)."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     # Create requirements.txt to trigger migration
     (base / "requirements.txt").write_text("requests>=2.0\n")
@@ -206,10 +208,10 @@ def test_parse_editable_spec(spec, expected):
 # Tests for extract_package_name_from_path
 
 
-def test_extract_package_name_from_pyproject(tmpdir):
+def test_extract_package_name_from_pyproject(tmp_path):
     """extract_package_name_from_path reads name from pyproject.toml."""
     extract_package_name_from_path = appenv.extract_package_name_from_path
-    base = Path(tmpdir)
+    base = tmp_path
     pkg_dir = base / "mypackage"
     pkg_dir.mkdir()
 
@@ -221,10 +223,10 @@ def test_extract_package_name_from_pyproject(tmpdir):
     assert result == "my-cool-package"
 
 
-def test_extract_package_name_from_setup_py(tmpdir):
+def test_extract_package_name_from_setup_py(tmp_path):
     """extract_package_name_from_path reads name from setup.py."""
     extract_package_name_from_path = appenv.extract_package_name_from_path
-    base = Path(tmpdir)
+    base = tmp_path
     pkg_dir = base / "legacy-pkg"
     pkg_dir.mkdir()
 
@@ -236,10 +238,10 @@ def test_extract_package_name_from_setup_py(tmpdir):
     assert result == "legacy-package"
 
 
-def test_extract_package_name_from_path_relative(tmpdir):
+def test_extract_package_name_from_path_relative(tmp_path):
     """extract_package_name_from_path handles relative paths."""
     extract_package_name_from_path = appenv.extract_package_name_from_path
-    base = Path(tmpdir)
+    base = tmp_path
     pkg_dir = base / "packages" / "subpkg"
     pkg_dir.mkdir(parents=True)
 
@@ -249,10 +251,10 @@ def test_extract_package_name_from_path_relative(tmpdir):
     assert result == "sub-package"
 
 
-def test_extract_package_name_from_path_not_found(tmpdir):
+def test_extract_package_name_from_path_not_found(tmp_path):
     """extract_package_name_from_path returns None when no package metadata found."""
     extract_package_name_from_path = appenv.extract_package_name_from_path
-    base = Path(tmpdir)
+    base = tmp_path
     empty_dir = base / "empty"
     empty_dir.mkdir()
 
@@ -260,10 +262,10 @@ def test_extract_package_name_from_path_not_found(tmpdir):
     assert result is None
 
 
-def test_extract_package_name_from_path_missing_dir(tmpdir):
+def test_extract_package_name_from_path_missing_dir(tmp_path):
     """extract_package_name_from_path returns None when directory doesn't exist."""
     extract_package_name_from_path = appenv.extract_package_name_from_path
-    base = Path(tmpdir)
+    base = tmp_path
 
     result = extract_package_name_from_path("nonexistent", base)
     assert result is None
@@ -272,10 +274,10 @@ def test_extract_package_name_from_path_missing_dir(tmpdir):
 # Tests for init_pyproject with editable installs
 
 
-def test_migrate_editable_with_valid_local_package(tmpdir, monkeypatch, capsys):
+def test_migrate_editable_with_valid_local_package(tmp_path, monkeypatch, capsys):
     """init_pyproject converts -e ./path to proper uv.sources entry."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     # Create local package with pyproject.toml
     local_pkg = base / "local-lib"
@@ -309,10 +311,10 @@ def test_migrate_editable_with_valid_local_package(tmpdir, monkeypatch, capsys):
     assert "my-local-lib" in captured.out
 
 
-def test_migrate_editable_with_setup_py(tmpdir, monkeypatch, capsys):
+def test_migrate_editable_with_setup_py(tmp_path, monkeypatch, capsys):
     """init_pyproject handles editable with setup.py package."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     # Create local package with setup.py
     local_pkg = base / "legacy-lib"
@@ -336,10 +338,10 @@ def test_migrate_editable_with_setup_py(tmpdir, monkeypatch, capsys):
     assert 'legacy-lib = { path = "./legacy-lib", editable = true }' in pyproject
 
 
-def test_migrate_editable_only_dependencies(tmpdir, monkeypatch, capsys):
+def test_migrate_editable_only_dependencies(tmp_path, monkeypatch, capsys):
     """init_pyproject handles requirements.txt with ONLY editable installs."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     # Create local package
     local_pkg = base / "only-pkg"
@@ -368,10 +370,10 @@ def test_migrate_editable_only_dependencies(tmpdir, monkeypatch, capsys):
     assert "dependencies = []" not in pyproject
 
 
-def test_migrate_multiple_editables(tmpdir, monkeypatch, capsys):
+def test_migrate_multiple_editables(tmp_path, monkeypatch, capsys):
     """init_pyproject handles multiple editable installs."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     # Create multiple local packages
     for name in ["pkg-a", "pkg-b", "pkg-c"]:
@@ -407,10 +409,10 @@ def test_migrate_multiple_editables(tmpdir, monkeypatch, capsys):
     assert "pkg-c" in pyproject
 
 
-def test_migrate_editable_with_extras(tmpdir, monkeypatch, capsys):
+def test_migrate_editable_with_extras(tmp_path, monkeypatch, capsys):
     """init_pyproject handles editable with extras like -e ./pkg[extra]."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     # Create local package
     local_pkg = base / "lib-with-extras"
@@ -435,10 +437,10 @@ def test_migrate_editable_with_extras(tmpdir, monkeypatch, capsys):
     assert "[tool.uv.sources]" in pyproject
 
 
-def test_migrate_editable_missing_package_warns(tmpdir, monkeypatch, capsys):
+def test_migrate_editable_missing_package_warns(tmp_path, monkeypatch, capsys):
     """init_pyproject warns when editable path has no package metadata."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     # Create directory without pyproject.toml or setup.py
     empty_dir = base / "empty-dir"
@@ -464,10 +466,10 @@ def test_migrate_editable_missing_package_warns(tmpdir, monkeypatch, capsys):
     assert "[tool.uv.sources]" not in pyproject
 
 
-def test_migrate_editable_git_url_warns(tmpdir, monkeypatch, capsys):
+def test_migrate_editable_git_url_warns(tmp_path, monkeypatch, capsys):
     """init_pyproject warns for git URL editable (not supported)."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     # Create requirements.txt with git URL
     (base / "requirements.txt").write_text(
@@ -491,9 +493,9 @@ def test_migrate_editable_git_url_warns(tmpdir, monkeypatch, capsys):
     assert "[tool.uv.sources]" not in pyproject
 
 
-def test_migrate_editable_relative_parent_path(tmpdir, monkeypatch, capsys):
+def test_migrate_editable_relative_parent_path(tmp_path, monkeypatch, capsys):
     """init_pyproject handles -e ../sibling style paths."""
-    base = Path(tmpdir)
+    base = tmp_path
 
     # Create sibling package
     sibling = base / "sibling-pkg"
@@ -522,10 +524,10 @@ def test_migrate_editable_relative_parent_path(tmpdir, monkeypatch, capsys):
     assert "../sibling-pkg" in pyproject
 
 
-def test_migrate_editable_bare_path_gets_prefix(tmpdir, monkeypatch, capsys):
+def test_migrate_editable_bare_path_gets_prefix(tmp_path, monkeypatch, capsys):
     """init_pyproject adds ./ prefix to bare path editables."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     # Create local package
     local_pkg = base / "bare-pkg"
@@ -549,10 +551,10 @@ def test_migrate_editable_bare_path_gets_prefix(tmpdir, monkeypatch, capsys):
     assert 'path = "./bare-pkg"' in pyproject
 
 
-def test_migrate_editable_mixed_valid_and_invalid(tmpdir, monkeypatch, capsys):
+def test_migrate_editable_mixed_valid_and_invalid(tmp_path, monkeypatch, capsys):
     """init_pyproject handles mix of valid and invalid editables."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     # Create one valid package
     valid_pkg = base / "valid-pkg"
@@ -586,10 +588,10 @@ def test_migrate_editable_mixed_valid_and_invalid(tmpdir, monkeypatch, capsys):
     assert "empty-dir" in captured.out
 
 
-def test_migrate_editable_warnings_updated(tmpdir, monkeypatch, capsys):
+def test_migrate_editable_warnings_updated(tmp_path, monkeypatch, capsys):
     """init_pyproject warns about unsupported editable formats (git URLs, etc)."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     # Create requirements.txt with git URLs (not supported)
     (base / "requirements.txt").write_text(

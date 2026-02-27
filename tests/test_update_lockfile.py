@@ -373,10 +373,10 @@ def test_update_lockfile_pyproject_diff_no_changes(workdir, monkeypatch, capsys)
     assert "No changes" in captured.out
 
 
-def test_update_lockfile_pyproject_calls_uv_lock(tmpdir, monkeypatch):
+def test_update_lockfile_pyproject_calls_uv_lock(tmp_path, monkeypatch):
     """_update_lockfile_pyproject calls uv lock."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     (base / "pyproject.toml").write_text(
         "[project]\nname = 'test'\ndependencies = []\n"
@@ -398,10 +398,10 @@ def test_update_lockfile_pyproject_calls_uv_lock(tmpdir, monkeypatch):
     assert any("lock" in str(c) for c in uv_calls)
 
 
-def test_update_lockfile_verbose_shows_running_uv_lock(tmpdir, monkeypatch, capsys):
+def test_update_lockfile_verbose_shows_running_uv_lock(tmp_path, monkeypatch, capsys):
     """_update_lockfile_pyproject shows 'Running: uv lock' in verbose mode."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     (base / "pyproject.toml").write_text(
         "[project]\nname = 'test'\ndependencies = []\n"

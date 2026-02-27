@@ -5,10 +5,10 @@ from pathlib import Path
 import appenv
 
 
-def test_init_fresh_start_interactive(tmpdir, monkeypatch, capsys):
+def test_init_fresh_start_interactive(tmp_path, monkeypatch, capsys):
     """init fresh start flow with interactive inputs."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     # No requirements.txt - triggers fresh start flow
     # Inputs: command name, deps (2), empty, project name, desc, py version
@@ -42,10 +42,10 @@ def test_init_fresh_start_interactive(tmpdir, monkeypatch, capsys):
     assert (base / "myapp").is_symlink()
 
 
-def test_init_fresh_start_default_dependencies(tmpdir, monkeypatch, capsys):
+def test_init_fresh_start_default_dependencies(tmp_path, monkeypatch, capsys):
     """init fresh start uses command name as default dependency when empty."""
-    monkeypatch.chdir(tmpdir)
-    base = Path(tmpdir)
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
 
     # No requirements.txt - triggers fresh start flow
     # Use a real package name that exists on PyPI

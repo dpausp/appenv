@@ -13,27 +13,27 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def setup_isolated_appenv(tmpdir):
+def setup_isolated_appenv(tmp_path):
     """Copy appenv script to isolated directory for testing."""
     import appenv
 
     src_appenv = Path(appenv.__file__).resolve()
-    dst_appenv = Path(tmpdir) / "appenv"
+    dst_appenv = tmp_path / "appenv"
     shutil.copy(src_appenv, dst_appenv)
     dst_appenv.chmod(0o755)
     return dst_appenv
 
 
-def test_init_cli(tmpdir):
+def test_init_cli(tmp_path):
     """Integration test: appenv init fresh start via CLI."""
-    base = Path(tmpdir)
-    appenv_script = setup_isolated_appenv(tmpdir)
+    base = tmp_path
+    appenv_script = setup_isolated_appenv(tmp_path)
 
     # Spawn the appenv process - it will detect no pyproject.toml
     child = pexpect.spawn(
         sys.executable,
         [str(appenv_script), "init"],
-        cwd=str(tmpdir),
+        cwd=str(tmp_path),
         timeout=10,
     )
 
@@ -85,10 +85,10 @@ def test_init_cli(tmpdir):
     assert (base / "mycli").is_symlink()
 
 
-def test_migrate_cli(tmpdir):
+def test_migrate_cli(tmp_path):
     """Integration test: appenv migrate via CLI (non-interactive)."""
-    base = Path(tmpdir)
-    appenv_script = setup_isolated_appenv(tmpdir)
+    base = tmp_path
+    appenv_script = setup_isolated_appenv(tmp_path)
 
     # Create requirements.txt to trigger migration
     (base / "requirements.txt").write_text("requests>=2.28\nurllib3\n")
@@ -96,7 +96,7 @@ def test_migrate_cli(tmpdir):
     child = pexpect.spawn(
         sys.executable,
         [str(appenv_script), "migrate"],
-        cwd=str(tmpdir),
+        cwd=str(tmp_path),
         timeout=10,
     )
 
