@@ -2,30 +2,40 @@
 
 Self-contained bootstrapping/updating of Python CLI applications using pyproject.toml and uv.
 
-> The following examples use the `ducker` package to illustrate how to use
-> `appenv`. `ducker` and `appenv` are not related at all.
+> The following examples use the `httpie` package to illustrate how to use
+> `appenv`. `httpie` and `appenv` are not related at all.
 
 ## Bootstrapping a project
 
 Use the bootstrap script to create a new project:
 
 ```
+$ mkdir httpie && cd httpie
 $ curl -sL https://github.com/flyingcircusio/appenv/raw/master/bootstrap | sh
-Let's create a new appenv project.
+Let's create a new pyproject.toml project.
 
-What should the command be named? ducker <return>
-What is the main dependency as found on PyPI? [ducker] <return>
-Where should we create this? [/private/tmp/ducker] <return>
+What should the command be named? [app] http
+Enter dependencies (one per line, empty line to finish):
+  Default: http
+  Dependency: httpie
+  Dependency: 
+Project name [http-app]: http
+Description []: HTTP CLI
+Minimum Python version [3.8]: 3.14
 
-Creating appenv setup in /private/tmp/ducker ...
+Created pyproject.toml
+Created http symlink
 
-Done. You can now `cd ducker` and call `./ducker` to bootstrap and run it.
+Done. pyproject.toml created.
 
-$ cd ducker
-$ ./ducker
-Installing ducker ...
-Please initiate a query.
-Ducker (? for help) q
+Generating lockfile ...
+✓ Created (+273 lines)
+
+Run `./http` to bootstrap and run
+
+$ ./http
+Installing httpie ...
+http: warning: command-line flag syntax is deprecated
 ```
 
 ## Project Structure
@@ -50,12 +60,12 @@ Use `update-lockfile` to create a lockfile for reproducible installs:
 $ ./appenv update-lockfile
 ✓ Created (+42 lines)
 
-$ time ./ducker wikipedia
-Installing ducker ...
-./ducker wikipedia  2.91s user 0.99s system 88% cpu 4.407 total
+$ time ./http GET https://httpbin.org/get
+Installing httpie ...
+./http GET https://httpbin.org/get  2.91s user 0.99s system 88% cpu 4.407 total
 
-$ time ./ducker wikipedia
-./ducker wikipedia  0.22s user 0.11s system 90% cpu 0.371 total
+$ time ./http GET https://httpbin.org/get
+./http GET https://httpbin.org/get  0.22s user 0.11s system 90% cpu 0.371 total
 ```
 
 ### Options
@@ -203,6 +213,19 @@ $ ./appenv uv sync                    # Re-sync dependencies
 ## Environment Variables
 
 - `APPENV_VERBOSE=1` - Show verbose output during bootstrap
+
+By default, appenv suppresses uv command output for a clean user experience.
+With `APPENV_VERBOSE=1`, you can see exactly what uv commands are being executed:
+
+```
+$ ./http GET https://example.org
+# (silent - just the HTTP response)
+
+$ APPENV_VERBOSE=1 ./http GET https://example.org
+Running: /path/to/uv venv --python /usr/bin/python3.11 .appenv/venv
+Running: /path/to/uv sync --frozen
+# ... HTTP response follows
+```
 
 ## Requirements
 
