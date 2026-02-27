@@ -782,11 +782,11 @@ def test_main_calls_ensure_best_python(monkeypatch, workdir):
 
 def test_main_entry_point_subprocess():
     """Line 1216: Test __main__ entry point via subprocess."""
+    project_root = Path(__file__).parent.parent.resolve()
     result = subprocess.run(
-        [sys.executable, str(Path("src/appenv.py")), "--help"],
+        [sys.executable, str(project_root / "src" / "appenv.py"), "--help"],
         capture_output=True,
         text=True,
-        cwd=Path(__file__).parent.parent,
     )
     assert result.returncode == 0
     assert "usage" in result.stdout.lower() or "usage" in result.stderr.lower()
