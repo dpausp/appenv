@@ -51,6 +51,7 @@ test = [
     "pytest-ty>=0.1.5",
     "pytest-ruff>=0.5",
     "pytest-xdist>=3.8.0",
+    "mutmut>=3.5.0",
 ]
 lint = ["ruff", "ty", "vulture"]
 dev = [
@@ -116,4 +117,16 @@ addopts = [
 testpaths = ["tests"]
 markers = [
     "slow: tests that install packages and take longer (run with: pytest -m slow)",
+]
+
+[tool.mutmut]
+paths_to_mutate = ["src/"]
+also_copy = ["README.md", "pyproject.toml", "uv.lock"]
+# WARNING: mutmut segfaults on macOS due to setproctitle+fork bug
+# (github.com/boxed/mutmut/issues/446, PR #450 pending)
+# Run mutation testing on Linux CI only.
+# Only run isolated unit tests (no subprocess/execv tests)
+pytest_add_cli_args_test_selection = [
+    "-k",
+    "parse_uv_version or print_colored_diff or verbose_print or parse_requires_python or extract_package_name or parse_editable_spec or find_available_pythons or test_reset",
 ]
