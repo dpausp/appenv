@@ -1,0 +1,9 @@
+# tox-gh configuration: maps GitHub Actions matrix python-version to tox environments
+
+[gh.python]
+"3.9" = ["3.9"]
+"3.10" = ["3.10"]
+"3.11" = ["3.11"]
+"3.12" = ["3.12"]
+"3.13" = ["3.13"]
+"3.14" = ["3.14"]
