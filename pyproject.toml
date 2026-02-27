@@ -108,5 +108,9 @@ addopts = [
     "-W", "error",
     "--tb=native",
     "-v",
+    "-m", "not slow",  # Skip slow tests by default
 ]
 testpaths = ["tests"]
+markers = [
+    "slow: tests that install packages and take longer (run with: pytest -m slow)",
+]
