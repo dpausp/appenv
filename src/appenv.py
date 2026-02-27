@@ -76,6 +76,41 @@ def find_available_pythons():
     return pythons
 
 
+def version_satisfies_constraints(version, min_version, max_version=None):
+    """Check if a version satisfies min/max constraints.
+
+    Args:
+        version: Version string like "3.10" or "3.10.1"
+        min_version: Minimum version string (inclusive)
+        max_version: Maximum version string (exclusive), optional
+
+    Returns:
+        True if version >= min_version and (version < max_version if max set)
+
+    Examples:
+        >>> version_satisfies_constraints("3.12", "3.10")
+        True
+        >>> version_satisfies_constraints("3.9", "3.10")
+        False
+        >>> version_satisfies_constraints("3.14", "3.10", "3.14")
+        False
+        >>> version_satisfies_constraints("3.13", "3.10", "3.14")
+        True
+    """
+    ver_parts = [int(p) for p in version.split(".")]
+    min_parts = [int(p) for p in min_version.split(".")]
+
+    if ver_parts < min_parts:
+        return False
+
+    if max_version is not None:
+        max_parts = [int(p) for p in max_version.split(".")]
+        if ver_parts >= max_parts:
+            return False
+
+    return True
+
+
 def ensure_best_python(base):
     """Ensure best Python for pyproject.toml workflow.
 
@@ -98,20 +133,8 @@ def ensure_best_python(base):
     current_python = str(Path(sys.executable).resolve())
 
     for version, path in available:
-        ver_parts = [int(p) for p in version.split(".")]
-
-        # Check minimum version
-        min_parts = [int(p) for p in min_version.split(".")]
-        if ver_parts < min_parts:
-            # Too old, skip
+        if not version_satisfies_constraints(version, min_version, max_version):
             continue
-
-        # Check maximum version (if specified)
-        if max_version is not None:
-            max_parts = [int(p) for p in max_version.split(".")]
-            if ver_parts >= max_parts:
-                # Too new (max is exclusive), skip
-                continue
 
         path = str(Path(path).resolve())
         if path == current_python:

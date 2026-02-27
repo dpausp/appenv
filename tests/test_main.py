@@ -395,6 +395,55 @@ def test_find_available_pythons_sorting(monkeypatch):
     assert versions == ["3.14", "3.13", "3.12", "3.11", "3.10", "3.9"]
 
 
+def test_version_satisfies_constraints_min_only():
+    """version_satisfies_constraints with only minimum version."""
+    # Satisfies minimum
+    assert appenv.version_satisfies_constraints("3.10", "3.10") is True
+    assert appenv.version_satisfies_constraints("3.14", "3.10") is True
+    assert appenv.version_satisfies_constraints("3.10.1", "3.10") is True
+
+    # Below minimum
+    assert appenv.version_satisfies_constraints("3.9", "3.10") is False
+    assert appenv.version_satisfies_constraints("3.8", "3.10") is False
+
+
+def test_version_satisfies_constraints_with_max():
+    """version_satisfies_constraints with min and max (exclusive)."""
+    # In range
+    assert appenv.version_satisfies_constraints("3.11", "3.10", "3.14") is True
+    assert appenv.version_satisfies_constraints("3.13", "3.10", "3.14") is True
+
+    # At min (inclusive)
+    assert appenv.version_satisfies_constraints("3.10", "3.10", "3.14") is True
+
+    # At max (exclusive) - should FAIL
+    assert appenv.version_satisfies_constraints("3.14", "3.10", "3.14") is False
+
+    # Above max
+    assert appenv.version_satisfies_constraints("3.15", "3.10", "3.14") is False
+
+    # Below min
+    assert appenv.version_satisfies_constraints("3.9", "3.10", "3.14") is False
+
+
+def test_version_satisfies_constraints_edge_cases():
+    """version_satisfies_constraints handles patch versions correctly."""
+    # Patch versions in comparison
+    assert appenv.version_satisfies_constraints("3.10.5", "3.10.0") is True
+    assert appenv.version_satisfies_constraints("3.10.0", "3.10.5") is False
+
+    # Mixed major.minor vs major.minor.patch
+    # Note: [3, 10] < [3, 10, 0] in list comparison, so 3.10 < 3.10.0
+    # This is acceptable for our use case (we typically compare X.Y versions)
+    assert (
+        appenv.version_satisfies_constraints("3.10.1", "3.10") is True
+    )  # [3,10,1] > [3,10]
+    # 3.10 is treated as "less than" 3.10.0 due to list length - this is expected
+    assert (
+        appenv.version_satisfies_constraints("3.10", "3.10.0") is False
+    )  # [3,10] < [3,10,0]
+
+
 def test_verbose_print_with_env(monkeypatch, capsys):
     """verbose_print outputs when APPENV_VERBOSE is set."""
     monkeypatch.setenv("APPENV_VERBOSE", "1")

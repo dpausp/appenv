@@ -128,5 +128,5 @@ also_copy = ["README.md", "pyproject.toml", "uv.lock"]
 # Only run isolated unit tests (no subprocess/execv tests)
 pytest_add_cli_args_test_selection = [
     "-k",
-    "parse_uv_version or print_colored_diff or verbose_print or parse_requires_python or extract_package_name or parse_editable_spec or find_available_pythons or test_reset",
+    "parse_uv_version or print_colored_diff or verbose_print or parse_requires_python or extract_package_name or parse_editable_spec or find_available_pythons or version_satisfies or test_reset",
 ]
