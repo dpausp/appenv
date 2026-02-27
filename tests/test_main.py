@@ -590,7 +590,7 @@ def test_ensure_best_python_default_min_version(tmp_path, monkeypatch):
     with pytest.raises(SystemExit):
         appenv.ensure_best_python(base)
 
-    assert "python3.12" in execv_called[0][0]
+    assert "python3.14" in execv_called[0][0]
 
 
 def test_ensure_best_python_already_running_best(tmp_path, monkeypatch):
