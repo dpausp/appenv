@@ -11,6 +11,12 @@ outside_appenv_test/
 # Appenv runtime directory (created on first run)
 .appenv/
 
+# Test artifacts generated in src/ by integration tests
+/src/appenv
+/src/http
+/src/pyproject.toml
+/src/uv.lock
+
 # uv binary built by nix
 .appenv/.uv/
 
