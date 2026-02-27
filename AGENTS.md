@@ -63,19 +63,33 @@ import appenv
 
 ### Type Hints
 
-- Minimal typing - use when it clarifies complex logic
-- `from typing import cast` for type narrowing
-- Return types optional for simple functions
+**IMPORTANT: Type annotations go in `.pyi` stub files, NOT in `.py` source files.**
+
+- `src/appenv.pyi` contains all type annotations for `src/appenv.py`
+- When adding/modifying functions in `src/appenv.py`, ALWAYS update `src/appenv.pyi`
+- Keep the stub file synchronized with the implementation
+- Minimal typing in source files - use stubs for full type information
 
 ```python
-def find_files(root: Path) -> list[Path]:
+# In src/appenv.py - NO type annotations
+def find_files(root):
     """Find text files to fix."""
     ...
 
-def parse_requires_python(pyproject_path):  # No annotation needed
+def parse_requires_python(pyproject_path):
     """Parse requires-python from pyproject.toml."""
     ...
 ```
+
+```python
+# In src/appenv.pyi - ALL type annotations
+def find_files(root: Path) -> list[Path]: ...
+def parse_requires_python(pyproject_path: Path) -> tuple[str | None, str | None]: ...
+```
+
+For complex internal logic where types help clarity:
+- Use `from typing import cast` for type narrowing
+- Return types optional for simple functions
 
 ### Naming Conventions
 
