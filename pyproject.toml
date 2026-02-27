@@ -51,7 +51,7 @@ test = [
     "pytest-ty>=0.1.5",
     "pytest-ruff>=0.5",
     "pytest-xdist>=3.8.0",
-    "mutmut>=3.5.0",
+    "mutmut @ git+https://github.com/boxed/mutmut.git@fix-macos-segfault",
 ]
 lint = ["ruff", "ty", "vulture"]
 dev = [
