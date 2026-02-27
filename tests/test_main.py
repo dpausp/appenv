@@ -366,25 +366,33 @@ def test_parse_uv_version_strips_v_prefix():
 
 
 def test_find_available_pythons_sorting(monkeypatch):
-    """find_available_pythons returns versions sorted newest-first."""
+    """find_available_pythons returns versions sorted numerically, newest-first.
 
-    # Mock shutil.which to return paths for specific versions
+    This test includes 3.9 to catch lexikographic vs numeric sorting bugs:
+    - Numeric: 3.10 > 3.9 (correct)
+    - Lexikographic: "3.9" > "3.10" (wrong, but would pass with broken sort)
+    """
+    import shutil
+
     def mock_which(name):
         versions = {
+            "python3.9": "/usr/bin/python3.9",
             "python3.10": "/usr/bin/python3.10",
+            "python3.11": "/usr/bin/python3.11",
             "python3.12": "/usr/bin/python3.12",
             "python3.13": "/usr/bin/python3.13",
             "python3.14": "/usr/bin/python3.14",
         }
         return versions.get(name)
 
-    monkeypatch.setattr("shutil.which", mock_which)
+    monkeypatch.setattr(shutil, "which", mock_which)
 
     result = appenv.find_available_pythons()
 
-    # Should be sorted newest first
+    # Must be numerically sorted: 3.14, 3.13, 3.12, 3.11, 3.10, 3.9
+    # (lexikographic would be wrong: 3.9 > 3.10)
     versions = [v for v, _ in result]
-    assert versions == ["3.14", "3.13", "3.12", "3.10"]
+    assert versions == ["3.14", "3.13", "3.12", "3.11", "3.10", "3.9"]
 
 
 def test_verbose_print_with_env(monkeypatch, capsys):
