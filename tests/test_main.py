@@ -371,10 +371,10 @@ def test_find_available_pythons_sorting(monkeypatch):
     # Mock shutil.which to return paths for specific versions
     def mock_which(name):
         versions = {
-            "python3.8": "/usr/bin/python3.8",
             "python3.10": "/usr/bin/python3.10",
             "python3.12": "/usr/bin/python3.12",
-            "python3.9": "/usr/bin/python3.9",
+            "python3.13": "/usr/bin/python3.13",
+            "python3.14": "/usr/bin/python3.14",
         }
         return versions.get(name)
 
@@ -384,7 +384,7 @@ def test_find_available_pythons_sorting(monkeypatch):
 
     # Should be sorted newest first
     versions = [v for v, _ in result]
-    assert versions == ["3.12", "3.10", "3.9", "3.8"]
+    assert versions == ["3.14", "3.13", "3.12", "3.10"]
 
 
 def test_verbose_print_with_env(monkeypatch, capsys):
@@ -469,13 +469,13 @@ def test_parse_requires_python_edge_cases(tmp_path):
 
     pyproject = base / "pyproject.toml"
 
-    # Format: >=3.8 (no space around operators)
-    pyproject.write_text('requires-python = ">=3.8"\n')
-    assert appenv.parse_requires_python(pyproject) == ("3.8", None)
+    # Format: >=3.13 (no space around operators)
+    pyproject.write_text('requires-python = ">=3.13"\n')
+    assert appenv.parse_requires_python(pyproject) == ("3.13", None)
 
-    # Format: = "3.9" (with space after = and before value)
-    pyproject.write_text('requires-python = ">=3.9"\n')
-    assert appenv.parse_requires_python(pyproject) == ("3.9", None)
+    # Format: = "3.14" (with space after = and before value)
+    pyproject.write_text('requires-python = ">=3.14"\n')
+    assert appenv.parse_requires_python(pyproject) == ("3.14", None)
 
     # Format: >3.10 (greater than, not >=) - regex handles >=? so just > matches
     pyproject.write_text("requires-python = '>3.10'\n")
@@ -503,9 +503,9 @@ def test_parse_requires_python_with_upper_bound(tmp_path):
     pyproject.write_text('requires-python = ">=3.11.0,<3.15.0"\n')
     assert appenv.parse_requires_python(pyproject) == ("3.11", "3.15")
 
-    # Format: >=3.8,<=3.12 (inclusive upper bound)
-    pyproject.write_text('requires-python = ">=3.8,<=3.12"\n')
-    assert appenv.parse_requires_python(pyproject) == ("3.8", "3.12")
+    # Format: >=3.10,<=3.14 (inclusive upper bound)
+    pyproject.write_text('requires-python = ">=3.10,<=3.14"\n')
+    assert appenv.parse_requires_python(pyproject) == ("3.10", "3.14")
 
     # Format with spaces: >= 3.11, < 3.15
     pyproject.write_text('requires-python = ">= 3.11, < 3.15"\n')
@@ -560,7 +560,7 @@ def test_ensure_best_python_skips_when_env_set(tmp_path, monkeypatch):
 
 
 def test_ensure_best_python_default_min_version(tmp_path, monkeypatch):
-    """Line 99: Uses 3.8 as default when no requires-python specified."""
+    """Line 99: Uses 3.10 as default when no requires-python specified."""
     base = tmp_path
     (base / "pyproject.toml").write_text('[project]\nname = "test"\n')
 
@@ -571,9 +571,9 @@ def test_ensure_best_python_default_min_version(tmp_path, monkeypatch):
         appenv,
         "find_available_pythons",
         lambda: [
-            ("3.12", "/usr/bin/python3.12"),
-            ("3.8", "/usr/bin/python3.8"),
-            ("3.7", "/usr/bin/python3.7"),
+            ("3.14", "/usr/bin/python3.14"),
+            ("3.10", "/usr/bin/python3.10"),
+            ("3.9", "/usr/bin/python3.9"),
         ],
     )
 

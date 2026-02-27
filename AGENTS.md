@@ -56,7 +56,7 @@ import appenv
 
 ### Formatting
 
-- Target Python 3.9+ (see `requires-python` in pyproject.toml)
+- Target Python 3.10+ (see `requires-python` in pyproject.toml)
 - Line length: default ruff (88 chars)
 - Use double quotes for strings
 - Trailing commas in multi-line structures

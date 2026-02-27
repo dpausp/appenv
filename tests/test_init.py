@@ -56,7 +56,7 @@ def test_init_fresh_start_default_dependencies(tmp_path, monkeypatch, capsys):
             "",
             "",  # project name (use default: requests-app)
             "",  # empty description
-            "",  # python version (use default 3.8)
+            "",  # python version (use default 3.10)
         ]
     )
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
@@ -68,7 +68,7 @@ def test_init_fresh_start_default_dependencies(tmp_path, monkeypatch, capsys):
     pyproject = (base / "pyproject.toml").read_text()
     assert 'name = "requests-app"' in pyproject
     assert '"requests"' in pyproject  # dependency defaults to command name
-    assert 'requires-python = ">=3.8"' in pyproject  # default version
+    assert 'requires-python = ">=3.10"' in pyproject  # default version
 
 
 def test_init_empty_command_name_uses_app(workdir, monkeypatch, capsys):

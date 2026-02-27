@@ -21,7 +21,7 @@ Enter dependencies (one per line, empty line to finish):
   Dependency: 
 Project name [http-app]: http
 Description []: HTTP CLI
-Minimum Python version [3.8]: 3.14
+Minimum Python version [3.13]: 3.14
 
 Created pyproject.toml
 Created http symlink
@@ -148,7 +148,7 @@ Enter dependencies (one per line, empty line to finish):
   Dependency:
 Project name [mycli-app]:
 Description []: My awesome CLI
-Minimum Python version [3.8]: 3.11
+Minimum Python version [3.13]: 3.14
 
 Created pyproject.toml
 ```
@@ -229,7 +229,7 @@ Running: /path/to/uv sync --frozen
 
 ## Requirements
 
-- Python 3.8+
+- Python 3.10+
 - uv 0.5.0+ (auto-installed if not found)
 
 ## Testing
