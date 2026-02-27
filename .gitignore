@@ -17,12 +17,6 @@ outside_appenv_test/
 /src/pyproject.toml
 /src/uv.lock
 
-# uv binary built by nix
-.appenv/.uv/
-
-# Development symlink
-/appenv
-
 # Example project artifacts
 example/.venv/
 example/.appenv/
