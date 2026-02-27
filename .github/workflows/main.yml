@@ -24,6 +24,6 @@ jobs:
         with:
           enable-cache: true
 
-      - run: uv tool install tox --with tox-uv --with tox-gh
+      - run: uv tool install tox --with tox-uv-bare --with tox-gh
 
       - run: tox

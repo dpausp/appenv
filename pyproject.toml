@@ -54,7 +54,7 @@ dev = [
     {include-group = "test"},
     {include-group = "lint"},
     "tox",
-    "tox-uv",
+    "tox-uv-bare",
 ]
 
 [tool.tox]
