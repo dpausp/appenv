@@ -57,10 +57,10 @@ dev = [
     { name = "pytest-cov" },
     { name = "pytest-deduplicate" },
     { name = "pytest-patterns" },
-    { name = "pytest-ruff", specifier = ">=0.5" },
+    { name = "pytest-ruff" },
     { name = "pytest-timeout" },
-    { name = "pytest-ty", specifier = ">=0.1.5" },
-    { name = "pytest-xdist", specifier = ">=3.8.0" },
+    { name = "pytest-ty" },
+    { name = "pytest-xdist" },
     { name = "ruff" },
     { name = "tox" },
     { name = "tox-uv-bare" },
@@ -79,10 +79,10 @@ test = [
     { name = "pytest-cov" },
     { name = "pytest-deduplicate" },
     { name = "pytest-patterns" },
-    { name = "pytest-ruff", specifier = ">=0.5" },
+    { name = "pytest-ruff" },
     { name = "pytest-timeout" },
-    { name = "pytest-ty", specifier = ">=0.1.5" },
-    { name = "pytest-xdist", specifier = ">=3.8.0" },
+    { name = "pytest-ty" },
+    { name = "pytest-xdist" },
 ]
 
 [[package]]
