@@ -56,7 +56,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-deduplicate" },
-    { name = "pytest-patterns" },
+    { name = "pytest-patterns", directory = "../pytest-patterns" },
     { name = "pytest-ruff" },
     { name = "pytest-timeout" },
     { name = "pytest-ty" },
@@ -78,7 +78,7 @@ test = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-deduplicate" },
-    { name = "pytest-patterns" },
+    { name = "pytest-patterns", directory = "../pytest-patterns" },
     { name = "pytest-ruff" },
     { name = "pytest-timeout" },
     { name = "pytest-ty" },
@@ -530,15 +530,16 @@ wheels = [
 
 [[package]]
 name = "pytest-patterns"
-version = "0.3.0"
-source = { registry = "https://pypi.org/simple" }
+source = { directory = "../pytest-patterns" }
 dependencies = [
     { name = "pytest" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/79/d7/39a6e4d25c411b3bf5b88807b5a40e251fd218f4829863e8b631dbae1238/pytest_patterns-0.3.0.tar.gz", hash = "sha256:5660426a2e73052cdad34310ba06c45dcbc4b70de44215e7cccec20de7a1d364", size = 52905, upload-time = "2024-10-22T16:06:09.933Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/52/a0/5c37db5c48ca428b53fbe93bd0d930eaca2346ae5ae88b9e35456bcd2322/pytest_patterns-0.3.0-py3-none-any.whl", hash = "sha256:399973a325a561f6f6f26149f0f073e0a02939935e3ad3f168b427fe920d2f3d", size = 9389, upload-time = "2024-10-22T16:06:07.891Z" },
-]
+
+[package.metadata]
+requires-dist = [{ name = "pytest", specifier = ">=6" }]
+
+[package.metadata.requires-dev]
+test = [{ name = "pytest-cov", specifier = ">=4.1.0" }]
 
 [[package]]
 name = "pytest-ruff"
