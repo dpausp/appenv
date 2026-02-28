@@ -70,7 +70,7 @@ package = "wheel"
 runner = "uv-venv-lock-runner"
 setenv = {APPENV_BEST_PYTHON = "{envpython}"}
 dependency_groups = ["test"]
-commands = [["pytest"]]
+commands = [["pytest", { replace = "posargs", extend = true }]]
 
 [tool.tox.env.fix]
 skip_install = true
