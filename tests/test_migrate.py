@@ -78,10 +78,39 @@ def test_migrate_already_exists(tmp_path, monkeypatch, capsys):
     env = appenv.AppEnv(base, Path.cwd())
     env.migrate()
 
-    # Check output mentions "already exists" message
+    # Check output mentions "already has [project]" message
     captured = capsys.readouterr()
-    assert "already exists" in captured.out
+    assert "already has [project]" in captured.out
     assert "Nothing to do" in captured.out
+
+
+def test_migrate_merges_with_tool_only_pyproject(tmp_path, monkeypatch, capsys):
+    """migrate adds [project] section to pyproject.toml with only tool configs."""
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
+
+    # Create pyproject.toml with only tool configs (no [project] section)
+    (base / "pyproject.toml").write_text(
+        '[tool.ruff]\nline-length = 88\n\n[tool.pytest]\naddopts = ["-v"]\n'
+    )
+
+    # Create requirements.txt to trigger migration
+    (base / "requirements.txt").write_text("requests>=2.0\n")
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.migrate()
+
+    # Verify pyproject.toml has both tool configs and [project] section
+    pyproject = (base / "pyproject.toml").read_text()
+    assert "[tool.ruff]" in pyproject
+    assert "[tool.pytest]" in pyproject
+    assert "[project]" in pyproject
+    assert 'name = "' in pyproject
+    assert '"requests>=2.0"' in pyproject
+
+    captured = capsys.readouterr()
+    assert "Adding [project] section" in captured.out
+    assert "Updated pyproject.toml" in captured.out
 
 
 def test_migrate_existing_symlinks(tmp_path, monkeypatch, capsys):

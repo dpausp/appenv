@@ -76,6 +76,8 @@ class AppEnv:
         args: argparse.Namespace | None = None,
         remaining: list[str] | None = None,
     ) -> None: ...
+    @staticmethod
+    def _has_project_section(content: str) -> bool: ...
     def _create_pyproject(
         self,
         target: Path,
@@ -85,6 +87,7 @@ class AppEnv:
         editable_sources: dict[str, Any],
         python_version: str,
         command_name: str | None,
+        existing_content: str | None = None,
     ) -> None: ...
     def python(self, args: argparse.Namespace, remaining: list[str]) -> None: ...
     def run_script(self, args: argparse.Namespace, remaining: list[str]) -> None: ...

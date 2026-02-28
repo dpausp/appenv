@@ -523,7 +523,7 @@ def extract_package_name_from_path(path, base_dir):
 
 class AppEnv:
     def __init__(self, base, original_cwd):
-        self.base = Path(base)
+        self.base = Path(base).resolve()
         self.appenv_dir = self.base / ".appenv"
         self.original_cwd = Path(original_cwd)
 
@@ -746,10 +746,14 @@ class AppEnv:
         requirements_file = target / "requirements.txt"
         pyproject_file = target / PYPROJECT_TOML
 
+        existing_pyproject = None
         if pyproject_file.exists():
-            print(f"pyproject.toml already exists in {target}.")
-            print("Nothing to do.")
-            return
+            existing_pyproject = pyproject_file.read_text()
+            if self._has_project_section(existing_pyproject):
+                print(f"pyproject.toml already has [project] section in {target}.")
+                print("Nothing to do.")
+                return
+            print(f"Adding [project] section to existing pyproject.toml.\n")
 
         if not requirements_file.exists():
             print(f"No requirements.txt found in {target}.")
@@ -836,10 +840,20 @@ class AppEnv:
             editable_sources=editable_sources,
             python_version=python_version,
             command_name=None,  # Find existing symlinks
+            existing_content=existing_pyproject,
         )
         print(
             "\nrequirements.txt kept as legacy. Delete it when migration is complete."
         )
+
+    @staticmethod
+    def _has_project_section(content):
+        """Check if TOML content has a [project] section."""
+        for line in content.splitlines():
+            stripped = line.strip()
+            if stripped == "[project]" or stripped.startswith("[project."):
+                return True
+        return False
 
     def _create_pyproject(
         self,
@@ -850,19 +864,20 @@ class AppEnv:
         editable_sources,
         python_version,
         command_name,
+        existing_content=None,
     ):
         """Create pyproject.toml, appenv bootstrap, symlink, and lockfile."""
         pyproject_file = target / PYPROJECT_TOML
         appenv_script = target / "appenv"
 
-        # Generate pyproject.toml
+        # Generate [project] section
         if dependencies:
             deps_toml = ",\n    ".join(f'"{dep}"' for dep in dependencies)
             deps_block = f"[\n    {deps_toml},\n]"
         else:
             deps_block = "[]"
 
-        pyproject_content = f"""[project]
+        project_section = f"""[project]
 name = "{project_name}"
 version = "0.1.0"
 description = "{description}"
@@ -870,6 +885,8 @@ dependencies = {deps_block}
 requires-python = ">={python_version}"
 """
 
+        # Generate [tool.uv.sources] section if needed
+        sources_section = ""
         if editable_sources:
             sources_lines = ["[tool.uv.sources]"]
             for pkg_name, src_config in sorted(editable_sources.items()):
@@ -877,10 +894,20 @@ requires-python = ">={python_version}"
                 sources_lines.append(
                     f'{pkg_name} = {{ path = "{path}", editable = true }}'
                 )
-            pyproject_content += "\n" + "\n".join(sources_lines) + "\n"
+            sources_section = "\n" + "\n".join(sources_lines) + "\n"
+
+        # Merge with existing content or create new
+        if existing_content:
+            # Ensure existing content ends with newline for clean merge
+            pyproject_content = existing_content.rstrip() + "\n\n" + project_section
+            if sources_section:
+                pyproject_content += sources_section
+            print(f"\nUpdated {PYPROJECT_TOML}")
+        else:
+            pyproject_content = project_section + sources_section
+            print(f"\nCreated {PYPROJECT_TOML}")
 
         pyproject_file.write_text(pyproject_content)
-        print(f"\nCreated {PYPROJECT_TOML}")
 
         # Create appenv bootstrap if needed
         if not appenv_script.exists():
