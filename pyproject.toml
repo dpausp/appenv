@@ -57,6 +57,7 @@ lint = ["ruff", "ty", "vulture"]
 dev = [
     {include-group = "test"},
     {include-group = "lint"},
+    "pyproject-fmt>=2.16.2",
     "tox",
     "tox-uv-bare",
 ]
