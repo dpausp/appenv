@@ -560,6 +560,11 @@ class AppEnv:
         p = subparsers.add_parser("version", help="Show appenv version.")
         p.set_defaults(func=self.show_version)
 
+        p = subparsers.add_parser(
+            "settings", help="Show environment variables and settings."
+        )
+        p.set_defaults(func=self.settings)
+
         p = subparsers.add_parser("prepare", help="Prepare the venv.")
         p.set_defaults(func=self.prepare)
 
@@ -1031,6 +1036,29 @@ requires-python = ">={python_version}"
     def show_version(self, args=None, remaining=None):
         """Show appenv version."""
         print(f"appenv {__version__}")
+
+    def settings(self, args=None, remaining=None):
+        """Show environment variables and settings."""
+        print("appenv environment:\n")
+
+        env_vars = [
+            ("APPENV_EXTRAS", "Extras to install (comma-separated)"),
+            ("APPENV_VERBOSE", "Show verbose output"),
+            ("APPENV_PROFILE", "Enable profiling"),
+            ("APPENV_PROFILE_OUTPUT", "Profiling output file"),
+            ("APPENV_BASEDIR", "Base directory of the project"),
+            ("APPENV_BEST_PYTHON", "Selected Python interpreter"),
+            ("UV_PROJECT_ENVIRONMENT", "uv venv location"),
+            ("PYTHONPATH", "Python module search path"),
+        ]
+
+        for var, description in env_vars:
+            value = os.environ.get(var, "(not set)")
+            print(f"  {var}: {value}")
+            print(f"    {description}\n")
+
+        print(f"  Base directory: {self.base}")
+        print(f"  Current working directory: {Path.cwd()}")
 
     def profiling_list(self, args, remaining=None):
         """List recent profiling files."""
