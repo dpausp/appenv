@@ -4,6 +4,8 @@ import argparse
 from pathlib import Path
 from typing import Any
 
+__version__: str
+
 PYPROJECT_TOML: str
 UV_LOCK: str
 

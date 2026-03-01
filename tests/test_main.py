@@ -5,6 +5,7 @@ import os
 import re
 import subprocess
 import sys
+from importlib.metadata import version as get_metadata_version
 from pathlib import Path
 
 import pytest
@@ -734,6 +735,7 @@ def test_show_version(capsys):
 
     captured = capsys.readouterr()
     assert "appenv" in captured.out
+    assert appenv.__version__ in captured.out
 
 
 def test_check_uv_version_not_found(monkeypatch):
@@ -1087,6 +1089,16 @@ def test_main_entry_point_subprocess():
 # ==============================================================================
 
 
+def get_source_version():
+    """Get version from src/appenv.py __version__."""
+    appenv_py = Path(__file__).parent.parent / "src" / "appenv.py"
+    content = appenv_py.read_text()
+    match = re.search(r'^__version__\s*=\s*"([^"]+)"', content, re.MULTILINE)
+    if not match:
+        raise ValueError("Could not find __version__ in src/appenv.py")
+    return match.group(1)
+
+
 def get_appenv_version():
     """Get version from ./appenv version command."""
     result = subprocess.run(
@@ -1100,14 +1112,14 @@ def get_appenv_version():
 
 
 def test_version_consistency():
-    """Ensure ./appenv version outputs a valid version string."""
+    """Ensure __version__, importlib.metadata and ./appenv version match."""
+    source_version = get_source_version()
+    metadata_version = get_metadata_version("appenv")
     appenv_version = get_appenv_version()
 
-    # Version should be either a CalVer (YYYY.M.P) or "dev" or dev version
-    # (YYYY.M.P.devN+gHASH)
-    calver_pattern = r"^\d{4}\.\d+\.\d+(\.dev\d+\+g[a-f0-9]+\.d\d+)?$"
-    assert re.match(calver_pattern, appenv_version) or appenv_version == "dev", (
-        f"Invalid version format: {appenv_version}"
+    assert source_version == metadata_version == appenv_version, (
+        f"Version mismatch: __version__={source_version}, "
+        f"metadata={metadata_version}, appenv={appenv_version}"
     )
 
 
