@@ -250,7 +250,7 @@ def test_run_with_profiling_enabled(monkeypatch, tmp_path, capsys):
 
     assert len(execv_called) == 1
     path, argv = execv_called[0]
-    assert path == sys.executable
+    assert path.endswith("bin/python")
     assert "-m" in argv
     assert "cProfile" in argv
     assert "-o" in argv

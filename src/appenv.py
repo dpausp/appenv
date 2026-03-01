@@ -598,10 +598,11 @@ class AppEnv:
         if os.environ.get("APPENV_PROFILE"):
             profile_output = os.environ.get("APPENV_PROFILE_OUTPUT", f"{command}.prof")
             print(f"Profile written to: {profile_output}")
+            venv_python = env_dir / "bin" / "python"
             os.execv(
-                sys.executable,
+                str(venv_python),
                 [
-                    sys.executable,
+                    str(venv_python),
                     "-m",
                     "cProfile",
                     "-o",
