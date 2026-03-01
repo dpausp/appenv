@@ -704,8 +704,18 @@ class AppEnv:
             uv_cmd(["venv", "--python", sys.executable, str(venv_real)])
 
         # Sync dependencies (idempotent)
-        verbose_print("Syncing dependencies (uv sync) ...")
-        uv_cmd(["sync"])
+        extras = [
+            e.strip()
+            for e in os.environ.get("APPENV_EXTRAS", "").split(",")
+            if e.strip()
+        ]
+        if extras:
+            sync_args = ["sync"] + [arg for e in extras for arg in ("--extra", e)]
+            verbose_print(f"Syncing with extras: {', '.join(extras)} ...")
+        else:
+            sync_args = ["sync"]
+            verbose_print("Syncing dependencies (uv sync) ...")
+        uv_cmd(sync_args)
 
         # Show venv python info AFTER sync (version may have changed)
         venv_python = venv_real / "bin" / "python"
