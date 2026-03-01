@@ -226,6 +226,69 @@ def test_run_sets_env_and_execs(monkeypatch, tmp_path):
     assert "myapp" in execv_called[0][0]
 
 
+def test_run_with_profiling_enabled(monkeypatch, tmp_path, capsys):
+    env = appenv.AppEnv(tmp_path, Path.cwd())
+
+    env_dir = tmp_path / ".appenv" / "abc123"
+    env_dir.mkdir(parents=True)
+    bin_dir = env_dir / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "myapp").write_text("#!/bin/sh\necho hello\n")
+
+    monkeypatch.setattr(env, "prepare", lambda: str(env_dir))
+    monkeypatch.setattr("os.chdir", lambda p: None)
+    monkeypatch.setenv("APPENV_PROFILE", "1")
+
+    execv_called = []
+    monkeypatch.setattr(
+        os,
+        "execv",
+        lambda path, argv: execv_called.append((path, argv)),
+    )
+
+    env.run("myapp", ["--help"])
+
+    assert len(execv_called) == 1
+    path, argv = execv_called[0]
+    assert path == sys.executable
+    assert "-m" in argv
+    assert "cProfile" in argv
+    assert "-o" in argv
+    assert "myapp.prof" in argv
+    captured = capsys.readouterr()
+    assert "Profile written to: myapp.prof" in captured.out
+
+
+def test_run_with_profiling_custom_output(monkeypatch, tmp_path, capsys):
+    env = appenv.AppEnv(tmp_path, Path.cwd())
+
+    env_dir = tmp_path / ".appenv" / "abc123"
+    env_dir.mkdir(parents=True)
+    bin_dir = env_dir / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "myapp").write_text("#!/bin/sh\necho hello\n")
+
+    monkeypatch.setattr(env, "prepare", lambda: str(env_dir))
+    monkeypatch.setattr("os.chdir", lambda p: None)
+    monkeypatch.setenv("APPENV_PROFILE", "1")
+    monkeypatch.setenv("APPENV_PROFILE_OUTPUT", "/tmp/custom.prof")
+
+    execv_called = []
+    monkeypatch.setattr(
+        os,
+        "execv",
+        lambda path, argv: execv_called.append((path, argv)),
+    )
+
+    env.run("myapp", ["--help"])
+
+    assert len(execv_called) == 1
+    path, argv = execv_called[0]
+    assert "/tmp/custom.prof" in argv
+    captured = capsys.readouterr()
+    assert "Profile written to: /tmp/custom.prof" in captured.out
+
+
 # python() method tests
 
 

@@ -593,7 +593,25 @@ class AppEnv:
         argv = [str(cmd_path)] + argv
         os.environ["APPENV_BASEDIR"] = str(self.base)
         os.chdir(self.original_cwd)
-        os.execv(str(cmd_path), argv)
+
+        # Profiling support via APPENV_PROFILE=1
+        if os.environ.get("APPENV_PROFILE"):
+            profile_output = os.environ.get("APPENV_PROFILE_OUTPUT", f"{command}.prof")
+            print(f"Profile written to: {profile_output}")
+            os.execv(
+                sys.executable,
+                [
+                    sys.executable,
+                    "-m",
+                    "cProfile",
+                    "-o",
+                    profile_output,
+                    str(cmd_path),
+                ]
+                + argv[1:],
+            )
+        else:
+            os.execv(str(cmd_path), argv)
 
     def prepare(self, args=None, remaining=None):
         os.chdir(self.base)
