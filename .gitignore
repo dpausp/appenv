@@ -160,5 +160,9 @@ dmypy.json
 # ruff
 .ruff_cache/
 
+# Profiling artifacts
+*.prof
+*.pstats
+
 # Pyre type checker
 .pyre/
