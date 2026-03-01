@@ -8,10 +8,9 @@
 #   - the name of the application/file becomes the CLI entrypoint via symlink
 #   - pyproject.toml next to the appenv file
 
-__version__ = "2026.2.0"
-
 import argparse
 import difflib
+import importlib.metadata
 import os
 import re
 import shutil
@@ -989,7 +988,11 @@ requires-python = ">={python_version}"
 
     def show_version(self, args=None, remaining=None):
         """Show appenv version."""
-        print(f"appenv {__version__}")
+        try:
+            version = importlib.metadata.version("appenv")
+        except importlib.metadata.PackageNotFoundError:
+            version = "dev"
+        print(f"appenv {version}")
 
     def reset(self, args=None, remaining=None):
         """Reset all virtual environments."""

@@ -28,7 +28,7 @@ Homepage = "https://github.com/flyingcircusio/appenv/"
 appenv = "appenv:main"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
@@ -38,7 +38,8 @@ packages = ["src"]
 sources = ["src"]
 
 [tool.hatch.version]
-path = "src/appenv.py"
+source = "vcs"
+raw-options = { version_scheme = "no-guess-dev", local_scheme = "node-and-timestamp", fallback_version = "2026.3.0.dev0" }
 
 [dependency-groups]
 test = [
