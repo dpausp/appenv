@@ -253,7 +253,8 @@ def test_run_with_profiling_enabled(monkeypatch, tmp_path, capsys):
     assert "-m" in argv
     assert "cProfile" in argv
     assert "-o" in argv
-    # Check for datetime-based profile path: .appenv/profiling/myapp-YYYYMMDD-HHMMSS.prof
+    # Check for datetime-based profile path:
+    # .appenv/profiling/myapp-YYYYMMDD-HHMMSS.prof
     import re
 
     profile_arg = argv[argv.index("-o") + 1]
@@ -295,7 +296,88 @@ def test_run_with_profiling_custom_output(monkeypatch, tmp_path, capsys):
     assert "Profile written to: /tmp/custom.prof" in captured.out
 
 
-# python() method tests
+def test_profiling_list_no_data(tmp_path, capsys):
+    """profiling_list shows message when no profiling data exists."""
+    env = appenv.AppEnv(tmp_path, Path.cwd())
+    args = argparse.Namespace(count=10)
+    env.profiling_list(args)
+
+    captured = capsys.readouterr()
+    assert "No profiling data found" in captured.out
+
+
+def test_profiling_list_with_profiles(tmp_path, capsys):
+    """profiling_list shows profiles sorted by mtime."""
+    env = appenv.AppEnv(tmp_path, Path.cwd())
+    profiling_dir = tmp_path / ".appenv" / "profiling"
+    profiling_dir.mkdir(parents=True)
+
+    # Create test profiles with different mtimes
+    import time
+
+    profile1 = profiling_dir / "batou-20260301-100000.prof"
+    profile1.write_text("dummy")
+    time.sleep(0.01)
+    profile2 = profiling_dir / "batou-20260301-110000.prof"
+    profile2.write_text("dummy")
+    time.sleep(0.01)
+    profile3 = profiling_dir / "http-20260301-120000.prof"
+    profile3.write_text("dummy")
+
+    args = argparse.Namespace(count=10)
+    env.profiling_list(args)
+
+    captured = capsys.readouterr()
+    assert "Showing 3 of 3 profiles" in captured.out
+    # Newest first
+    assert captured.out.index("http-20260301") < captured.out.index(
+        "batou-20260301-110000"
+    )
+    assert captured.out.index("batou-20260301-110000") < captured.out.index(
+        "batou-20260301-100000"
+    )
+
+
+def test_profiling_list_with_count_limit(tmp_path, capsys):
+    """profiling_list respects -n count limit."""
+    env = appenv.AppEnv(tmp_path, Path.cwd())
+    profiling_dir = tmp_path / ".appenv" / "profiling"
+    profiling_dir.mkdir(parents=True)
+
+    for i in range(5):
+        (profiling_dir / f"cmd-{i:04d}.prof").write_text("dummy")
+
+    args = argparse.Namespace(count=2)
+    env.profiling_list(args)
+
+    captured = capsys.readouterr()
+    assert "Showing 2 of 5 profiles" in captured.out
+
+
+def test_profiling_show_no_data(tmp_path, capsys):
+    """profiling_show exits when no profiling data exists."""
+    env = appenv.AppEnv(tmp_path, Path.cwd())
+    args = argparse.Namespace(file=None)
+
+    with pytest.raises(SystemExit) as exc_info:
+        env.profiling_show(args)
+
+    assert exc_info.value.code == appenv.EXIT_CODE_NOINPUT
+    captured = capsys.readouterr()
+    assert "No profiling data found" in captured.out
+
+
+def test_profiling_show_file_not_found(tmp_path, capsys):
+    """profiling_show exits when specified file not found."""
+    env = appenv.AppEnv(tmp_path, Path.cwd())
+    args = argparse.Namespace(file="nonexistent.prof")
+
+    with pytest.raises(SystemExit) as exc_info:
+        env.profiling_show(args)
+
+    assert exc_info.value.code == appenv.EXIT_CODE_NOINPUT
+    captured = capsys.readouterr()
+    assert "Profile not found" in captured.out
 
 
 def test_python_method_calls_run(monkeypatch, tmp_path):

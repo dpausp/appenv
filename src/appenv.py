@@ -580,6 +580,22 @@ class AppEnv:
         )
         p.set_defaults(func=self.run_uv)
 
+        # profiling subcommand with list/show
+        p = subparsers.add_parser("profiling", help="Manage profiling data.")
+        profiling_subparsers = p.add_subparsers(dest="profiling_command")
+
+        p_list = profiling_subparsers.add_parser("list", help="List recent profiles.")
+        p_list.add_argument(
+            "-n", "--count", type=int, default=10, help="Number of profiles to show."
+        )
+        p_list.set_defaults(func=self.profiling_list)
+
+        p_show = profiling_subparsers.add_parser(
+            "show", help="Show latest profile with pstats."
+        )
+        p_show.add_argument("file", nargs="?", help="Specific profile file to show.")
+        p_show.set_defaults(func=self.profiling_show)
+
         args, remaining = parser.parse_known_args()
 
         if not hasattr(args, "func"):
@@ -1000,6 +1016,65 @@ requires-python = ">={python_version}"
         except importlib.metadata.PackageNotFoundError:
             version = "dev"
         print(f"appenv {version}")
+
+    def profiling_list(self, args, remaining=None):
+        """List recent profiling files."""
+        profiling_dir = self.appenv_dir / "profiling"
+        if not profiling_dir.exists():
+            print("No profiling data found.")
+            return
+
+        profiles = sorted(
+            profiling_dir.glob("*.prof"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+
+        if not profiles:
+            print("No profiling data found.")
+            return
+
+        count = min(args.count, len(profiles))
+        print(f"Showing {count} of {len(profiles)} profiles:\n")
+        for i, profile in enumerate(profiles[:count], 1):
+            mtime = datetime.fromtimestamp(profile.stat().st_mtime)
+            size = profile.stat().st_size
+            print(
+                f"  {i:3}. {profile.name}  ({size:,} bytes, {mtime:%Y-%m-%d %H:%M:%S})"
+            )
+
+    def profiling_show(self, args, remaining=None):
+        """Show profile with pstats."""
+        profiling_dir = self.appenv_dir / "profiling"
+
+        if args.file:
+            profile_path = profiling_dir / args.file
+            if not profile_path.exists():
+                print(f"Profile not found: {args.file}")
+                sys.exit(EXIT_CODE_NOINPUT)
+        else:
+            if not profiling_dir.exists():
+                print("No profiling data found.")
+                sys.exit(EXIT_CODE_NOINPUT)
+
+            profiles = sorted(
+                profiling_dir.glob("*.prof"),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+
+            if not profiles:
+                print("No profiling data found.")
+                sys.exit(EXIT_CODE_NOINPUT)
+
+            profile_path = profiles[0]
+            print(f"Showing latest profile: {profile_path.name}\n")
+
+        import pstats
+
+        stats = pstats.Stats(str(profile_path))
+        stats.sort_stats("cumulative")
+        stats.print_stats(20)
 
     def reset(self, args=None, remaining=None):
         """Reset all virtual environments."""

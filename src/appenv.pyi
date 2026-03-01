@@ -94,6 +94,12 @@ class AppEnv:
         args: argparse.Namespace | None = None,
         remaining: list[str] | None = None,
     ) -> None: ...
+    def profiling_list(
+        self, args: argparse.Namespace, remaining: list[str] | None = None
+    ) -> None: ...
+    def profiling_show(
+        self, args: argparse.Namespace, remaining: list[str] | None = None
+    ) -> None: ...
     def reset(
         self,
         args: argparse.Namespace | None = None,
