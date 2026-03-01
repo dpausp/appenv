@@ -380,6 +380,89 @@ def test_profiling_show_file_not_found(tmp_path, capsys):
     assert "Profile not found" in captured.out
 
 
+def test_profiling_snakeviz_no_data(tmp_path, capsys):
+    """profiling_snakeviz exits when no profiling data exists."""
+    env = appenv.AppEnv(tmp_path, Path.cwd())
+    args = argparse.Namespace(file=None)
+
+    with pytest.raises(SystemExit) as exc_info:
+        env.profiling_snakeviz(args)
+
+    assert exc_info.value.code == appenv.EXIT_CODE_NOINPUT
+    captured = capsys.readouterr()
+    assert "No profiling data found" in captured.out
+
+
+def test_profiling_snakeviz_opens_latest(tmp_path, capsys, monkeypatch):
+    """profiling_snakeviz opens latest profile with uv run snakeviz."""
+    env = appenv.AppEnv(tmp_path, Path.cwd())
+    profiling_dir = tmp_path / ".appenv" / "profiling"
+    profiling_dir.mkdir(parents=True)
+
+    profile = profiling_dir / "batou-20260301-100000.prof"
+    profile.write_text("dummy")
+
+    args = argparse.Namespace(file=None)
+
+    execv_called = []
+    monkeypatch.setattr(
+        os,
+        "execv",
+        lambda path, argv: execv_called.append((path, argv)),
+    )
+
+    env.profiling_snakeviz(args)
+
+    assert len(execv_called) == 1
+    path, argv = execv_called[0]
+    assert path == sys.executable
+    assert "uv" in argv
+    assert "run" in argv
+    assert "--with" in argv
+    assert "snakeviz" in argv
+    assert str(profile) in argv
+    captured = capsys.readouterr()
+    assert "Opening latest profile" in captured.out
+
+
+def test_profiling_snakeviz_specific_file(tmp_path, monkeypatch):
+    """profiling_snakeviz opens specific profile file."""
+    env = appenv.AppEnv(tmp_path, Path.cwd())
+    profiling_dir = tmp_path / ".appenv" / "profiling"
+    profiling_dir.mkdir(parents=True)
+
+    profile = profiling_dir / "custom.prof"
+    profile.write_text("dummy")
+
+    args = argparse.Namespace(file="custom.prof")
+
+    execv_called = []
+    monkeypatch.setattr(
+        os,
+        "execv",
+        lambda path, argv: execv_called.append((path, argv)),
+    )
+
+    env.profiling_snakeviz(args)
+
+    assert len(execv_called) == 1
+    path, argv = execv_called[0]
+    assert str(profile) in argv
+
+
+def test_profiling_snakeviz_file_not_found(tmp_path, capsys):
+    """profiling_snakeviz exits when specified file not found."""
+    env = appenv.AppEnv(tmp_path, Path.cwd())
+    args = argparse.Namespace(file="nonexistent.prof")
+
+    with pytest.raises(SystemExit) as exc_info:
+        env.profiling_snakeviz(args)
+
+    assert exc_info.value.code == appenv.EXIT_CODE_NOINPUT
+    captured = capsys.readouterr()
+    assert "Profile not found" in captured.out
+
+
 def test_python_method_calls_run(monkeypatch, tmp_path):
     env = appenv.AppEnv(tmp_path, Path.cwd())
 

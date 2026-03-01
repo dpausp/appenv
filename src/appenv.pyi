@@ -100,6 +100,9 @@ class AppEnv:
     def profiling_show(
         self, args: argparse.Namespace, remaining: list[str] | None = None
     ) -> None: ...
+    def profiling_snakeviz(
+        self, args: argparse.Namespace, remaining: list[str] | None = None
+    ) -> None: ...
     def reset(
         self,
         args: argparse.Namespace | None = None,

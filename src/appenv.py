@@ -596,6 +596,14 @@ class AppEnv:
         p_show.add_argument("file", nargs="?", help="Specific profile file to show.")
         p_show.set_defaults(func=self.profiling_show)
 
+        p_snakeviz = profiling_subparsers.add_parser(
+            "snakeviz", help="Show latest profile with snakeviz (interactive web UI)."
+        )
+        p_snakeviz.add_argument(
+            "file", nargs="?", help="Specific profile file to show."
+        )
+        p_snakeviz.set_defaults(func=self.profiling_snakeviz)
+
         args, remaining = parser.parse_known_args()
 
         if not hasattr(args, "func"):
@@ -1075,6 +1083,47 @@ requires-python = ">={python_version}"
         stats = pstats.Stats(str(profile_path))
         stats.sort_stats("cumulative")
         stats.print_stats(20)
+
+    def profiling_snakeviz(self, args, remaining=None):
+        """Show profile with snakeviz (interactive web UI)."""
+        profiling_dir = self.appenv_dir / "profiling"
+
+        if args.file:
+            profile_path = profiling_dir / args.file
+            if not profile_path.exists():
+                print(f"Profile not found: {args.file}")
+                sys.exit(EXIT_CODE_NOINPUT)
+        else:
+            if not profiling_dir.exists():
+                print("No profiling data found.")
+                sys.exit(EXIT_CODE_NOINPUT)
+
+            profiles = sorted(
+                profiling_dir.glob("*.prof"),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+
+            if not profiles:
+                print("No profiling data found.")
+                sys.exit(EXIT_CODE_NOINPUT)
+
+            profile_path = profiles[0]
+            print(f"Opening latest profile: {profile_path.name}")
+
+        os.execv(
+            sys.executable,
+            [
+                sys.executable,
+                "-m",
+                "uv",
+                "run",
+                "--with",
+                "snakeviz",
+                "snakeviz",
+                str(profile_path),
+            ],
+        )
 
     def reset(self, args=None, remaining=None):
         """Reset all virtual environments."""
