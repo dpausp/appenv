@@ -17,6 +17,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from datetime import datetime
 from pathlib import Path
 from typing import cast
 
@@ -595,7 +596,13 @@ class AppEnv:
 
         # Profiling support via APPENV_PROFILE=1
         if os.environ.get("APPENV_PROFILE"):
-            profile_output = os.environ.get("APPENV_PROFILE_OUTPUT", f"{command}.prof")
+            if os.environ.get("APPENV_PROFILE_OUTPUT"):
+                profile_output = os.environ["APPENV_PROFILE_OUTPUT"]
+            else:
+                profiling_dir = self.appenv_dir / "profiling"
+                profiling_dir.mkdir(parents=True, exist_ok=True)
+                timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+                profile_output = str(profiling_dir / f"{command}-{timestamp}.prof")
             print(f"Profile written to: {profile_output}")
             venv_python = env_dir / "bin" / "python"
             os.execv(

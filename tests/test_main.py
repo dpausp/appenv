@@ -253,9 +253,16 @@ def test_run_with_profiling_enabled(monkeypatch, tmp_path, capsys):
     assert "-m" in argv
     assert "cProfile" in argv
     assert "-o" in argv
-    assert "myapp.prof" in argv
+    # Check for datetime-based profile path: .appenv/profiling/myapp-YYYYMMDD-HHMMSS.prof
+    import re
+
+    profile_arg = argv[argv.index("-o") + 1]
+    assert re.match(r".*\.appenv/profiling/myapp-\d{8}-\d{6}\.prof$", profile_arg), (
+        f"Unexpected profile path: {profile_arg}"
+    )
     captured = capsys.readouterr()
-    assert "Profile written to: myapp.prof" in captured.out
+    assert "Profile written to:" in captured.out
+    assert ".appenv/profiling/myapp-" in captured.out
 
 
 def test_run_with_profiling_custom_output(monkeypatch, tmp_path, capsys):
