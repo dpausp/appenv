@@ -1,6 +1,7 @@
 """Tests for main() entry point and related functions."""
 
 import argparse
+import io
 import os
 import re
 import subprocess
@@ -736,6 +737,156 @@ def test_show_version(capsys):
     captured = capsys.readouterr()
     assert "appenv" in captured.out
     assert appenv.__version__ in captured.out
+
+
+def test_settings_shows_all_vars(patterns, monkeypatch):
+    """settings() displays all environment variables in clean state."""
+    env = appenv.AppEnv(Path("/project"), Path.cwd())
+
+    # Clean state - all APPENV vars unset
+    for var in [
+        "APPENV_EXTRAS",
+        "APPENV_VERBOSE",
+        "APPENV_PROFILE",
+        "APPENV_PROFILE_OUTPUT",
+        "APPENV_BASEDIR",
+        "APPENV_BEST_PYTHON",
+        "UV_PROJECT_ENVIRONMENT",  # Add this
+    ]:
+        monkeypatch.delenv(var, raising=False)
+
+    output = io.StringIO()
+    monkeypatch.setattr("sys.stdout", output)
+
+    env.settings()
+
+    result = output.getvalue()
+
+    # Pattern: all vars shown as (not set) with descriptions
+    p = patterns.all_vars
+    p.in_order(
+        """\
+appenv environment:
+<empty-line>
+  APPENV_EXTRAS: (not set)
+    Extras to install (comma-separated)
+<empty-line>
+  APPENV_VERBOSE: (not set)
+    Show verbose output
+<empty-line>
+  APPENV_PROFILE: (not set)
+    Enable profiling
+<empty-line>
+  APPENV_PROFILE_OUTPUT: (not set)
+    Profiling output file
+<empty-line>
+  APPENV_BASEDIR: (not set)
+    Base directory of the project
+<empty-line>
+  APPENV_BEST_PYTHON: (not set)
+    Selected Python interpreter
+<empty-line>
+  UV_PROJECT_ENVIRONMENT: (not set)
+    uv venv location
+<empty-line>
+  PYTHONPATH: (not set)
+    Python module search path
+<empty-line>
+  Base directory: /project
+  Current working directory: ...
+"""
+    )
+
+    assert p == result
+
+
+def test_settings_shows_set_values(patterns, monkeypatch):
+    """settings() displays actual values when vars are set."""
+    env = appenv.AppEnv(Path("/project"), Path.cwd())
+
+    # Clear all first
+    for var in [
+        "APPENV_EXTRAS",
+        "APPENV_VERBOSE",
+        "APPENV_PROFILE",
+        "APPENV_PROFILE_OUTPUT",
+        "APPENV_BASEDIR",
+        "APPENV_BEST_PYTHON",
+    ]:
+        monkeypatch.delenv(var, raising=False)
+
+    # Set some vars
+    monkeypatch.setenv("APPENV_EXTRAS", "controller,dev")
+    monkeypatch.setenv("APPENV_VERBOSE", "1")
+
+    output = io.StringIO()
+    monkeypatch.setattr("sys.stdout", output)
+
+    env.settings()
+
+    result = output.getvalue()
+
+    # Pattern: set values shown, others as (not set)
+    p = patterns.set_values
+    p.in_order(
+        """\
+appenv environment:
+<empty-line>
+  APPENV_EXTRAS: controller,dev
+    Extras to install (comma-separated)
+<empty-line>
+  APPENV_VERBOSE: 1
+    Show verbose output
+<empty-line>
+  APPENV_PROFILE: (not set)
+    Enable profiling
+<empty-line>
+  APPENV_PROFILE_OUTPUT: (not set)
+    Profiling output file
+<empty-line>
+  APPENV_BASEDIR: (not set)
+    Base directory of the project
+<empty-line>
+  APPENV_BEST_PYTHON: (not set)
+    Selected Python interpreter
+<empty-line>
+  UV_PROJECT_ENVIRONMENT: ...
+    uv venv location
+<empty-line>
+  PYTHONPATH: ...
+    Python module search path
+<empty-line>
+  Base directory: /project
+  Current working directory: ...
+"""
+    )
+
+    assert p == result
+
+
+def test_settings_no_error_lines(patterns, monkeypatch):
+    """settings() output contains no error or exception lines."""
+    env = appenv.AppEnv(Path("/project"), Path.cwd())
+
+    for var in ["APPENV_EXTRAS", "APPENV_VERBOSE", "APPENV_PROFILE"]:
+        monkeypatch.delenv(var, raising=False)
+
+    output = io.StringIO()
+    monkeypatch.setattr("sys.stdout", output)
+
+    env.settings()
+
+    result = output.getvalue()
+
+    # Pattern: refuse common error indicators
+    p = patterns.clean_output
+    p.refused("...error...")
+    p.refused("...exception...")
+    p.refused("...traceback...")
+    p.refused("...failed...")
+    p.optional("...")  # Allow everything else
+
+    assert p == result
 
 
 def test_check_uv_version_not_found(monkeypatch):
