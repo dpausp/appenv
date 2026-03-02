@@ -818,7 +818,7 @@ class AppEnv:
                 print(f"pyproject.toml already has [project] section in {target}.")
                 print("Nothing to do.")
                 return
-            print(f"Adding [project] section to existing pyproject.toml.\n")
+            print("Adding [project] section to existing pyproject.toml.\n")
 
         if not requirements_file.exists():
             print(f"No requirements.txt found in {target}.")
