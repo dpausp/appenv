@@ -58,7 +58,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-deduplicate" },
-    { name = "pytest-patterns", directory = "../pytest-patterns" },
+    { name = "pytest-patterns", editable = "../pytest-patterns" },
     { name = "pytest-ruff" },
     { name = "pytest-timeout" },
     { name = "pytest-ty" },
@@ -80,7 +80,7 @@ test = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-deduplicate" },
-    { name = "pytest-patterns", directory = "../pytest-patterns" },
+    { name = "pytest-patterns", editable = "../pytest-patterns" },
     { name = "pytest-ruff" },
     { name = "pytest-timeout" },
     { name = "pytest-ty" },
@@ -553,7 +553,7 @@ wheels = [
 
 [[package]]
 name = "pytest-patterns"
-source = { directory = "../pytest-patterns" }
+source = { editable = "../pytest-patterns" }
 dependencies = [
     { name = "pytest" },
 ]

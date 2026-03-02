@@ -111,7 +111,6 @@ select = ["E", "F", "I", "N", "W", "UP", "B"]
 addopts = [
     "--timeout=25",
     "-W", "error",
-    "--tb=native",
     "--ruff",
     "--ty",
     "-m", "not slow",
@@ -134,4 +133,4 @@ pytest_add_cli_args_test_selection = [
 ]
 
 [tool.uv.sources]
-pytest-patterns = { path = "../pytest-patterns" }
+pytest-patterns = { path = "../pytest-patterns", editable=true }
