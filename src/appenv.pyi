@@ -72,7 +72,7 @@ class AppEnv:
     ) -> None: ...
     @staticmethod
     def _has_project_section(content: str) -> bool: ...
-    def _create_pyproject(
+    def _init_project(
         self,
         target: Path,
         project_name: str,

@@ -726,7 +726,7 @@ class AppEnv:
         if not python_version:
             python_version = "3.10"
 
-        self._create_pyproject(
+        self._init_project(
             target=target,
             project_name=project_name,
             description=description,
@@ -828,7 +828,7 @@ class AppEnv:
         # Use directory name as project name
         project_name = target.name
 
-        self._create_pyproject(
+        self._init_project(
             target=target,
             project_name=project_name,
             description="",
@@ -851,7 +851,7 @@ class AppEnv:
                 return True
         return False
 
-    def _create_pyproject(
+    def _init_project(
         self,
         target,
         project_name,
