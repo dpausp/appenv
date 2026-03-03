@@ -212,7 +212,7 @@ def test_prepare_pyproject_verbose(workdir, monkeypatch, capsys):
     monkeypatch.setenv("APPENV_VERBOSE", "1")
 
     env = appenv.AppEnv(base, Path.cwd())
-    env._prepare_pyproject()
+    env.prepare()
 
     captured = capsys.readouterr()
     assert "Venv Python" in captured.out
@@ -275,7 +275,7 @@ def test_prepare_pyproject_unlink_file_in_appenv(workdir, monkeypatch, capsys):
     monkeypatch.setenv("APPENV_VERBOSE", "1")
 
     env = appenv.AppEnv(base, Path.cwd())
-    env._prepare_pyproject()
+    env.prepare()
 
     assert not old_file.exists()
     captured = capsys.readouterr()
@@ -307,7 +307,7 @@ def test_run_uv_sets_environment_and_execs(workdir, monkeypatch):
     remaining = ["--version"]
 
     with pytest.raises(SystemExit):
-        env.run_uv(args, remaining)  # type: ignore[attr-defined]
+        env.run_uv(args, remaining)
 
     assert len(execv_called) == 1
     assert execv_called[0][0] == "/usr/bin/uv"
@@ -478,7 +478,7 @@ def test_prepare_pyproject_cleanup_old_appenv(tmp_path, monkeypatch):
     monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: None)
 
     env = appenv.AppEnv(base, Path.cwd())
-    env._prepare_pyproject()
+    env.prepare()
 
     # Old hash-based venv should be gone
     assert not (base / ".appenv" / "oldhash").exists()
@@ -507,7 +507,7 @@ def test_prepare_pyproject_removes_old_current_symlink(tmp_path, monkeypatch):
     monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: None)
 
     env = appenv.AppEnv(base, Path.cwd())
-    env._prepare_pyproject()
+    env.prepare()
 
     # Old current symlink should be removed
     assert not current_link.exists()
@@ -536,7 +536,7 @@ def test_prepare_pyproject_keeps_appenv_if_requirements_exists(tmp_path, monkeyp
     monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: None)
 
     env = appenv.AppEnv(base, Path.cwd())
-    env._prepare_pyproject()
+    env.prepare()
 
     # Old .appenv should still exist (requirements.txt present)
     assert (base / ".appenv").exists()
@@ -570,7 +570,7 @@ def test_prepare_pyproject_missing_uv_lock(tmp_path, monkeypatch, capsys):
     env = appenv.AppEnv(base, Path.cwd())
 
     with pytest.raises(SystemExit) as err:
-        env._prepare_pyproject()
+        env.prepare()
 
     assert err.value.code == 67
     captured = capsys.readouterr()
@@ -604,7 +604,7 @@ def test_prepare_pyproject_corrupted_venv(tmp_path, monkeypatch):
     )
 
     env = appenv.AppEnv(base, Path.cwd())
-    result = env._prepare_pyproject()
+    result = env.prepare()
 
     # venv is now in .appenv/venv
     assert result == str(venv_real)
@@ -683,7 +683,7 @@ def test_prepare_pyproject_sets_uv_project_environment(tmp_path, monkeypatch):
     monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: None)
 
     env = appenv.AppEnv(base, Path.cwd())
-    env._prepare_pyproject()
+    env.prepare()
 
     assert os.environ.get("UV_PROJECT_ENVIRONMENT") == str(base / ".appenv" / "venv")
 
@@ -707,7 +707,7 @@ def test_prepare_pyproject_updates_broken_symlink(tmp_path, monkeypatch):
     monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: None)
 
     env = appenv.AppEnv(base, Path.cwd())
-    env._prepare_pyproject()
+    env.prepare()
 
     # Symlink should now point to correct location
     assert venv_link.is_symlink()
@@ -734,7 +734,7 @@ def test_prepare_pyproject_keeps_real_venv_directory(tmp_path, monkeypatch):
     monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: None)
 
     env = appenv.AppEnv(base, Path.cwd())
-    env._prepare_pyproject()
+    env.prepare()
 
     # .venv should still be a real directory, not a symlink
     assert venv_dir.is_dir()
@@ -766,7 +766,7 @@ def test_prepare_pyproject_keeps_dot_uv_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: None)
 
     env = appenv.AppEnv(base, Path.cwd())
-    env._prepare_pyproject()
+    env.prepare()
 
     # .uv should be kept
     assert uv_dir.exists()
@@ -804,14 +804,14 @@ def test_detect_project_type_pyproject(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
 
-    result = appenv.detect_project_type(tmp_path)
+    result = appenv.check_pyproject(tmp_path)
     assert result == "pyproject"
 
 
 def test_detect_project_type_none(tmp_path, monkeypatch):
     """Returns None when no pyproject.toml exists."""
     monkeypatch.chdir(tmp_path)
-    result = appenv.detect_project_type(tmp_path)
+    result = appenv.check_pyproject(tmp_path)
     assert result is None
 
 
@@ -828,7 +828,7 @@ def test_ensure_uv_builds_with_nix(tmp_path, monkeypatch):
     (base / "pyproject.toml").write_text("[project]\nname = 'test'\n")
 
     # Reset cache
-    appenv._uv_bin_cache = None
+    appenv._UV_BIN_CACHE = None
 
     # Pre-create the uv binary at the expected location
     uv_out = base / ".appenv" / ".uv"
@@ -870,7 +870,7 @@ def test_ensure_uv_builds_with_nix(tmp_path, monkeypatch):
     assert any("nix-build" in c for c in run_calls)
 
     # Reset cache
-    appenv._uv_bin_cache = None
+    appenv._UV_BIN_CACHE = None
 
 
 def test_ensure_uv_nix_version_too_old_fallback(tmp_path, monkeypatch):
@@ -881,7 +881,7 @@ def test_ensure_uv_nix_version_too_old_fallback(tmp_path, monkeypatch):
     (base / "pyproject.toml").write_text("[project]\nname = 'test'\n")
 
     # Reset cache
-    appenv._uv_bin_cache = None
+    appenv._UV_BIN_CACHE = None
 
     # Pre-create the uv binary at the expected location
     uv_out = base / ".appenv" / ".uv"
@@ -927,7 +927,7 @@ def test_ensure_uv_nix_version_too_old_fallback(tmp_path, monkeypatch):
     assert any("nix" in str(c) and "build" in str(c) for c in run_calls)
 
     # Reset cache
-    appenv._uv_bin_cache = None
+    appenv._UV_BIN_CACHE = None
 
 
 def test_ensure_uv_nix_version_parse_error_fallback(tmp_path, monkeypatch):
@@ -938,7 +938,7 @@ def test_ensure_uv_nix_version_parse_error_fallback(tmp_path, monkeypatch):
     (base / "pyproject.toml").write_text("[project]\nname = 'test'\n")
 
     # Reset cache
-    appenv._uv_bin_cache = None
+    appenv._UV_BIN_CACHE = None
 
     # Pre-create the uv binary at the expected location
     uv_out = base / ".appenv" / ".uv"
@@ -980,4 +980,4 @@ def test_ensure_uv_nix_version_parse_error_fallback(tmp_path, monkeypatch):
     assert any("nix" in str(c) and "build" in str(c) for c in run_calls)
 
     # Reset cache
-    appenv._uv_bin_cache = None
+    appenv._UV_BIN_CACHE = None

@@ -6,7 +6,14 @@
 #
 #   - the appenv file is placed in a repo with the name of the application
 #   - the name of the application/file becomes the CLI entrypoint via symlink
+#   - Python 3.10+
+#   - system has usable uv (see UV_MIN_VERSION) or has Nix to install uv on-demand
 #   - pyproject.toml next to the appenv file
+
+# TODO
+#
+# - provide a `clone` meta command to create a new project based on this one
+#   maybe use an entry point to allow further initialisation of the clone.
 
 __version__ = "2026.2.0"
 
@@ -22,14 +29,30 @@ from datetime import datetime
 from pathlib import Path
 from typing import cast
 
+# Global cache for uv binary path
+_UV_BIN_CACHE = None
+
 # Constants
 PYPROJECT_TOML = "pyproject.toml"
 UV_LOCK = "uv.lock"
+UV_MIN_VERSION = (0, 5, 0)
 
 # Exit codes (BSD sysexits.h conventions)
-EXIT_CODE_DATAERR = 65  # Input data issue (Python version not found)
-EXIT_CODE_NOINPUT = 67  # Missing input file (pyproject.toml/uv.lock not found)
-EXIT_CODE_UNAVAILABLE = 68  # Resource unavailable (uv too old)
+EXIT_CODE_DATAERR = 65
+EXIT_CODE_NOINPUT = 67
+EXIT_CODE_UNAVAILABLE = 68
+
+def cmd(c, merge_stderr=True, quiet=False, cwd=None):
+    try:
+        is_shell = isinstance(c, str)
+        cmd_list = cast("list[str]", [c] if is_shell else c)
+        stderr = subprocess.STDOUT if merge_stderr else None
+        return subprocess.check_output(cmd_list, shell=is_shell, stderr=stderr, cwd=cwd)
+    except subprocess.CalledProcessError as e:
+        if not quiet:
+            print(f"{c} returned with exit code {e.returncode}")
+            print(e.output.decode("utf-8", "replace"))
+        raise ValueError(e.output.decode("utf-8", "replace")) from e
 
 
 def parse_requires_python(pyproject_path):
@@ -143,8 +166,6 @@ def ensure_best_python(base):
             return
 
         # Try whether this Python works
-        # SPEC: SRS-F001-python-detection - Skip non-functional Python binaries
-        # Action: Continue to next candidate if this Python fails basic execution
         try:
             subprocess.check_call(
                 [path, "-c", "print(1)"],
@@ -170,29 +191,8 @@ def ensure_best_python(base):
     sys.exit(EXIT_CODE_DATAERR)
 
 
-def detect_project_type(base):
-    """Detect project type based on present files.
-
-    Returns: "pyproject" or None
-    """
-    if (base / PYPROJECT_TOML).exists():
-        return "pyproject"
-    return None
-
-
-def cmd(c, merge_stderr=True, quiet=False, cwd=None):
-    # SPEC: SRS-F002-command-execution - Provide actionable error context for failures
-    # Action: Print command output then raise ValueError with full context
-    try:
-        is_shell = isinstance(c, str)
-        cmd_list = cast("list[str]", [c] if is_shell else c)
-        stderr = subprocess.STDOUT if merge_stderr else None
-        return subprocess.check_output(cmd_list, shell=is_shell, stderr=stderr, cwd=cwd)
-    except subprocess.CalledProcessError as e:
-        if not quiet:
-            print(f"{c} returned with exit code {e.returncode}")
-            print(e.output.decode("utf-8", "replace"))
-        raise ValueError(e.output.decode("utf-8", "replace")) from e
+def check_pyproject(base):
+    return (base / PYPROJECT_TOML).exists()
 
 
 def has_nix():
@@ -240,38 +240,22 @@ def print_colored_diff(old_content, new_content, fromfile, tofile):
     return has_changes
 
 
-# Global cache for uv binary path
-_uv_bin_cache = None
-
-# Minimum uv version required for pyproject workflow
-UV_MIN_VERSION = (0, 5, 0)
-
-
 def parse_uv_version(version_str):
     """Parse uv version string like '0.5.11' to tuple."""
     # Remove leading 'v' if present
     version_str = version_str.lstrip("v")
     parts = version_str.split(".")
-    # SPEC: SRS-F003-uv-version-parsing - Graceful fallback for malformed versions
-    # Action: Return (0, 0, 0) sentinel that fails comparison, triggering warning
     try:
         return (int(parts[0]), int(parts[1]), int(parts[2]) if len(parts) > 2 else 0)
     except (ValueError, IndexError):
         return (0, 0, 0)
 
 
-def check_uv_version():
+def check_uv_version(uv_bin):
     """Check uv version and return version tuple.
 
     Exits with error if version is too old.
     """
-    uv_bin = _uv_bin_cache or shutil.which("uv")
-    if not uv_bin:
-        raise RuntimeError("uv not found")
-
-    # SPEC: SRS-F004-uv-version-check - Validate uv meets minimum requirements
-    # Action: Exit with actionable upgrade instructions if version too old;
-    # warn but proceed with degraded functionality if version cannot be determined.
     try:
         result = subprocess.run(
             [uv_bin, "--version"],
@@ -300,16 +284,11 @@ def check_uv_version():
             sys.exit(EXIT_CODE_UNAVAILABLE)
 
         return version
-    # SPEC: SRS-F004-uv-version-check - Handle uv executable failures
-    # Action: Warn and return sentinel (0,0,0) which fails comparison, allowing
-    # operation to proceed with potential version issues visible to user
     except subprocess.CalledProcessError as e:
         print(f"Warning: Could not determine uv version: {e}")
         print(f"  uv binary: {uv_bin}")
         print("  Proceeding anyway - sync operations may fail if uv is too old")
         return (0, 0, 0)
-    # SPEC: SRS-F004-uv-version-check - Handle unexpected uv --version output format
-    # Action: Warn and return sentinel (0,0,0) allowing degraded operation
     except (IndexError, ValueError) as e:
         print(f"Warning: Could not parse uv version: {e}")
         print(f"  uv binary: {uv_bin}")
@@ -326,16 +305,17 @@ def get_uv_bin(base=None):
        (fallback to nix build nixpkgs#uv if version < 0.5)
     3. pip install uv → use it
     """
-    global _uv_bin_cache
+    global _UV_BIN_CACHE
 
-    if _uv_bin_cache:
-        return _uv_bin_cache
+    if _UV_BIN_CACHE:
+        return _UV_BIN_CACHE
 
     # 1. Check PATH
     uv_in_path = shutil.which("uv")
     if uv_in_path:
-        _uv_bin_cache = uv_in_path
-        return uv_in_path
+        uv_bin = Path(uv_in_path)
+        _UV_BIN_CACHE = uv_bin
+        return uv_bin
 
     # 2. Build with nix (try cheap channel first, fallback to fresh nixpkgs)
     if base and has_nix():
@@ -351,7 +331,6 @@ def get_uv_bin(base=None):
 
         # Check if version is recent enough (>= 0.5)
         if result.returncode == 0 and uv_local.exists():
-            # SPEC: SRS-F004-uv-version-check - Handle nix-built uv check failures
             try:
                 version_result = subprocess.run(
                     [str(uv_local), "--version"],
@@ -363,7 +342,7 @@ def get_uv_bin(base=None):
                 version = parse_uv_version(version_str)
 
                 if version >= (0, 5, 0):
-                    _uv_bin_cache = str(uv_local)
+                    _UV_BIN_CACHE = str(uv_local)
                     return str(uv_local)
 
                 verbose_print(
@@ -379,8 +358,8 @@ def get_uv_bin(base=None):
             ["nix", "build", "nixpkgs#uv", "--out-link", str(uv_out)],
             check=True,
         )
-        _uv_bin_cache = str(uv_local)
-        return str(uv_local)
+        _UV_BIN_CACHE = uv_local
+        return uv_local
 
     # 3. pip install fallback
     verbose_print("Installing uv via pip ...")
@@ -388,23 +367,14 @@ def get_uv_bin(base=None):
         [sys.executable, "-m", "pip", "install", "-q", "uv"],
         check=True,
     )
-    uv_in_path = shutil.which("uv")
-    if uv_in_path:
-        _uv_bin_cache = uv_in_path
-        return uv_in_path
-
     raise RuntimeError("uv not found and could not be installed.")
 
 
 def ensure_uv(base=None):
-    """Ensure uv is available. Call get_uv_bin to get the path."""
-    get_uv_bin(base)
-
-
-def ensure_uv_version():
-    """Ensure uv version is new enough for pyproject workflow."""
-    check_uv_version()
-
+    """Ensure uv is available and has a usable version"""
+    uv_bin = get_uv_bin(base)
+    check_uv_version(uv_bin)
+    return uv_bin
 
 def uv_cmd(args, verbose=False, **kwargs):
     """Execute uv command.
@@ -414,10 +384,8 @@ def uv_cmd(args, verbose=False, **kwargs):
         verbose: If True, pass -v flag to uv for verbose output and print it
         **kwargs: Additional arguments passed to cmd()
     """
-    uv_bin = _uv_bin_cache or shutil.which("uv")
-    if not uv_bin:
-        raise RuntimeError("uv not found. Call ensure_uv() first.")
-    cmd_args = [uv_bin]
+    uv_bin = ensure_uv()
+    cmd_args = [str(uv_bin)]
     if verbose:
         cmd_args.append("-v")
     cmd_args.extend(str(arg) for arg in args)
@@ -653,22 +621,12 @@ class AppEnv:
             os.execv(str(cmd_path), argv)
 
     def prepare(self, args=None, remaining=None):
-        os.chdir(self.base)
-
-        project_type = detect_project_type(self.base)
-
-        verbose_print(f"Mode: {project_type}")
-
-        if project_type == "pyproject":
-            return self._prepare_pyproject()
-        else:
+        if not check_pyproject(self.base):
             print(f"No {PYPROJECT_TOML} found.")
             sys.exit(EXIT_CODE_NOINPUT)
 
-    def _prepare_pyproject(self):
-        """Prepare environment for pyproject.toml using uv native workflow."""
-        # Store venv in .appenv/venv to avoid deployment issues
-        # (batou and similar tools can ignore .appenv)
+        os.chdir(self.base)
+
         venv_real = self.appenv_dir / "venv"
         venv_link = self.base / ".venv"
         lock_file = self.base / UV_LOCK
@@ -682,8 +640,7 @@ class AppEnv:
             print(f"No {UV_LOCK} found. Run: ./appenv update-lockfile")
             sys.exit(EXIT_CODE_NOINPUT)
 
-        ensure_uv(self.base)
-        ensure_uv_version()
+        uv_bin = ensure_uv(self.base)
 
         # Tell uv where to put/find the venv
         os.environ["UV_PROJECT_ENVIRONMENT"] = str(venv_real)
@@ -693,7 +650,7 @@ class AppEnv:
         verbose_print(f"pyproject.toml: {pyproject_file}")
         verbose_print(f"uv.lock: {lock_file}")
         verbose_print(f"venv: {venv_real}")
-        verbose_print(f"uv binary: {get_uv_bin(self.base)}")
+        verbose_print(f"uv binary: {uv_bin}")
         verbose_print(f"Python: {Path(sys.executable).resolve()}")
 
         # Ensure .appenv directory exists
@@ -1193,34 +1150,20 @@ requires-python = ">={python_version}"
                         path.unlink()
 
     def update_lockfile(self, args=None, remaining=None):
-        """Update lockfile.
+        verbose: bool = bool(args and getattr(args, "verbose", False))
 
-        For pyproject.toml: uses uv lock (native)
-        For requirements.txt: uses uv pip compile (legacy)
-        """
         ensure_uv(self.base)
         os.chdir(self.base)
 
-        project_type = detect_project_type(self.base)
-        verbose: bool = bool(args and getattr(args, "verbose", False))
-
-        # Show what we're doing (only in verbose mode)
-        verbose_print(f"Base directory: {self.base}")
-        if project_type == "pyproject":
-            source_file = self.base / PYPROJECT_TOML
-            lock_file = self.base / UV_LOCK
-            verbose_print("Mode: pyproject.toml (native uv workflow)")
-            verbose_print(f"Reading: {source_file}")
-            verbose_print(f"Lockfile: {lock_file}")
-        else:
+        if not check_pyproject(self.base):
             print(f"No {PYPROJECT_TOML} found.")
             sys.exit(EXIT_CODE_NOINPUT)
 
-        self._update_lockfile_pyproject(args, verbose)
-
-    def _update_lockfile_pyproject(self, args, verbose=False):
-        """Update uv.lock using uv lock (native workflow)."""
-        ensure_uv_version()
+        source_file = self.base / PYPROJECT_TOML
+        lock_file = self.base / UV_LOCK
+        verbose_print("update_lockfile")
+        verbose_print(f"Reading: {source_file}")
+        verbose_print(f"Lockfile: {lock_file}")
 
         lock_file = self.base / UV_LOCK
 

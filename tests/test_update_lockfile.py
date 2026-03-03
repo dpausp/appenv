@@ -392,7 +392,7 @@ def test_update_lockfile_pyproject_calls_uv_lock(tmp_path, monkeypatch):
     )
 
     env = appenv.AppEnv(base, Path.cwd())
-    env._update_lockfile_pyproject(None)
+    env._update_lockfile(None)
 
     # Should call uv lock
     assert any("lock" in str(c) for c in uv_calls)
@@ -413,7 +413,7 @@ def test_update_lockfile_verbose_shows_running_uv_lock(tmp_path, monkeypatch, ca
 
     env = appenv.AppEnv(base, Path.cwd())
     args = argparse.Namespace(diff=False)
-    env._update_lockfile_pyproject(args, verbose=True)
+    env._update_lockfile(args, verbose=True)
 
     captured = capsys.readouterr()
     assert "Running: uv lock" in captured.out
