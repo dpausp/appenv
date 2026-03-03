@@ -114,10 +114,10 @@ The `requirements.txt` is kept as legacy. Delete it when migration is complete.
 
 ```
 $ ./appenv --help
-usage: appenv [-h] {update-lockfile,init,migrate,reset,version,prepare,python,run,uv} ...
+usage: appenv [-h] {update-lockfile,init,migrate,reset,version,prepare,python,run,uv,settings,profiling} ...
 
 positional arguments:
-  {update-lockfile,init,migrate,reset,version,prepare,python,run,uv}
+  {update-lockfile,init,migrate,reset,version,prepare,python,run,uv,settings,profiling}
     update-lockfile     Update the lock file.
     init                Create a new pyproject.toml project.
     migrate             Migrate from requirements.txt to pyproject.toml.
@@ -127,6 +127,8 @@ positional arguments:
     python              Spawn the embedded Python interpreter REPL.
     run                 Run a script from the bin/ directory of the virtual env.
     uv                  Run uv with appenv-configured environment.
+    settings            Show environment variables and settings.
+    profiling           Manage profiling data.
 
 options:
   -h, --help            show this help message and exit
@@ -210,9 +212,52 @@ $ ./appenv uv add black               # Add to dependencies
 $ ./appenv uv sync                    # Re-sync dependencies
 ```
 
+### settings
+
+Show environment variables and settings:
+
+```
+$ ./appenv settings
+appenv environment:
+
+  APPENV_EXTRAS: (not set)
+    Extras to install (comma-separated)
+
+  APPENV_VERBOSE: (not set)
+    Show verbose output
+
+  APPENV_PROFILE: (not set)
+    Enable profiling
+
+  ...
+```
+
+### profiling
+
+Manage profiling data:
+
+```
+$ ./appenv profiling list              # List recent profiles
+$ ./appenv profiling show              # Show latest profile with pstats
+$ ./appenv profiling show file.prof    # Show specific profile
+$ ./appenv profiling snakeviz          # Open latest profile in snakeviz
+```
+
+Enable profiling with `APPENV_PROFILE=1`:
+
+```
+$ APPENV_PROFILE=1 ./http GET https://example.org
+Profile written to: .appenv/profiling/http-20260303-143022.prof
+```
+
 ## Environment Variables
 
 - `APPENV_VERBOSE=1` - Show verbose output during bootstrap
+- `APPENV_EXTRAS` - Extras to install (comma-separated)
+- `APPENV_PROFILE=1` - Enable profiling
+- `APPENV_PROFILE_OUTPUT` - Profiling output file
+- `APPENV_BASEDIR` - Base directory of the project
+- `APPENV_BEST_PYTHON` - Selected Python interpreter
 
 By default, appenv suppresses uv command output for a clean user experience.
 With `APPENV_VERBOSE=1`, you can see exactly what uv commands are being executed:
