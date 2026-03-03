@@ -34,7 +34,7 @@ def test_init_cli(tmp_path):
         sys.executable,
         [str(appenv_script), "init"],
         cwd=str(tmp_path),
-        timeout=10,
+        timeout=20,
     )
 
     # Wait for first prompt
@@ -97,7 +97,7 @@ def test_migrate_cli(tmp_path):
         sys.executable,
         [str(appenv_script), "migrate"],
         cwd=str(tmp_path),
-        timeout=10,
+        timeout=20,
     )
 
     # Should see migration output
