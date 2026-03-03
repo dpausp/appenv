@@ -101,6 +101,7 @@ def test_cmd_with_list_no_shell():
 
 def test_uv_cmd_raises_when_uv_not_found(monkeypatch):
     appenv._UV_BIN_CACHE = None  # Reset cache
+
     # Mock ensure_uv to raise RuntimeError
     def fake_ensure_uv(base=None):
         raise RuntimeError("uv not found and could not be installed.")
@@ -516,8 +517,6 @@ def test_print_colored_diff_shows_filenames(capsys):
 
 
 # ensure_uv_version() tests
-
-
 
 
 def test_check_uv_version_returns_zero_on_subprocess_error(monkeypatch, capsys):
@@ -1171,7 +1170,6 @@ def test_get_uv_bin_pip_fallback_success(tmp_path, monkeypatch):
     appenv._UV_BIN_CACHE = None
 
 
-
 def test_main_calls_ensure_best_python(monkeypatch, workdir):
     """Line 1196: main() calls ensure_best_python."""
     base = Path(workdir)
@@ -1252,6 +1250,8 @@ def test_version_consistency():
     assert module_version == file_version, (
         f"Version mismatch: module={module_version}, file={file_version}"
     )
+
+
 def test_reset_nonexisting_envdir_silent(tmp_path):
     env = appenv.AppEnv(tmp_path / "ducker", Path.cwd())
     assert not os.path.exists(env.appenv_dir)

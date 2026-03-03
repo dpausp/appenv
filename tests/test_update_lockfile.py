@@ -123,13 +123,15 @@ def test_update_lockfile_verbose_output(workdir, monkeypatch, capsys, patterns):
     assert "Reading:" in captured.out
     assert "Lockfile:" in captured.out
 
-    out = capsys.readouterr().out
 
-    # Strip ANSI codes for cleaner pattern matching
+# captured unused - removed
 
-    # out_clean = re.sub(r"\x1b\[[0-9;]*m", "", out)
+# Strip ANSI codes for cleaner pattern matching
 
-    # Use patterns for structured verbose output
+# out_clean = re.sub(r"\x1b\[[0-9;]*m", "", out)
+
+
+# Use patterns for structured verbose output
 def test_update_lockfile_no_changes_output(workdir, monkeypatch, capsys, patterns):
     """update_lockfile shows 'No changes' when lockfile is up to date."""
     app_dir = Path(workdir) / "nochange"
@@ -215,7 +217,7 @@ dependencies = ["click"]
     env.update_lockfile(args=args, remaining=None)
 
     # Verify diff output was shown
-    out = capsys.readouterr().out
+    # captured unused - removed
 
     # Strip ANSI codes for cleaner pattern matching
     # out_clean = re.sub(r"\x1b\[[0-9;]*m", "", out)
@@ -402,7 +404,7 @@ def test_update_lockfile_verbose_shows_running_uv_lock(tmp_path, monkeypatch, ca
     monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: None)
 
     env = appenv.AppEnv(base, Path.cwd())
-    args = argparse.Namespace(diff=False)
+    args = argparse.Namespace(diff=False, verbose=True)
     env.update_lockfile(args)
 
     captured = capsys.readouterr()

@@ -117,7 +117,6 @@ def test_prepare_verbose_output(workdir, monkeypatch, capsys, patterns):
     patterns.main.merge("any")
     patterns.main.in_order(
         """\
-Mode: pyproject
 Workflow: pyproject.toml (uv native)
 Project base: ...
 pyproject.toml: .../pyproject.toml
@@ -249,7 +248,7 @@ def test_prepare_pyproject_mode_verbose(workdir, monkeypatch, capsys):
     env.prepare()
 
     captured = capsys.readouterr()
-    assert "Mode: pyproject" in captured.out
+    assert "Workflow: pyproject.toml (uv native)" in captured.out
 
 
 def test_prepare_pyproject_unlink_file_in_appenv(workdir, monkeypatch, capsys):
@@ -866,7 +865,7 @@ def test_ensure_uv_builds_with_nix(tmp_path, monkeypatch):
 
     result = appenv.get_uv_bin(base)
 
-    assert result == str(uv_bin)
+    assert result == uv_bin
     assert any("nix-build" in c for c in run_calls)
 
     # Reset cache
@@ -921,7 +920,7 @@ def test_ensure_uv_nix_version_too_old_fallback(tmp_path, monkeypatch):
 
     result = appenv.get_uv_bin(base)
 
-    assert result == str(uv_bin)
+    assert result == uv_bin
     # Should have tried nix-build first, then fallen back to nix build
     assert any("nix-build" in str(c) for c in run_calls)
     assert any("nix" in str(c) and "build" in str(c) for c in run_calls)
@@ -975,7 +974,7 @@ def test_ensure_uv_nix_version_parse_error_fallback(tmp_path, monkeypatch):
 
     result = appenv.get_uv_bin(base)
 
-    assert result == str(uv_bin)
+    assert result == uv_bin
     # Should have tried nix-build, failed to parse version, then fallen back
     assert any("nix" in str(c) and "build" in str(c) for c in run_calls)
 
