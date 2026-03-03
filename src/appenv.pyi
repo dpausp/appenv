@@ -14,6 +14,8 @@ EXIT_CODE_DATAERR: int  # Input data issue (Python version not found)
 EXIT_CODE_NOINPUT: int  # Missing input file (pyproject.toml/uv.lock not found)
 EXIT_CODE_UNAVAILABLE: int  # Resource unavailable (uv too old)
 
+UV_MIN_VERSION: tuple[int, int, int]
+
 _uv_bin_cache: str | None
 
 def cmd(
