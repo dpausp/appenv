@@ -14,8 +14,7 @@ EXIT_CODE_DATAERR: int
 EXIT_CODE_NOINPUT: int
 EXIT_CODE_UNAVAILABLE: int
 
-
-_UV_BIN_CACHE: str | None
+_UV_BIN_CACHE: Path | None
 
 def cmd(
     c: str | list[str],
@@ -30,7 +29,7 @@ def print_colored_diff(
     old_content: str, new_content: str, fromfile: str, tofile: str
 ) -> bool: ...
 def get_uv_bin(base: Path | None = None) -> Path: ...
-def ensure_uv(base: Path) -> Path: ...
+def ensure_uv(base: Path | None = None) -> Path: ...
 def python(
     path: Path, c: list[str], *, merge_stderr: bool = True, quiet: bool = False
 ) -> bytes: ...
@@ -120,7 +119,4 @@ class AppEnv:
         self,
         args: argparse.Namespace | None = None,
         remaining: list[str] | None = None,
-    ) -> None: ...
-    def _update_lockfile(
-        self, args: argparse.Namespace | None, verbose: bool = False
     ) -> None: ...

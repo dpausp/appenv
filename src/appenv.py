@@ -42,6 +42,7 @@ EXIT_CODE_DATAERR = 65
 EXIT_CODE_NOINPUT = 67
 EXIT_CODE_UNAVAILABLE = 68
 
+
 def cmd(c, merge_stderr=True, quiet=False, cwd=None):
     try:
         is_shell = isinstance(c, str)
@@ -94,7 +95,9 @@ def find_available_pythons():
     Returns list of (version_str, path) tuples, sorted by version (newest first).
     """
     pythons = [
-        (f"3.{i}", path) for i in range(4, 20) if (path := shutil.which(f"python3.{i}"))
+        (f"3.{i}", path)
+        for i in range(10, 25)
+        if (path := shutil.which(f"python3.{i}"))
     ]
     pythons.sort(key=lambda x: [int(p) for p in x[0].split(".")], reverse=True)
     return pythons
@@ -284,13 +287,8 @@ def check_uv_version(uv_bin):
             sys.exit(EXIT_CODE_UNAVAILABLE)
 
         return version
-    except subprocess.CalledProcessError as e:
+    except (subprocess.CalledProcessError, IndexError, ValueError) as e:
         print(f"Warning: Could not determine uv version: {e}")
-        print(f"  uv binary: {uv_bin}")
-        print("  Proceeding anyway - sync operations may fail if uv is too old")
-        return (0, 0, 0)
-    except (IndexError, ValueError) as e:
-        print(f"Warning: Could not parse uv version: {e}")
         print(f"  uv binary: {uv_bin}")
         print("  Proceeding anyway - sync operations may fail if uv is too old")
         return (0, 0, 0)
@@ -375,6 +373,7 @@ def ensure_uv(base=None):
     uv_bin = get_uv_bin(base)
     check_uv_version(uv_bin)
     return uv_bin
+
 
 def uv_cmd(args, verbose=False, **kwargs):
     """Execute uv command.
@@ -497,6 +496,7 @@ class AppEnv:
         self.base = Path(base).resolve()
         self.appenv_dir = self.base / ".appenv"
         self.original_cwd = Path(original_cwd)
+        self._uv_bin_cache = None  # Instance-level cache for uv binary
 
     def meta(self):
         # Parse the appenv arguments
