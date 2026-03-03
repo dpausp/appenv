@@ -71,6 +71,7 @@ package = "wheel"
 runner = "uv-venv-lock-runner"
 setenv = {APPENV_BEST_PYTHON = "{envpython}"}
 dependency_groups = ["test"]
+depends = ["fix"]
 commands = [["pytest", { replace = "posargs", extend = true }]]
 
 [tool.tox.env.fix]
@@ -79,11 +80,10 @@ depends = []
 description = "Format, lint, fix whitespace, type-check, dead code"
 dependency_groups = ["test", "lint"]
 commands = [
-    ["ruff", "check", "--fix", "."],
-    ["ruff", "format", "."],
-    ["python", "scripts/fix_whitespace.py", "."],
-    ["ty", "check", ".", "--exclude", ".vulture_exclude"],
+    ["ruff", "check", "--fix"],
     ["vulture", "src/", "tests/", ".vulture_exclude", "--min-confidence=80"],
+    ["python", "scripts/fix_whitespace.py", "."],
+    ["ruff", "format"],
 ]
 
 [tool.tox.env.cov]
@@ -92,6 +92,7 @@ package = "wheel"
 runner = "uv-venv-lock-runner"
 setenv = {APPENV_BEST_PYTHON = "{envpython}"}
 dependency_groups = ["test"]
+depends = ["fix"]
 description = "Tests with coverage and test deduplication check"
 commands = [
     ["pytest", "--cov=appenv", "--cov-report=term-missing", "--cov-report=html"],
