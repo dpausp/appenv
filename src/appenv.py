@@ -342,8 +342,8 @@ def get_uv_bin(base=None):
                 version = parse_uv_version(version_str)
 
                 if version >= (0, 5, 0):
-                    _UV_BIN_CACHE = str(uv_local)
-                    return str(uv_local)
+                    _UV_BIN_CACHE = uv_local
+                    return uv_local
 
                 verbose_print(
                     f"nix-build uv version {version_str} too old, trying nix build ..."
