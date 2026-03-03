@@ -393,12 +393,6 @@ def uv_cmd(args, verbose=False, **kwargs):
     return output
 
 
-def python(path, c, *, merge_stderr=True, quiet=False):
-    return cmd(
-        [str(path / "bin" / "python")] + c, merge_stderr=merge_stderr, quiet=quiet
-    )
-
-
 def parse_editable_spec(spec):
     """Parse an editable install spec like '-e ./path' or '-e /absolute/path'.
 

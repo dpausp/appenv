@@ -685,23 +685,6 @@ def test_verbose_print_without_env(monkeypatch, capsys):
     assert captured.out == ""
 
 
-def test_python_function_delegates(monkeypatch, tmp_path):
-    """python() function delegates to cmd() with correct arguments."""
-    cmd_called = []
-
-    def mock_cmd(c, **kwargs):
-        cmd_called.append((c, kwargs))
-        return b"Python 3.12.0"
-
-    monkeypatch.setattr(appenv, "cmd", mock_cmd)
-
-    path = tmp_path
-    result = appenv.python(path, ["--version"])
-
-    assert cmd_called[0][0] == [str(path / "bin" / "python"), "--version"]
-    assert result == b"Python 3.12.0"
-
-
 def test_run_script_delegates(monkeypatch, tmp_path):
     """run_script() delegates to AppEnv.run() with script name."""
     env = appenv.AppEnv(tmp_path, Path.cwd())
