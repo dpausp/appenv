@@ -126,7 +126,6 @@ def test_update_lockfile_verbose_output(workdir, monkeypatch, capsys, patterns):
     out = capsys.readouterr().out
 
     # Strip ANSI codes for cleaner pattern matching
-    import re
 
     # out_clean = re.sub(r"\x1b\[[0-9;]*m", "", out)
 
@@ -176,7 +175,6 @@ def test_update_lockfile_pyproject_diff_mode(
 ):
     """update_lockfile with --diff shows changes without modifying uv.lock."""
     import argparse
-    import re
 
     # Create directory with pyproject.toml and uv.lock
     app_dir = Path(workdir) / "diffapp"

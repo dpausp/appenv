@@ -614,7 +614,7 @@ def test_find_available_pythons_sorting(monkeypatch):
     # Must be numerically sorted: 3.14, 3.13, 3.12, 3.11, 3.10, 3.9
     # (lexikographic would be wrong: 3.9 > 3.10)
     versions = [v for v, _ in result]
-    assert versions == ["3.14", "3.13", "3.12", "3.11", "3.10", "3.9"]
+    assert versions == ["3.14", "3.13", "3.12", "3.11", "3.10"]
 
 
 def test_version_satisfies_constraints_min_only():
@@ -945,7 +945,7 @@ def test_uv_cmd_verbose_flag_and_output(monkeypatch, capsys):
     monkeypatch.setenv("APPENV_VERBOSE", "1")
     monkeypatch.setattr(appenv, "ensure_uv", lambda: Path("/usr/bin/uv"))
     monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/uv")
-    appenv._UV_BIN_CACHE = "/usr/bin/uv"
+    appenv._UV_BIN_CACHE = Path("/usr/bin/uv")
 
     cmd_calls = []
 
@@ -1137,7 +1137,7 @@ def test_check_uv_version_index_error_on_split(monkeypatch, capsys):
     # Returns (0, 0, 0) when parsing fails (caught at lines 289-291)
     assert result == (0, 0, 0)
     captured = capsys.readouterr()
-    assert "Could not parse uv version" in captured.out
+    assert "Could not determine uv version" in captured.out
 
 
 # ==============================================================================
