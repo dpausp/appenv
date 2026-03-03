@@ -194,13 +194,8 @@ def ensure_best_python(base):
     sys.exit(EXIT_CODE_DATAERR)
 
 
-def check_pyproject(base):
+def has_pyproject(base):
     return (base / PYPROJECT_TOML).exists()
-
-
-def has_nix():
-    """Check if nix is available."""
-    return shutil.which("nix") is not None
 
 
 def verbose_print(*args, **kwargs):
@@ -316,7 +311,7 @@ def get_uv_bin(base=None):
         return uv_bin
 
     # 2. Build with nix (try cheap channel first, fallback to fresh nixpkgs)
-    if base and has_nix():
+    if base and shutil.which("nix") is not None:
         uv_local = base / ".appenv" / ".uv" / "bin" / "uv"
         uv_out = base / ".appenv" / ".uv"
         verbose_print("Building uv with nix ...")
@@ -402,23 +397,6 @@ def python(path, c, *, merge_stderr=True, quiet=False):
     return cmd(
         [str(path / "bin" / "python")] + c, merge_stderr=merge_stderr, quiet=quiet
     )
-
-
-def ensure_venv(target, base=None):
-    if (target / "bin" / "python").exists():
-        return
-    # Derive base from target if not provided: .appenv/hash -> base
-    if not base:
-        base = (
-            target.parent.parent if target.parent.name == ".appenv" else target.parent
-        )
-    ensure_uv(base)
-    if target.exists():
-        verbose_print("Deleting unclean target")
-        cmd(["rm", "-rf", str(target)])
-    verbose_print("Creating venv with uv ...")
-    # Note: venv doesn't need --project, explicit python path is given
-    uv_cmd(["venv", "--python", sys.executable, str(target)])
 
 
 def parse_editable_spec(spec):
@@ -621,7 +599,7 @@ class AppEnv:
             os.execv(str(cmd_path), argv)
 
     def prepare(self, args=None, remaining=None):
-        if not check_pyproject(self.base):
+        if not has_pyproject(self.base):
             print(f"No {PYPROJECT_TOML} found.")
             sys.exit(EXIT_CODE_NOINPUT)
 
@@ -1155,7 +1133,7 @@ requires-python = ">={python_version}"
         ensure_uv(self.base)
         os.chdir(self.base)
 
-        if not check_pyproject(self.base):
+        if not has_pyproject(self.base):
             print(f"No {PYPROJECT_TOML} found.")
             sys.exit(EXIT_CODE_NOINPUT)
 

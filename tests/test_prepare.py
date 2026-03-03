@@ -319,36 +319,6 @@ def test_run_uv_sets_environment_and_execs(workdir, monkeypatch):
 # ==============================================================================
 
 
-def test_new_venv(tmp_path):
-    tmpdir = str(tmp_path)
-    appenv.ensure_venv(tmp_path / "venv")
-    assert os.path.exists(os.path.join(tmpdir, "venv", "bin", "python"))
-    assert os.path.exists(os.path.join(tmpdir, "venv", "lib"))
-
-    # doesn't break things
-    appenv.ensure_venv(tmp_path / "venv")
-    assert os.path.exists(os.path.join(tmpdir, "venv", "bin", "python"))
-    assert os.path.exists(os.path.join(tmpdir, "venv", "lib"))
-
-
-def test_new_broken_venv_recreated(tmp_path):
-    tmpdir = str(tmp_path)
-    appenv.ensure_venv(tmp_path / "venv")
-    assert os.path.exists(os.path.join(tmpdir, "venv", "bin", "python"))
-    assert os.path.exists(os.path.join(tmpdir, "venv", "lib"))
-
-    os.unlink(os.path.join(tmpdir, "venv", "bin", "python"))
-    with open(os.path.join(tmpdir, "venv", "asdf"), "w"):
-        pass
-    assert os.path.exists(os.path.join(tmpdir, "venv", "asdf"))
-
-    # re-creates the venv
-    appenv.ensure_venv(tmp_path / "venv")
-    assert os.path.exists(os.path.join(tmpdir, "venv", "bin", "python"))
-    assert os.path.exists(os.path.join(tmpdir, "venv", "lib"))
-    assert not os.path.exists(os.path.join(tmpdir, "venv", "asdf"))
-
-
 # ==============================================================================
 # os.execv() and sys.exit() tests (unique from test_exec_and_exit.py)
 # ==============================================================================
@@ -803,14 +773,14 @@ def test_detect_project_type_pyproject(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
 
-    result = appenv.check_pyproject(tmp_path)
+    result = appenv.has_pyproject(tmp_path)
     assert result is True
 
 
 def test_detect_project_type_none(tmp_path, monkeypatch):
     """Returns None when no pyproject.toml exists."""
     monkeypatch.chdir(tmp_path)
-    result = appenv.check_pyproject(tmp_path)
+    result = appenv.has_pyproject(tmp_path)
     assert result is False
 
 
