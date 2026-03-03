@@ -749,7 +749,7 @@ class AppEnv:
         pyproject_file = target / PYPROJECT_TOML
 
         existing_pyproject = None
-        if pyproject_file.exists():
+        if has_pyproject(target):
             existing_pyproject = pyproject_file.read_text()
             if self._has_project_section(existing_pyproject):
                 print(f"pyproject.toml already has [project] section in {target}.")
