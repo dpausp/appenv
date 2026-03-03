@@ -515,28 +515,11 @@ def test_print_colored_diff_shows_filenames(capsys):
 # ensure_uv_version() tests
 
 
-def test_ensure_uv_version_exits_when_too_old(monkeypatch, capsys):
-    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/uv")
-
-    # Mock subprocess.run to return old version
-    class FakeResult:
-        stdout = "uv 0.4.0 (abc123 2024-01-01)\n"
-        returncode = 0
-
-    monkeypatch.setattr("subprocess.run", lambda *args, **kwargs: FakeResult())
-
-    with pytest.raises(SystemExit) as err:
-        appenv.ensure_uv_version()
-
-    assert err.value.code == 68
-    captured = capsys.readouterr()
-    assert "too old" in captured.out
-    assert "0.5.0" in captured.out
 
 
 def test_check_uv_version_returns_zero_on_subprocess_error(monkeypatch, capsys):
     """When uv --version fails, check_uv_version returns (0,0,0) without exiting."""
-    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/uv")
+    uv_bin = Path("/usr/bin/uv")
 
     import subprocess
 
@@ -545,7 +528,7 @@ def test_check_uv_version_returns_zero_on_subprocess_error(monkeypatch, capsys):
 
     monkeypatch.setattr("subprocess.run", fake_run)
 
-    result = appenv.check_uv_version()
+    result = appenv.check_uv_version(uv_bin)
 
     assert result == (0, 0, 0)
     captured = capsys.readouterr()
@@ -555,7 +538,7 @@ def test_check_uv_version_returns_zero_on_subprocess_error(monkeypatch, capsys):
 def test_check_uv_version_exits_on_parse_error(monkeypatch, capsys):
     """When version string is unparseable, parse_uv_version returns (0,0,0)
     which is < UV_MIN_VERSION, so check_uv_version exits."""
-    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/uv")
+    uv_bin = Path("/usr/bin/uv")
 
     class FakeResult:
         stdout = "uv invalid-version\n"
@@ -564,7 +547,7 @@ def test_check_uv_version_exits_on_parse_error(monkeypatch, capsys):
     monkeypatch.setattr("subprocess.run", lambda *args, **kwargs: FakeResult())
 
     with pytest.raises(SystemExit) as err:
-        appenv.check_uv_version()
+        appenv.check_uv_version(uv_bin)
 
     assert err.value.code == 68
     captured = capsys.readouterr()
@@ -890,12 +873,8 @@ def test_settings_no_error_lines(patterns, monkeypatch):
 
 
 def test_check_uv_version_not_found(monkeypatch):
-    """check_uv_version raises RuntimeError when uv not in PATH."""
-    monkeypatch.setattr("shutil.which", lambda name: None)
-    # Reset cache
-    appenv._UV_BIN_CACHE = None
-
-    with pytest.raises(RuntimeError, match="uv not found"):
+    """check_uv_version raises TypeError when uv_bin is missing."""
+    with pytest.raises(TypeError):
         appenv.check_uv_version()
 
 
@@ -1107,8 +1086,7 @@ def test_ensure_best_python_broken_python(tmp_path, monkeypatch):
 
 def test_check_uv_version_returns_version_on_success(tmp_path, monkeypatch):
     """Line 285: Returns version tuple on successful version check."""
-    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/uv")
-    appenv._UV_BIN_CACHE = "/usr/bin/uv"
+    uv_bin = Path("/usr/bin/uv")
 
     class FakeResult:
         stdout = "uv 0.10.3 (abc123 2024-01-01)\n"
@@ -1116,16 +1094,14 @@ def test_check_uv_version_returns_version_on_success(tmp_path, monkeypatch):
 
     monkeypatch.setattr("subprocess.run", lambda *args, **kwargs: FakeResult())
 
-    result = appenv.check_uv_version()
+    result = appenv.check_uv_version(uv_bin)
 
     assert result == (0, 10, 3)
-    appenv._UV_BIN_CACHE = None
 
 
 def test_check_uv_version_handles_parse_error(tmp_path, monkeypatch, capsys):
     """Lines 290-291: Handles IndexError/ValueError during version parse."""
-    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/uv")
-    appenv._UV_BIN_CACHE = "/usr/bin/uv"
+    uv_bin = Path("/usr/bin/uv")
 
     class FakeResult:
         stdout = "uv invalid-version\n"
@@ -1134,18 +1110,16 @@ def test_check_uv_version_handles_parse_error(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr("subprocess.run", lambda *args, **kwargs: FakeResult())
 
     with pytest.raises(SystemExit) as err:
-        appenv.check_uv_version()
+        appenv.check_uv_version(uv_bin)
 
     assert err.value.code == 68
     captured = capsys.readouterr()
     assert "too old" in captured.out
-    appenv._UV_BIN_CACHE = None
 
 
 def test_check_uv_version_index_error_on_split(monkeypatch, capsys):
     """Lines 290-291: IndexError when version output has no second element."""
-    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/uv")
-    appenv._UV_BIN_CACHE = "/usr/bin/uv"
+    uv_bin = Path("/usr/bin/uv")
 
     class FakeResult:
         # Single word output - split()[1] will raise IndexError
@@ -1154,13 +1128,12 @@ def test_check_uv_version_index_error_on_split(monkeypatch, capsys):
 
     monkeypatch.setattr("subprocess.run", lambda *args, **kwargs: FakeResult())
 
-    result = appenv.check_uv_version()
+    result = appenv.check_uv_version(uv_bin)
 
     # Returns (0, 0, 0) when parsing fails (caught at lines 289-291)
     assert result == (0, 0, 0)
     captured = capsys.readouterr()
     assert "Could not parse uv version" in captured.out
-    appenv._UV_BIN_CACHE = None
 
 
 # ==============================================================================
@@ -1191,7 +1164,7 @@ def test_get_uv_bin_pip_fallback_success(tmp_path, monkeypatch):
 
     result = appenv.get_uv_bin(tmp_path)
 
-    assert result == "/usr/local/bin/uv"
+    assert result == Path("/usr/local/bin/uv")
     assert any("pip" in str(cmd) and "uv" in str(cmd) for cmd in pip_called)
     appenv._UV_BIN_CACHE = None
 

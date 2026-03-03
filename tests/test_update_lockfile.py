@@ -55,7 +55,7 @@ dependencies = ["click"]
 
     # Mock ensure_uv and uv_cmd
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
-    monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base=None: Path("/usr/bin/uv"))
 
     captured_calls = []
 
@@ -105,7 +105,7 @@ def test_update_lockfile_verbose_output(workdir, monkeypatch, capsys, patterns):
     (app_dir / "appenv").chmod(0o755)
 
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
-    monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base=None: Path("/usr/bin/uv"))
 
     def mock_uv_cmd(args, verbose=False, **kwargs):
         if "lock" in args and "pip" not in args:
@@ -153,7 +153,7 @@ def test_update_lockfile_no_changes_output(workdir, monkeypatch, capsys, pattern
     (app_dir / "uv.lock").write_text("version = 1\n")
 
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
-    monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base=None: Path("/usr/bin/uv"))
 
     def mock_uv_cmd(args, verbose=False, **kwargs):
         cwd = kwargs.get("cwd")
@@ -204,7 +204,7 @@ dependencies = ["click"]
 
     # Mock ensure_uv and uv_cmd
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
-    monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base=None: Path("/usr/bin/uv"))
 
     def mock_uv_cmd(args, verbose=False, **kwargs):
         cwd = kwargs.get("cwd")
@@ -264,7 +264,7 @@ def test_update_lockfile_pyproject_no_changes(workdir, monkeypatch, capsys):
     (base / "uv.lock").write_text(lock_content)
 
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
-    monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base=None: Path("/usr/bin/uv"))
 
     def mock_uv_cmd(args, verbose=False, **kwargs):
         return b""
@@ -290,7 +290,7 @@ def test_update_lockfile_pyproject_updated(workdir, monkeypatch, capsys):
     )
 
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
-    monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base=None: Path("/usr/bin/uv"))
 
     def mock_uv_cmd(args, verbose=False, **kwargs):
         if "lock" in args and "pip" not in args:
@@ -320,7 +320,7 @@ def test_update_lockfile_pyproject_diff_verbose(workdir, monkeypatch, capsys):
     (base / "uv.lock").write_text("version = 1\n")
 
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
-    monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base=None: Path("/usr/bin/uv"))
 
     def mock_uv_cmd(args, verbose=False, **kwargs):
         if "lock" in args and "pip" not in args:
@@ -352,7 +352,7 @@ def test_update_lockfile_pyproject_diff_no_changes(workdir, monkeypatch, capsys)
     (base / "uv.lock").write_text(lock_content)
 
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
-    monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base=None: Path("/usr/bin/uv"))
 
     def mock_uv_cmd(args, verbose=False, **kwargs):
         if "lock" in args and "pip" not in args:
@@ -384,7 +384,7 @@ def test_update_lockfile_pyproject_calls_uv_lock(tmp_path, monkeypatch):
 
     uv_calls = []
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
-    monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base=None: Path("/usr/bin/uv"))
     monkeypatch.setattr(
         appenv,
         "uv_cmd",
@@ -392,7 +392,7 @@ def test_update_lockfile_pyproject_calls_uv_lock(tmp_path, monkeypatch):
     )
 
     env = appenv.AppEnv(base, Path.cwd())
-    env._update_lockfile(None)
+    env.update_lockfile(None)
 
     # Should call uv lock
     assert any("lock" in str(c) for c in uv_calls)
@@ -408,12 +408,12 @@ def test_update_lockfile_verbose_shows_running_uv_lock(tmp_path, monkeypatch, ca
     )
 
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
-    monkeypatch.setattr(appenv, "ensure_uv_version", lambda: None)
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base=None: Path("/usr/bin/uv"))
     monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: None)
 
     env = appenv.AppEnv(base, Path.cwd())
     args = argparse.Namespace(diff=False)
-    env._update_lockfile(args, verbose=True)
+    env.update_lockfile(args)
 
     captured = capsys.readouterr()
     assert "Running: uv lock" in captured.out
