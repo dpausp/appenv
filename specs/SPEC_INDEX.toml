@@ -1,0 +1,12 @@
+# Specification Index
+# Central index for all specification files
+
+[features."001"]
+slug = "lsp-symbol-cache"
+name = "LSP Symbol Cache with SQLite"
+description = "SQLite-based caching system for LSP symbol and reference data with git-based invalidation"
+requirements_file = "./requirements/lsp-symbol-cache.md"
+design_file = "./design/lsp-symbol-cache.md"
+feature_file = null  # No BDD features yet
+created = "2026-03-03"
+status = "draft"
