@@ -81,6 +81,44 @@ def test_prepare_creates_venv_symlink(workdir, monkeypatch):
     assert env_dir == str(base / ".appenv" / "venv")
 
 
+def test_develop_syncs_with_dev_group(workdir, monkeypatch):
+    """Test develop calls uv sync with --group dev."""
+    base = Path(workdir) / "devproj"
+    base.mkdir()
+    os.chdir(base)
+
+    (base / "pyproject.toml").write_text(
+        '[project]\nname = "devproj"\ndependencies = ["click"]\n'
+        '[dependency-groups]\ndev = ["pytest", "ruff"]\n'
+    )
+    (base / "uv.lock").write_text("version = 1\n")
+
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base=None: Path("/usr/bin/uv"))
+
+    sync_args_captured = []
+
+    def mock_uv_cmd(args, **kwargs):
+        if "venv" in args:
+            venv = base / ".appenv" / "venv"
+            venv.mkdir(parents=True, exist_ok=True)
+            (venv / "bin").mkdir(exist_ok=True)
+            (venv / "bin" / "python").write_text("#!/bin/sh\n")
+        elif "sync" in args:
+            sync_args_captured.append(args)
+        return b""
+
+    monkeypatch.setattr(appenv, "uv_cmd", mock_uv_cmd)
+    monkeypatch.setattr(appenv, "cmd", lambda c, **kwargs: b"Python 3.12.0")
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.develop()
+
+    # Verify sync was called with --group dev
+    assert len(sync_args_captured) == 1
+    assert "--group" in sync_args_captured[0]
+    assert "dev" in sync_args_captured[0]
+
+
 def test_prepare_verbose_output(workdir, monkeypatch, capsys, patterns):
     """Verbose mode shows structured output with paths, mode, and sync info."""
     base = Path(workdir) / "verboseprep"

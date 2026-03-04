@@ -114,16 +114,17 @@ The `requirements.txt` is kept as legacy. Delete it when migration is complete.
 
 ```
 $ ./appenv --help
-usage: appenv [-h] {update-lockfile,init,migrate,reset,version,prepare,python,run,uv,settings,profiling} ...
+usage: appenv [-h] {update-lockfile,init,migrate,reset,version,prepare,develop,python,run,uv,settings,profiling} ...
 
 positional arguments:
-  {update-lockfile,init,migrate,reset,version,prepare,python,run,uv,settings,profiling}
+  {update-lockfile,init,migrate,reset,version,prepare,develop,python,run,uv,settings,profiling}
     update-lockfile     Update the lock file.
     init                Create a new pyproject.toml project.
     migrate             Migrate from requirements.txt to pyproject.toml.
     reset               Reset the environment.
     version             Show appenv version.
     prepare             Prepare the venv.
+    develop             Prepare the venv with dev dependencies.
     python              Spawn the embedded Python interpreter REPL.
     run                 Run a script from the bin/ directory of the virtual env.
     uv                  Run uv with appenv-configured environment.
@@ -131,7 +132,7 @@ positional arguments:
     profiling           Manage profiling data.
 
 options:
-  -h, --help            show this help message and exit
+  -h, --help            show this help message and output
 ```
 
 ### init
@@ -181,8 +182,19 @@ Removing .appenv/venv ...
 
 ### prepare
 
-Create the virtual environment and install dependencies. Called automatically
+Create the virtual environment and install production dependencies. Called automatically
 when running the application.
+
+### develop
+
+Create the virtual environment with dev dependencies (from `[dependency-groups] dev`):
+
+```bash
+$ ./appenv develop
+```
+
+This runs `uv sync --group dev` to install both production and dev dependencies.
+Useful for development when you need tools like pytest, ruff, etc.
 
 ### python
 

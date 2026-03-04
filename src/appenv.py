@@ -511,6 +511,11 @@ class AppEnv:
         p.set_defaults(func=self.prepare)
 
         p = subparsers.add_parser(
+            "develop", help="Prepare the venv with dev dependencies."
+        )
+        p.set_defaults(func=self.develop)
+
+        p = subparsers.add_parser(
             "python", help="Spawn the embedded Python interpreter REPL"
         )
         p.set_defaults(func=self.python)
@@ -592,7 +597,12 @@ class AppEnv:
         else:
             os.execv(str(cmd_path), argv)
 
-    def prepare(self, args=None, remaining=None):
+    def _prepare_venv(self, include_dev=False):
+        """Shared venv preparation logic.
+
+        Args:
+            include_dev: If True, include dev dependency groups.
+        """
         if not has_pyproject(self.base):
             print(f"No {PYPROJECT_TOML} found.")
             sys.exit(EXIT_CODE_NOINPUT)
@@ -645,12 +655,17 @@ class AppEnv:
             for e in os.environ.get("APPENV_EXTRAS", "").split(",")
             if e.strip()
         ]
-        if extras:
-            sync_args = ["sync"] + [arg for e in extras for arg in ("--extra", e)]
-            verbose_print(f"Syncing with extras: {', '.join(extras)} ...")
+        sync_args = ["sync"]
+        if include_dev:
+            sync_args.extend(["--group", "dev"])
+            verbose_print("Syncing with dev dependencies (uv sync --group dev) ...")
         else:
-            sync_args = ["sync"]
             verbose_print("Syncing dependencies (uv sync) ...")
+
+        if extras:
+            sync_args.extend([arg for e in extras for arg in ("--extra", e)])
+            verbose_print(f"  with extras: {', '.join(extras)}")
+
         uv_cmd(sync_args)
 
         # Show venv python info AFTER sync (version may have changed)
@@ -687,6 +702,14 @@ class AppEnv:
                         path.unlink()
 
         return str(venv_real)
+
+    def prepare(self, args=None, remaining=None):
+        """Prepare the venv with production dependencies only."""
+        return self._prepare_venv(include_dev=False)
+
+    def develop(self, args=None, remaining=None):
+        """Prepare the venv with dev dependencies."""
+        return self._prepare_venv(include_dev=True)
 
     def init(self, args=None, remaining=None):
         """Create a new pyproject.toml project."""
