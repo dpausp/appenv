@@ -597,11 +597,12 @@ class AppEnv:
         else:
             os.execv(str(cmd_path), argv)
 
-    def _prepare_venv(self, include_dev=False):
+    def _prepare_venv(self, include_dev=False, frozen=True):
         """Shared venv preparation logic.
 
         Args:
             include_dev: If True, include dev dependency groups.
+            frozen: If True, use --frozen flag for strict lockfile adherence.
         """
         if not has_pyproject(self.base):
             print(f"No {PYPROJECT_TOML} found.")
@@ -656,11 +657,21 @@ class AppEnv:
             if e.strip()
         ]
         sync_args = ["sync"]
+        if frozen:
+            sync_args.append("--frozen")
         if include_dev:
             sync_args.extend(["--group", "dev"])
-            verbose_print("Syncing with dev dependencies (uv sync --group dev) ...")
+            if frozen:
+                verbose_print(
+                    "Syncing with dev dependencies (uv sync --frozen --group dev) ..."
+                )
+            else:
+                verbose_print("Syncing with dev dependencies (uv sync --group dev) ...")
         else:
-            verbose_print("Syncing dependencies (uv sync) ...")
+            if frozen:
+                verbose_print("Syncing dependencies (uv sync --frozen) ...")
+            else:
+                verbose_print("Syncing dependencies (uv sync) ...")
 
         if extras:
             sync_args.extend([arg for e in extras for arg in ("--extra", e)])
@@ -709,7 +720,7 @@ class AppEnv:
 
     def develop(self, args=None, remaining=None):
         """Prepare the venv with dev dependencies."""
-        return self._prepare_venv(include_dev=True)
+        return self._prepare_venv(include_dev=True, frozen=False)
 
     def init(self, args=None, remaining=None):
         """Create a new pyproject.toml project."""

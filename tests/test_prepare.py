@@ -82,7 +82,7 @@ def test_prepare_creates_venv_symlink(workdir, monkeypatch):
 
 
 def test_develop_syncs_with_dev_group(workdir, monkeypatch):
-    """Test develop calls uv sync with --group dev."""
+    """Test develop calls uv sync with --group dev and NO --frozen flag."""
     base = Path(workdir) / "devproj"
     base.mkdir()
     os.chdir(base)
@@ -113,10 +113,48 @@ def test_develop_syncs_with_dev_group(workdir, monkeypatch):
     env = appenv.AppEnv(base, Path.cwd())
     env.develop()
 
-    # Verify sync was called with --group dev
+    # Verify sync was called with --group dev and WITHOUT --frozen
     assert len(sync_args_captured) == 1
     assert "--group" in sync_args_captured[0]
     assert "dev" in sync_args_captured[0]
+    assert "--frozen" not in sync_args_captured[0]
+
+
+def test_prepare_syncs_with_frozen_flag(workdir, monkeypatch):
+    """Test prepare calls uv sync with --frozen flag (default behavior)."""
+    base = Path(workdir) / "frozenproj"
+    base.mkdir()
+    os.chdir(base)
+
+    (base / "pyproject.toml").write_text(
+        '[project]\nname = "frozenproj"\ndependencies = ["click"]\n'
+    )
+    (base / "uv.lock").write_text("version = 1\n")
+
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base=None: Path("/usr/bin/uv"))
+
+    sync_args_captured = []
+
+    def mock_uv_cmd(args, **kwargs):
+        if "venv" in args:
+            venv = base / ".appenv" / "venv"
+            venv.mkdir(parents=True, exist_ok=True)
+            (venv / "bin").mkdir(exist_ok=True)
+            (venv / "bin" / "python").write_text("#!/bin/sh\n")
+        elif "sync" in args:
+            sync_args_captured.append(args)
+        return b""
+
+    monkeypatch.setattr(appenv, "uv_cmd", mock_uv_cmd)
+    monkeypatch.setattr(appenv, "cmd", lambda c, **kwargs: b"Python 3.12.0")
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.prepare()
+
+    # Verify sync was called with --frozen (default for prepare)
+    assert len(sync_args_captured) == 1
+    assert "--frozen" in sync_args_captured[0]
+    assert "--group" not in sync_args_captured[0]  # No dev group
 
 
 def test_prepare_verbose_output(workdir, monkeypatch, capsys, patterns):
@@ -163,7 +201,7 @@ venv: .../.appenv/venv
 uv binary: ...
 Python: ...
 Creating venv with uv ...
-Syncing dependencies (uv sync) ...
+Syncing dependencies (uv sync --frozen) ...
 Venv Python: .../.appenv/venv/bin/python
 Venv Python (realpath): ...
 Venv Python version: Python 3.12.0"""
