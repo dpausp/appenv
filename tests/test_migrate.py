@@ -41,7 +41,20 @@ Found python preference: 3.12, 3.13, 3.14
 Using minimum version: 3.12
 ..."""
     )
-    assert patterns.main == captured.out
+
+    patterns.no_errors.optional("...")
+    patterns.no_errors.refused("...error...")
+    patterns.no_errors.refused("...exception...")
+    patterns.no_errors.refused("...traceback...")
+    patterns.no_errors.refused("...failed...")
+
+    full_pattern = patterns.full
+    full_pattern.merge("main", "no_errors")
+
+    example = full_pattern.generate_example()
+    print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
+
+    assert full_pattern == captured.out
 
 
 def test_migrate_editable_warnings(tmp_path, monkeypatch, capsys, patterns):
@@ -70,7 +83,20 @@ def test_migrate_editable_warnings(tmp_path, monkeypatch, capsys, patterns):
 ...warning: 2 editable install(s) skipped:...
 ...-e /path/to/local/pkg..."""
     )
-    assert patterns.main == captured.out.lower()
+
+    patterns.no_errors.optional("...")
+    patterns.no_errors.refused("...error...")
+    patterns.no_errors.refused("...exception...")
+    patterns.no_errors.refused("...traceback...")
+    patterns.no_errors.refused("...failed...")
+
+    full_pattern = patterns.full
+    full_pattern.merge("main", "no_errors")
+
+    example = full_pattern.generate_example()
+    print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
+
+    assert full_pattern == captured.out.lower()
 
     # Check pyproject.toml was created without editable installs
     pyproject = (base / "pyproject.toml").read_text()
@@ -101,7 +127,20 @@ def test_migrate_already_exists(tmp_path, monkeypatch, capsys, patterns):
 ...already has [project]...
 ...Nothing to do."""
     )
-    assert patterns.main == captured.out
+
+    patterns.no_errors.optional("...")
+    patterns.no_errors.refused("...error...")
+    patterns.no_errors.refused("...exception...")
+    patterns.no_errors.refused("...traceback...")
+    patterns.no_errors.refused("...failed...")
+
+    full_pattern = patterns.full
+    full_pattern.merge("main", "no_errors")
+
+    example = full_pattern.generate_example()
+    print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
+
+    assert full_pattern == captured.out
 
 
 def test_migrate_merges_with_tool_only_pyproject(
@@ -111,18 +150,15 @@ def test_migrate_merges_with_tool_only_pyproject(
     monkeypatch.chdir(tmp_path)
     base = tmp_path
 
-    # Create pyproject.toml with only tool configs (no [project] section)
     (base / "pyproject.toml").write_text(
         '[tool.ruff]\nline-length = 88\n\n[tool.pytest]\naddopts = ["-v"]\n'
     )
 
-    # Create requirements.txt to trigger migration
     (base / "requirements.txt").write_text("requests>=2.0\n")
 
     env = appenv.AppEnv(base, Path.cwd())
     env.migrate()
 
-    # Verify pyproject.toml has both tool configs and [project] section
     pyproject = (base / "pyproject.toml").read_text()
     assert "[tool.ruff]" in pyproject
     assert "[tool.pytest]" in pyproject
@@ -138,7 +174,20 @@ def test_migrate_merges_with_tool_only_pyproject(
 ...Adding [project] section...
 ...Updated pyproject.toml..."""
     )
-    assert patterns.main == captured.out
+
+    patterns.no_errors.optional("...")
+    patterns.no_errors.refused("...error...")
+    patterns.no_errors.refused("...exception...")
+    patterns.no_errors.refused("...traceback...")
+    patterns.no_errors.refused("...failed...")
+
+    full_pattern = patterns.full
+    full_pattern.merge("main", "no_errors")
+
+    example = full_pattern.generate_example()
+    print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
+
+    assert full_pattern == captured.out
 
 
 def test_migrate_existing_symlinks(tmp_path, monkeypatch, capsys, patterns):
@@ -171,7 +220,20 @@ def test_migrate_existing_symlinks(tmp_path, monkeypatch, capsys, patterns):
         """\
 ...existing symlink...myapp..."""
     )
-    assert patterns.main == captured.out.lower()
+
+    patterns.no_errors.optional("...")
+    patterns.no_errors.refused("...error...")
+    patterns.no_errors.refused("...exception...")
+    patterns.no_errors.refused("...traceback...")
+    patterns.no_errors.refused("...failed...")
+
+    full_pattern = patterns.full
+    full_pattern.merge("main", "no_errors")
+
+    example = full_pattern.generate_example()
+    print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
+
+    assert full_pattern == captured.out.lower()
 
     # Verify symlink still exists and points to appenv
     assert myapp_link.exists()
@@ -229,13 +291,32 @@ def test_migrate_no_requirements_txt(workdir, monkeypatch, capsys, patterns):
     """Lines 888-890: migrate() returns early when requirements.txt not found."""
     base = Path(workdir)
 
-    # No requirements.txt, no pyproject.toml
     env = appenv.AppEnv(base, Path.cwd())
     env.migrate()
 
     captured = capsys.readouterr()
-    assert "No requirements.txt found" in captured.out
-    assert "Use 'init' to create" in captured.out
+
+    patterns.any.optional("...")
+    patterns.main.merge("any")
+    patterns.main.in_order(
+        """\
+...No requirements.txt found...
+Use 'init' to create..."""
+    )
+
+    patterns.no_errors.optional("...")
+    patterns.no_errors.refused("...error...")
+    patterns.no_errors.refused("...exception...")
+    patterns.no_errors.refused("...traceback...")
+    patterns.no_errors.refused("...failed...")
+
+    full_pattern = patterns.full
+    full_pattern.merge("main", "no_errors")
+
+    example = full_pattern.generate_example()
+    print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
+
+    assert full_pattern == captured.out
 
 
 # Tests for parse_editable_spec
@@ -343,36 +424,49 @@ def test_migrate_editable_with_valid_local_package(
     monkeypatch.chdir(tmp_path)
     base = tmp_path
 
-    # Create local package with pyproject.toml
     local_pkg = base / "local-lib"
     local_pkg.mkdir()
     (local_pkg / "pyproject.toml").write_text(
         '[project]\nname = "my-local-lib"\nversion = "0.1.0"\n'
     )
 
-    # Create requirements.txt with editable install
     (base / "requirements.txt").write_text("-e ./local-lib\nrequests>=2.0\n")
 
-    # Mock input to use defaults
     inputs = iter(["myproject"])
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
     env = appenv.AppEnv(base, Path.cwd())
     env.migrate()
 
-    # Check pyproject.toml has both dependencies
     pyproject = (base / "pyproject.toml").read_text()
     assert '"my-local-lib"' in pyproject
     assert '"requests>=2.0"' in pyproject
-
-    # Check [tool.uv.sources] was generated
     assert "[tool.uv.sources]" in pyproject
     assert 'my-local-lib = { path = "./local-lib", editable = true }' in pyproject
 
-    # Check output mentions editable
     captured = capsys.readouterr()
-    assert "editable install" in captured.out.lower()
-    assert "my-local-lib" in captured.out.lower()
+
+    patterns.any.optional("...")
+    patterns.main.merge("any")
+    patterns.main.in_order(
+        """\
+...editable install...
+...my-local-lib..."""
+    )
+
+    patterns.no_errors.optional("...")
+    patterns.no_errors.refused("...error...")
+    patterns.no_errors.refused("...exception...")
+    patterns.no_errors.refused("...traceback...")
+    patterns.no_errors.refused("...failed...")
+
+    full_pattern = patterns.full
+    full_pattern.merge("main", "no_errors")
+
+    example = full_pattern.generate_example()
+    print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
+
+    assert full_pattern == captured.out.lower()
 
 
 def test_migrate_editable_with_setup_py(tmp_path, monkeypatch, capsys):
@@ -508,11 +602,9 @@ def test_migrate_editable_missing_package_warns(
     monkeypatch.chdir(tmp_path)
     base = tmp_path
 
-    # Create directory without pyproject.toml or setup.py
     empty_dir = base / "empty-dir"
     empty_dir.mkdir()
 
-    # Create requirements.txt with invalid editable
     (base / "requirements.txt").write_text("-e ./empty-dir\nrequests\n")
 
     inputs = iter(["myproject"])
@@ -521,13 +613,30 @@ def test_migrate_editable_missing_package_warns(
     env = appenv.AppEnv(base, Path.cwd())
     env.migrate()
 
-    # Check warning in output
     captured = capsys.readouterr()
-    assert "warning" in captured.out.lower()
-    assert "skipped" in captured.out.lower()
-    assert "empty-dir" in captured.out.lower()
 
-    # pyproject.toml should still have requests
+    patterns.any.optional("...")
+    patterns.main.merge("any")
+    patterns.main.in_order(
+        """\
+...warning...skipped...
+...-e ./empty-dir..."""
+    )
+
+    patterns.no_errors.optional("...")
+    patterns.no_errors.refused("...error...")
+    patterns.no_errors.refused("...exception...")
+    patterns.no_errors.refused("...traceback...")
+    patterns.no_errors.refused("...failed...")
+
+    full_pattern = patterns.full
+    full_pattern.merge("main", "no_errors")
+
+    example = full_pattern.generate_example()
+    print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
+
+    assert full_pattern == captured.out.lower()
+
     pyproject = (base / "pyproject.toml").read_text()
     assert '"requests"' in pyproject
     assert "[tool.uv.sources]" not in pyproject
@@ -538,7 +647,6 @@ def test_migrate_editable_git_url_warns(tmp_path, monkeypatch, capsys, patterns)
     monkeypatch.chdir(tmp_path)
     base = tmp_path
 
-    # Create requirements.txt with git URL
     (base / "requirements.txt").write_text(
         "-e git+https://github.com/user/repo.git\nrequests\n"
     )
@@ -549,13 +657,30 @@ def test_migrate_editable_git_url_warns(tmp_path, monkeypatch, capsys, patterns)
     env = appenv.AppEnv(base, Path.cwd())
     env.migrate()
 
-    # Check warning
     captured = capsys.readouterr()
-    assert "warning" in captured.out.lower()
-    assert "skipped" in captured.out.lower()
-    assert "unsupported format" in captured.out.lower()
 
-    # pyproject.toml should only have requests
+    patterns.any.optional("...")
+    patterns.main.merge("any")
+    patterns.main.in_order(
+        """\
+...warning...skipped...
+...git+https://github.com/user/repo.git..."""
+    )
+
+    patterns.no_errors.optional("...")
+    patterns.no_errors.refused("...error...")
+    patterns.no_errors.refused("...exception...")
+    patterns.no_errors.refused("...traceback...")
+    patterns.no_errors.refused("...failed...")
+
+    full_pattern = patterns.full
+    full_pattern.merge("main", "no_errors")
+
+    example = full_pattern.generate_example()
+    print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
+
+    assert full_pattern == captured.out.lower()
+
     pyproject = (base / "pyproject.toml").read_text()
     assert '"requests"' in pyproject
     assert "[tool.uv.sources]" not in pyproject
@@ -626,18 +751,15 @@ def test_migrate_editable_mixed_valid_and_invalid(
     monkeypatch.chdir(tmp_path)
     base = tmp_path
 
-    # Create one valid package
     valid_pkg = base / "valid-pkg"
     valid_pkg.mkdir()
     (valid_pkg / "pyproject.toml").write_text(
         '[project]\nname = "valid-pkg"\nversion = "1.0.0"\n'
     )
 
-    # Create one empty directory (invalid)
     empty_dir = base / "empty-dir"
     empty_dir.mkdir()
 
-    # Create requirements.txt with mix
     (base / "requirements.txt").write_text("-e ./valid-pkg\n-e ./empty-dir\nrequests\n")
 
     inputs = iter(["myproject"])
@@ -648,15 +770,32 @@ def test_migrate_editable_mixed_valid_and_invalid(
 
     pyproject = (base / "pyproject.toml").read_text()
 
-    # Valid should be in pyproject
     assert '"valid-pkg"' in pyproject
     assert "[tool.uv.sources]" in pyproject
 
-    # Check warning for invalid
     captured = capsys.readouterr()
-    assert "warning" in captured.out.lower()
-    assert "skipped" in captured.out.lower()
-    assert "empty-dir" in captured.out.lower()
+
+    patterns.any.optional("...")
+    patterns.main.merge("any")
+    patterns.main.in_order(
+        """\
+...warning...skipped...
+...-e ./empty-dir..."""
+    )
+
+    patterns.no_errors.optional("...")
+    patterns.no_errors.refused("...error...")
+    patterns.no_errors.refused("...exception...")
+    patterns.no_errors.refused("...traceback...")
+    patterns.no_errors.refused("...failed...")
+
+    full_pattern = patterns.full
+    full_pattern.merge("main", "no_errors")
+
+    example = full_pattern.generate_example()
+    print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
+
+    assert full_pattern == captured.out.lower()
 
 
 def test_migrate_editable_warnings_updated(tmp_path, monkeypatch, capsys, patterns):
@@ -684,11 +823,23 @@ def test_migrate_editable_warnings_updated(tmp_path, monkeypatch, capsys, patter
     patterns.main.merge("any")
     patterns.main.in_order(
         """\
-...
-warning: 2 editable install(s) skipped:
-..."""
+...warning...skipped...
+...unsupported format..."""
     )
-    assert patterns.main == captured.out.lower()
+
+    patterns.no_errors.optional("...")
+    patterns.no_errors.refused("...error...")
+    patterns.no_errors.refused("...exception...")
+    patterns.no_errors.refused("...traceback...")
+    patterns.no_errors.refused("...failed...")
+
+    full_pattern = patterns.full
+    full_pattern.merge("main", "no_errors")
+
+    example = full_pattern.generate_example()
+    print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
+
+    assert full_pattern == captured.out.lower()
 
     # Check pyproject.toml was created with only regular deps
     pyproject = (base / "pyproject.toml").read_text()

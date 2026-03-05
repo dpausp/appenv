@@ -78,12 +78,24 @@ dependencies = ["click"]
     env = appenv.AppEnv(app_dir, Path.cwd())
     env.update_lockfile()
 
-    # Verify it detected pyproject mode
     captured = capsys.readouterr()
     patterns.any.optional("...")
     patterns.main.merge("any")
     patterns.main.in_order("update_lockfile")
-    assert patterns.main == captured.out
+
+    patterns.no_errors.optional("...")
+    patterns.no_errors.refused("...error...")
+    patterns.no_errors.refused("...exception...")
+    patterns.no_errors.refused("...traceback...")
+    patterns.no_errors.refused("...failed...")
+
+    full_pattern = patterns.full
+    full_pattern.merge("main", "no_errors")
+
+    example = full_pattern.generate_example()
+    print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
+
+    assert full_pattern == captured.out
 
     # Verify uv.lock was created
     assert (app_dir / "uv.lock").exists()
@@ -129,7 +141,20 @@ def test_update_lockfile_verbose_output(workdir, monkeypatch, capsys, patterns):
 ...Reading:...
 ...Lockfile:..."""
     )
-    assert patterns.main == captured.out
+
+    patterns.no_errors.optional("...")
+    patterns.no_errors.refused("...error...")
+    patterns.no_errors.refused("...exception...")
+    patterns.no_errors.refused("...traceback...")
+    patterns.no_errors.refused("...failed...")
+
+    full_pattern = patterns.full
+    full_pattern.merge("main", "no_errors")
+
+    example = full_pattern.generate_example()
+    print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
+
+    assert full_pattern == captured.out
 
 
 # captured unused - removed
@@ -170,11 +195,23 @@ def test_update_lockfile_no_changes_output(workdir, monkeypatch, capsys, pattern
 
     out = capsys.readouterr().out
 
-    # Simple pattern: just check the key message appears
     patterns.any.optional("...")
     patterns.main.merge("any")
     patterns.main.in_order("No changes")
-    assert patterns.main == out
+
+    patterns.no_errors.optional("...")
+    patterns.no_errors.refused("...error...")
+    patterns.no_errors.refused("...exception...")
+    patterns.no_errors.refused("...traceback...")
+    patterns.no_errors.refused("...failed...")
+
+    full_pattern = patterns.full
+    full_pattern.merge("main", "no_errors")
+
+    example = full_pattern.generate_example()
+    print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
+
+    assert full_pattern == out
 
 
 # Tier 2 tests

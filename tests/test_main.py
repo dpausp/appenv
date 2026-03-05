@@ -519,7 +519,20 @@ def test_print_colored_diff_returns_true_when_changes(capsys, patterns):
 ...-line2...
 ...+line3..."""
     )
-    assert patterns.main == captured.out
+
+    patterns.no_errors.optional("...")
+    patterns.no_errors.refused("...error...")
+    patterns.no_errors.refused("...exception...")
+    patterns.no_errors.refused("...traceback...")
+    patterns.no_errors.refused("...failed...")
+
+    full_pattern = patterns.full
+    full_pattern.merge("main", "no_errors")
+
+    example = full_pattern.generate_example()
+    print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
+
+    assert full_pattern == captured.out
 
 
 def test_print_colored_diff_returns_false_when_no_changes(capsys):
@@ -546,7 +559,20 @@ def test_print_colored_diff_shows_filenames(capsys, patterns):
 ...--- oldfile.txt...
 ...+++ newfile.txt..."""
     )
-    assert patterns.main == captured.out
+
+    patterns.no_errors.optional("...")
+    patterns.no_errors.refused("...error...")
+    patterns.no_errors.refused("...exception...")
+    patterns.no_errors.refused("...traceback...")
+    patterns.no_errors.refused("...failed...")
+
+    full_pattern = patterns.full
+    full_pattern.merge("main", "no_errors")
+
+    example = full_pattern.generate_example()
+    print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
+
+    assert full_pattern == captured.out
 
 
 # ensure_uv_version() tests
@@ -736,15 +762,33 @@ def test_show_version(capsys, patterns):
     env.show_version()
 
     captured = capsys.readouterr()
-    assert "appenv" in captured.out
-    assert appenv.__version__ in captured.out
+
+    patterns.any.optional("...")
+    patterns.main.merge("any")
+    patterns.main.in_order(
+        f"""\
+appenv {appenv.__version__}"""
+    )
+
+    patterns.no_errors.optional("...")
+    patterns.no_errors.refused("...error...")
+    patterns.no_errors.refused("...exception...")
+    patterns.no_errors.refused("...traceback...")
+    patterns.no_errors.refused("...failed...")
+
+    full_pattern = patterns.full
+    full_pattern.merge("main", "no_errors")
+
+    example = full_pattern.generate_example()
+    print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
+
+    assert full_pattern == captured.out
 
 
 def test_settings_shows_all_vars(patterns, monkeypatch):
     """settings() displays all environment variables in clean state."""
     env = appenv.AppEnv(Path("/project"), Path.cwd())
 
-    # Clean state - all APPENV vars unset
     for var in [
         "APPENV_EXTRAS",
         "APPENV_VERBOSE",
@@ -752,7 +796,7 @@ def test_settings_shows_all_vars(patterns, monkeypatch):
         "APPENV_PROFILE_OUTPUT",
         "APPENV_BASEDIR",
         "APPENV_BEST_PYTHON",
-        "UV_PROJECT_ENVIRONMENT",  # Add this
+        "UV_PROJECT_ENVIRONMENT",
     ]:
         monkeypatch.delenv(var, raising=False)
 
@@ -763,7 +807,6 @@ def test_settings_shows_all_vars(patterns, monkeypatch):
 
     result = output.getvalue()
 
-    # Pattern: all vars shown as (not set) with descriptions
     p = patterns.all_vars
     p.in_order(
         """\
@@ -798,14 +841,25 @@ appenv environment:
 """
     )
 
-    assert p == result
+    patterns.no_errors.optional("...")
+    patterns.no_errors.refused("...error...")
+    patterns.no_errors.refused("...exception...")
+    patterns.no_errors.refused("...traceback...")
+    patterns.no_errors.refused("...failed...")
+
+    full_pattern = patterns.full
+    full_pattern.merge("all_vars", "no_errors")
+
+    example = full_pattern.generate_example()
+    print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
+
+    assert full_pattern == result
 
 
 def test_settings_shows_set_values(patterns, monkeypatch):
     """settings() displays actual values when vars are set."""
     env = appenv.AppEnv(Path("/project"), Path.cwd())
 
-    # Clear all first
     for var in [
         "APPENV_EXTRAS",
         "APPENV_VERBOSE",
@@ -816,7 +870,6 @@ def test_settings_shows_set_values(patterns, monkeypatch):
     ]:
         monkeypatch.delenv(var, raising=False)
 
-    # Set some vars
     monkeypatch.setenv("APPENV_EXTRAS", "controller,dev")
     monkeypatch.setenv("APPENV_VERBOSE", "1")
 
@@ -827,7 +880,6 @@ def test_settings_shows_set_values(patterns, monkeypatch):
 
     result = output.getvalue()
 
-    # Pattern: set values shown, others as (not set)
     p = patterns.set_values
     p.in_order(
         """\
@@ -862,7 +914,19 @@ appenv environment:
 """
     )
 
-    assert p == result
+    patterns.no_errors.optional("...")
+    patterns.no_errors.refused("...error...")
+    patterns.no_errors.refused("...exception...")
+    patterns.no_errors.refused("...traceback...")
+    patterns.no_errors.refused("...failed...")
+
+    full_pattern = patterns.full
+    full_pattern.merge("set_values", "no_errors")
+
+    example = full_pattern.generate_example()
+    print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
+
+    assert full_pattern == result
 
 
 def test_settings_no_error_lines(patterns, monkeypatch):

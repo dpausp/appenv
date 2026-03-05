@@ -189,7 +189,6 @@ def test_prepare_verbose_output(workdir, monkeypatch, capsys, patterns):
 
     out = capsys.readouterr().out
 
-    # Use patterns for structured verbose output
     patterns.any.optional("...")
     patterns.main.merge("any")
     patterns.main.in_order(
@@ -202,7 +201,20 @@ uv binary: ...
 Python: ...
 Creating venv with uv ..."""
     )
-    assert patterns.main == out
+
+    patterns.no_errors.optional("...")
+    patterns.no_errors.refused("...error...")
+    patterns.no_errors.refused("...exception...")
+    patterns.no_errors.refused("...traceback...")
+    patterns.no_errors.refused("...failed...")
+
+    full_pattern = patterns.full
+    full_pattern.merge("main", "no_errors")
+
+    example = full_pattern.generate_example()
+    print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
+
+    assert full_pattern == out
 
 
 def test_prepare_verbose_with_venv_python_info(workdir, monkeypatch, capsys, patterns):
@@ -236,7 +248,6 @@ def test_prepare_verbose_with_venv_python_info(workdir, monkeypatch, capsys, pat
 
     out = capsys.readouterr().out
 
-    # Check for venv python info in output
     patterns.any.optional("...")
     patterns.main.merge("any")
     patterns.main.in_order(
@@ -246,7 +257,20 @@ Venv Python: .../.appenv/venv/bin/python
 Venv Python (realpath): ...
 Venv Python version: Python 3.12.0"""
     )
-    assert patterns.main == out
+
+    patterns.no_errors.optional("...")
+    patterns.no_errors.refused("...error...")
+    patterns.no_errors.refused("...exception...")
+    patterns.no_errors.refused("...traceback...")
+    patterns.no_errors.refused("...failed...")
+
+    full_pattern = patterns.full
+    full_pattern.merge("main", "no_errors")
+
+    example = full_pattern.generate_example()
+    print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
+
+    assert full_pattern == out
 
 
 # ==============================================================================
@@ -254,7 +278,7 @@ Venv Python version: Python 3.12.0"""
 # ==============================================================================
 
 
-def test_prepare_pyproject_verbose(workdir, monkeypatch, capsys):
+def test_prepare_pyproject_verbose(workdir, monkeypatch, capsys, patterns):
     """Lines 639-642: Verbose output shows venv python info."""
     base = Path(workdir)
     (base / "pyproject.toml").write_text(
@@ -268,7 +292,6 @@ def test_prepare_pyproject_verbose(workdir, monkeypatch, capsys):
 
     def mock_uv_cmd(args, **kwargs):
         if "venv" in args:
-            # venv is now created in .appenv/venv
             venv = base / ".appenv" / "venv"
             venv.mkdir(parents=True, exist_ok=True)
             (venv / "bin").mkdir(exist_ok=True)
@@ -286,10 +309,34 @@ def test_prepare_pyproject_verbose(workdir, monkeypatch, capsys):
     env.prepare()
 
     captured = capsys.readouterr()
-    assert "Venv Python" in captured.out
+
+    patterns.any.optional("...")
+    patterns.main.merge("any")
+    patterns.main.in_order(
+        """\
+Project base: ...
+pyproject.toml: ...
+uv.lock: ...
+venv: ...
+Venv Python: ..."""
+    )
+
+    patterns.no_errors.optional("...")
+    patterns.no_errors.refused("...error...")
+    patterns.no_errors.refused("...exception...")
+    patterns.no_errors.refused("...traceback...")
+    patterns.no_errors.refused("...failed...")
+
+    full_pattern = patterns.full
+    full_pattern.merge("main", "no_errors")
+
+    example = full_pattern.generate_example()
+    print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
+
+    assert full_pattern == captured.out
 
 
-def test_prepare_pyproject_mode_verbose(workdir, monkeypatch, capsys):
+def test_prepare_pyproject_mode_verbose(workdir, monkeypatch, capsys, patterns):
     """Line 590: Verbose output shows mode."""
     base = Path(workdir)
     (base / "pyproject.toml").write_text(
@@ -302,7 +349,6 @@ def test_prepare_pyproject_mode_verbose(workdir, monkeypatch, capsys):
 
     def mock_uv_cmd(args, **kwargs):
         if "venv" in args:
-            # venv is now created in .appenv/venv
             venv = base / ".appenv" / "venv"
             venv.mkdir(parents=True, exist_ok=True)
             (venv / "bin").mkdir(exist_ok=True)
@@ -320,22 +366,42 @@ def test_prepare_pyproject_mode_verbose(workdir, monkeypatch, capsys):
     env.prepare()
 
     captured = capsys.readouterr()
-    # Verbose output shows project paths and venv info
-    assert "Project base:" in captured.out
-    assert "pyproject.toml:" in captured.out
+
+    patterns.any.optional("...")
+    patterns.main.merge("any")
+    patterns.main.in_order(
+        """\
+Project base: ...
+pyproject.toml: .../pyproject.toml
+uv.lock: .../uv.lock"""
+    )
+
+    patterns.no_errors.optional("...")
+    patterns.no_errors.refused("...error...")
+    patterns.no_errors.refused("...exception...")
+    patterns.no_errors.refused("...traceback...")
+    patterns.no_errors.refused("...failed...")
+
+    full_pattern = patterns.full
+    full_pattern.merge("main", "no_errors")
+
+    example = full_pattern.generate_example()
+    print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
+
+    assert full_pattern == captured.out
 
 
-def test_prepare_pyproject_unlink_file_in_appenv(workdir, monkeypatch, capsys):
+def test_prepare_pyproject_unlink_file_in_appenv(
+    workdir, monkeypatch, capsys, patterns
+):
     """Line 758: _prepare_pyproject unlinks non-directory files in .appenv."""
     base = Path(workdir)
 
-    # Create pyproject.toml and uv.lock
     (base / "pyproject.toml").write_text(
         '[project]\nname = "test"\ndependencies = []\n'
     )
     (base / "uv.lock").write_text("version = 1\n")
 
-    # Create .appenv with a file (not directory)
     appenv_dir = base / ".appenv"
     appenv_dir.mkdir()
     old_file = appenv_dir / "old_file.txt"
@@ -352,7 +418,24 @@ def test_prepare_pyproject_unlink_file_in_appenv(workdir, monkeypatch, capsys):
 
     assert not old_file.exists()
     captured = capsys.readouterr()
-    assert "Removing old .appenv entry" in captured.out
+
+    patterns.any.optional("...")
+    patterns.main.merge("any")
+    patterns.main.in_order("...Removing old .appenv entry...")
+
+    patterns.no_errors.optional("...")
+    patterns.no_errors.refused("...error...")
+    patterns.no_errors.refused("...exception...")
+    patterns.no_errors.refused("...traceback...")
+    patterns.no_errors.refused("...failed...")
+
+    full_pattern = patterns.full
+    full_pattern.merge("main", "no_errors")
+
+    example = full_pattern.generate_example()
+    print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
+
+    assert full_pattern == captured.out
 
 
 # ==============================================================================
