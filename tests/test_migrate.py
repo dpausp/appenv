@@ -26,20 +26,19 @@ def test_migrate_uses_python_preference_from_requirements(
     env = appenv.AppEnv(base, Path.cwd())
     env.migrate()
 
-    # Check that pyproject.toml has the correct python version
+    # Classic assertions for pyproject.toml with python version
     pyproject = (base / "pyproject.toml").read_text()
     assert 'requires-python = ">=3.12"' in pyproject
+    assert '"requests"' in pyproject
 
-    # Check output mentions the preference
+    # Pattern-test for console output
     captured = capsys.readouterr()
     patterns.any.optional("...")
     patterns.main.merge("any")
     patterns.main.in_order(
         """\
-...
-Found python preference: 3.12, 3.13, 3.14
-Using minimum version: 3.12
-..."""
+...Found python preference: 3.12, 3.13, 3.14
+Using minimum version: 3.12..."""
     )
 
     patterns.no_errors.optional("...")
@@ -74,14 +73,15 @@ def test_migrate_editable_warnings(tmp_path, monkeypatch, capsys, patterns):
     env = appenv.AppEnv(base, Path.cwd())
     env.migrate()
 
-    # Check output mentions editable installs warning
+    # Pattern-test for console output
     captured = capsys.readouterr()
     patterns.any.optional("...")
     patterns.main.merge("any")
     patterns.main.in_order(
         """\
-...warning: 2 editable install(s) skipped:...
-...-e /path/to/local/pkg..."""
+...warning: 2 editable install(s) skipped:
+...-e /path/to/local/pkg...
+...-e ../another-pkg..."""
     )
 
     patterns.no_errors.optional("...")
@@ -98,11 +98,12 @@ def test_migrate_editable_warnings(tmp_path, monkeypatch, capsys, patterns):
 
     assert full_pattern == captured.out.lower()
 
-    # Check pyproject.toml was created without editable installs
+    # Classic assertions for pyproject.toml (NO editable, NO uv.sources)
     pyproject = (base / "pyproject.toml").read_text()
     assert "-e" not in pyproject
-    assert "requests" in pyproject
-    assert "click" in pyproject
+    assert '"requests"' in pyproject
+    assert '"click"' in pyproject
+    assert "[tool.uv.sources]" not in pyproject
 
 
 def test_migrate_already_exists(tmp_path, monkeypatch, capsys, patterns):
@@ -124,8 +125,8 @@ def test_migrate_already_exists(tmp_path, monkeypatch, capsys, patterns):
     patterns.main.merge("any")
     patterns.main.in_order(
         """\
-...already has [project]...
-...Nothing to do."""
+pyproject.toml already has [project] section in ...
+Nothing to do."""
     )
 
     patterns.no_errors.optional("...")
@@ -160,18 +161,14 @@ def test_migrate_merges_with_tool_only_pyproject(
     env.migrate()
 
     pyproject = (base / "pyproject.toml").read_text()
-    assert "[tool.ruff]" in pyproject
-    assert "[tool.pytest]" in pyproject
-    assert "[project]" in pyproject
-    assert 'name = "' in pyproject
-    assert '"requests>=2.0"' in pyproject
 
+    # Pattern-test for console output
     captured = capsys.readouterr()
     patterns.any.optional("...")
     patterns.main.merge("any")
     patterns.main.in_order(
         """\
-...Adding [project] section...
+Adding [project] section to existing pyproject.toml...
 ...Updated pyproject.toml..."""
     )
 
@@ -188,6 +185,13 @@ def test_migrate_merges_with_tool_only_pyproject(
     print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
 
     assert full_pattern == captured.out
+
+    # Classic assertions for pyproject.toml structure
+    assert "[tool.ruff]" in pyproject
+    assert "[tool.pytest]" in pyproject
+    assert "[project]" in pyproject
+    assert 'name = "' in pyproject
+    assert '"requests>=2.0"' in pyproject
 
 
 def test_migrate_existing_symlinks(tmp_path, monkeypatch, capsys, patterns):
@@ -218,7 +222,7 @@ def test_migrate_existing_symlinks(tmp_path, monkeypatch, capsys, patterns):
     patterns.main.merge("any")
     patterns.main.in_order(
         """\
-...existing symlink...myapp..."""
+...found existing symlink(s): myapp..."""
     )
 
     patterns.no_errors.optional("...")
@@ -296,22 +300,14 @@ def test_migrate_no_requirements_txt(workdir, monkeypatch, capsys, patterns):
 
     captured = capsys.readouterr()
 
-    patterns.any.optional("...")
-    patterns.main.merge("any")
     patterns.main.in_order(
         """\
-...No requirements.txt found...
-Use 'init' to create..."""
+No requirements.txt found in ...
+Use 'init' to create a new project."""
     )
 
-    patterns.no_errors.optional("...")
-    patterns.no_errors.refused("...error...")
-    patterns.no_errors.refused("...exception...")
-    patterns.no_errors.refused("...traceback...")
-    patterns.no_errors.refused("...failed...")
-
     full_pattern = patterns.full
-    full_pattern.merge("main", "no_errors")
+    full_pattern.merge("main")
 
     example = full_pattern.generate_example()
     print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
@@ -438,20 +434,23 @@ def test_migrate_editable_with_valid_local_package(
     env = appenv.AppEnv(base, Path.cwd())
     env.migrate()
 
+    # Classic assertions for pyproject.toml with uv.sources
     pyproject = (base / "pyproject.toml").read_text()
     assert '"my-local-lib"' in pyproject
     assert '"requests>=2.0"' in pyproject
     assert "[tool.uv.sources]" in pyproject
     assert 'my-local-lib = { path = "./local-lib", editable = true }' in pyproject
 
+    # Pattern-test for console output
     captured = capsys.readouterr()
 
     patterns.any.optional("...")
     patterns.main.merge("any")
     patterns.main.in_order(
         """\
-...editable install...
-...my-local-lib..."""
+...found 1 editable install(s):
+...my-local-lib (./local-lib)...
+found 2 dependency(ies): requests>=2.0, my-local-lib..."""
     )
 
     patterns.no_errors.optional("...")
@@ -567,7 +566,7 @@ def test_migrate_multiple_editables(tmp_path, monkeypatch, capsys):
     assert "pkg-c" in pyproject
 
 
-def test_migrate_editable_with_extras(tmp_path, monkeypatch, capsys):
+def test_migrate_editable_with_extras(tmp_path, monkeypatch, capsys, patterns):
     """init_pyproject handles editable with extras like -e ./pkg[extra]."""
     monkeypatch.chdir(tmp_path)
     base = tmp_path
@@ -588,11 +587,13 @@ def test_migrate_editable_with_extras(tmp_path, monkeypatch, capsys):
     env = appenv.AppEnv(base, Path.cwd())
     env.migrate()
 
+    # Classic assertions for pyproject.toml with extras
     pyproject = (base / "pyproject.toml").read_text()
-
-    # Should have dependency with extras
     assert '"lib-with-extras[dev,test]"' in pyproject
     assert "[tool.uv.sources]" in pyproject
+    assert (
+        'lib-with-extras = { path = "./lib-with-extras", editable = true }' in pyproject
+    )
 
 
 def test_migrate_editable_missing_package_warns(
