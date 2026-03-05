@@ -164,6 +164,9 @@ dmypy.json
 *.prof
 *.pstats
 
+# pytest-patterns generated examples
+.pytest-patterns-examples.md
+
 # Pyre type checker
 .pyre/
 .ty-symbols.db
