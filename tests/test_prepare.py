@@ -113,15 +113,16 @@ def test_develop_syncs_with_dev_group(workdir, monkeypatch):
     env = appenv.AppEnv(base, Path.cwd())
     env.develop()
 
-    # Verify sync was called with --group dev and WITHOUT --frozen
+    # Verify sync was called with --group dev and WITHOUT --frozen or --no-dev
     assert len(sync_args_captured) == 1
     assert "--group" in sync_args_captured[0]
     assert "dev" in sync_args_captured[0]
     assert "--frozen" not in sync_args_captured[0]
+    assert "--no-dev" not in sync_args_captured[0]
 
 
 def test_prepare_syncs_with_frozen_flag(workdir, monkeypatch):
-    """Test prepare calls uv sync with --frozen flag (default behavior)."""
+    """Test prepare calls uv sync with --frozen and --no-dev flags."""
     base = Path(workdir) / "frozenproj"
     base.mkdir()
     os.chdir(base)
@@ -151,9 +152,10 @@ def test_prepare_syncs_with_frozen_flag(workdir, monkeypatch):
     env = appenv.AppEnv(base, Path.cwd())
     env.prepare()
 
-    # Verify sync was called with --frozen (default for prepare)
+    # Verify sync was called with --frozen and --no-dev (default for prepare)
     assert len(sync_args_captured) == 1
     assert "--frozen" in sync_args_captured[0]
+    assert "--no-dev" in sync_args_captured[0]
     assert "--group" not in sync_args_captured[0]  # No dev group
 
 
@@ -201,7 +203,7 @@ venv: .../.appenv/venv
 uv binary: ...
 Python: ...
 Creating venv with uv ...
-Syncing dependencies (uv sync --frozen) ...
+Syncing dependencies (uv sync --frozen --no-dev) ...
 Venv Python: .../.appenv/venv/bin/python
 Venv Python (realpath): ...
 Venv Python version: Python 3.12.0"""

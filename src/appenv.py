@@ -668,10 +668,11 @@ class AppEnv:
             else:
                 verbose_print("Syncing with dev dependencies (uv sync --group dev) ...")
         else:
+            sync_args.append("--no-dev")
             if frozen:
-                verbose_print("Syncing dependencies (uv sync --frozen) ...")
+                verbose_print("Syncing dependencies (uv sync --frozen --no-dev) ...")
             else:
-                verbose_print("Syncing dependencies (uv sync) ...")
+                verbose_print("Syncing dependencies (uv sync --no-dev) ...")
 
         if extras:
             sync_args.extend([arg for e in extras for arg in ("--extra", e)])
