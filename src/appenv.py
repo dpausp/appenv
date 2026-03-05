@@ -19,18 +19,22 @@ __version__ = "2026.3.5"
 
 import argparse
 import difflib
+import logging
 import os
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import cast
 
 # Global cache for uv binary path
 _UV_BIN_CACHE = None
+
+# Global logger instance
+log = logging.getLogger("appenv")
 
 # Constants
 PYPROJECT_TOML = "pyproject.toml"
@@ -198,12 +202,49 @@ def has_pyproject(base):
     return (base / PYPROJECT_TOML).exists()
 
 
-def verbose_print(*args, **kwargs):
-    """Print only if APPENV_VERBOSE is set.
+def setup_logging(command_name: str, base: Path) -> None:
+    """Setup command-specific logging to file and optional console."""
+    # Only setup logging if base directory exists
+    if not base.exists():
+        return
 
-    Used for output during symlink calls (app bootstrap).
-    Meta commands (init, update-lockfile, etc.) always print.
-    """
+    log_dir = base / ".appenv" / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    cleanup_old_logs(log_dir)
+
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    log_file = log_dir / f"{command_name}-{timestamp}.log"
+
+    log.setLevel(logging.DEBUG)
+
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(logging.DEBUG)
+    file_formatter = logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+    )
+    file_handler.setFormatter(file_formatter)
+    log.addHandler(file_handler)
+
+    if os.environ.get("APPENV_VERBOSE"):
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setLevel(logging.DEBUG)
+        console_formatter = logging.Formatter("%(message)s")
+        console_handler.setFormatter(console_formatter)
+        log.addHandler(console_handler)
+
+
+def cleanup_old_logs(log_dir: Path, max_age_days: int = 7) -> None:
+    """Remove logs older than max_age_days."""
+    cutoff = datetime.now() - timedelta(days=max_age_days)
+
+    for log_file in log_dir.glob("*.log"):
+        if datetime.fromtimestamp(log_file.stat().st_mtime) < cutoff:
+            log_file.unlink()
+
+
+def verbose_print(*args, **kwargs):
+    """DEPRECATED: Use log.debug() instead."""
     if os.environ.get("APPENV_VERBOSE"):
         print(*args, **kwargs, flush=True)
 
@@ -338,11 +379,11 @@ def get_uv_bin(base=None):
                     _UV_BIN_CACHE = uv_local
                     return uv_local
 
-                verbose_print(
+                log.debug(
                     f"nix-build uv version {version_str} too old, trying nix build ..."
                 )
             except (subprocess.CalledProcessError, IndexError, ValueError):
-                verbose_print(
+                log.debug(
                     "Could not determine nix-build uv version, trying nix build ..."
                 )
 
@@ -355,7 +396,7 @@ def get_uv_bin(base=None):
         return uv_local
 
     # 3. pip install fallback
-    verbose_print("Installing uv via pip ...")
+    log.debug("Installing uv via pip ...")
     subprocess.run(
         [sys.executable, "-m", "pip", "install", "-q", "uv"],
         check=True,
@@ -385,7 +426,7 @@ def uv_cmd(args, verbose=False, **kwargs):
     cmd_args.extend(str(arg) for arg in args)
 
     # Show command if APPENV_VERBOSE is set
-    verbose_print(f"Running: {' '.join(cmd_args)}")
+    log.debug(f"Running: {' '.join(cmd_args)}")
 
     output = cmd(cmd_args, **kwargs)
     if verbose and output:
@@ -470,7 +511,17 @@ class AppEnv:
         self.original_cwd = Path(original_cwd)
         self._uv_bin_cache = None  # Instance-level cache for uv binary
 
-    def meta(self):
+        # Determine command name for logging
+        if Path(sys.argv[0]).stem == "appenv":
+            command_name = sys.argv[1] if len(sys.argv) > 1 else "help"
+        else:
+            command_name = Path(sys.argv[0]).stem
+
+        # Setup logging in project base directory
+        project_base = find_project_base(self.base, self.original_cwd)
+        setup_logging(command_name, project_base)
+
+    def meta(self, remaining_args: list[str] | None = None):
         # Parse the appenv arguments
         parser = argparse.ArgumentParser()
         subparsers = parser.add_subparsers()
@@ -557,10 +608,16 @@ class AppEnv:
         )
         p_snakeviz.set_defaults(func=self.profiling_snakeviz)
 
-        args, remaining = parser.parse_known_args()
+        # Handle 'help' subcommand specially
+        if remaining_args and remaining_args[0] == "help":
+            parser.print_usage()
+            sys.exit(0)
+
+        args, remaining = parser.parse_known_args(remaining_args)
 
         if not hasattr(args, "func"):
             parser.print_usage()
+            sys.exit(0)
         else:
             args.func(args, remaining)
 
@@ -627,13 +684,13 @@ class AppEnv:
         os.environ["UV_PROJECT_ENVIRONMENT"] = str(venv_real)
 
         # Show verbose info
-        verbose_print(f"Project base: {self.base}")
-        verbose_print(f"pyproject.toml: {pyproject_file}")
-        verbose_print(f"uv.lock: {lock_file}")
-        verbose_print(f"venv: {venv_real}")
-        verbose_print(f"uv binary: {uv_bin}")
-        verbose_print(f"Python: {Path(sys.executable).resolve()}")
-        verbose_print(f"Dev mode: {dev_mode}")
+        log.debug(f"Project base: {self.base}")
+        log.debug(f"pyproject.toml: {pyproject_file}")
+        log.debug(f"uv.lock: {lock_file}")
+        log.debug(f"venv: {venv_real}")
+        log.debug(f"uv binary: {uv_bin}")
+        log.debug(f"Python: {Path(sys.executable).resolve()}")
+        log.debug(f"Dev mode: {dev_mode}")
 
         # Ensure .appenv directory exists
         if not self.appenv_dir.exists():
@@ -642,9 +699,9 @@ class AppEnv:
         # Create venv if needed or check integrity
         if not venv_real.exists() or not (venv_real / "bin" / "python").exists():
             if venv_real.exists():
-                verbose_print("Corrupted venv detected, removing ...")
+                log.debug("Corrupted venv detected, removing ...")
                 shutil.rmtree(venv_real)
-            verbose_print("Creating venv with uv ...")
+            log.debug("Creating venv with uv ...")
             # Use current Python (already selected by ensure_best_python)
             # Explicit path avoids uv downloading its own (breaks on NixOS, for example)
             uv_cmd(["venv", "--python", sys.executable, str(venv_real)])
@@ -660,19 +717,20 @@ class AppEnv:
             for e in os.environ.get("APPENV_EXTRAS", "").split(",")
             if e.strip()
         ]
-        verbose_print(f"prepare_venv activated extras/optional deps: {extras}")
-        sync_args.extend([arg for e in extras for arg in ("--extra", e)])
+        if extras:
+            sync_args.extend(["--extra", ",".join(extras)])
 
-        verbose_print(f"prepare_venv uv args: {sync_args}")
+        log.debug(f"prepare_venv activated extras/optional deps: {extras}")
+        log.debug(f"prepare_venv uv args: {sync_args}")
         uv_cmd(sync_args)
 
         # Show venv python info AFTER sync (version may have changed)
         venv_python = venv_real / "bin" / "python"
         if venv_python.exists():
-            verbose_print(f"Venv Python: {venv_python}")
-            verbose_print(f"Venv Python (realpath): {venv_python.resolve()}")
+            log.debug(f"Venv Python: {venv_python}")
+            log.debug(f"Venv Python (realpath): {venv_python.resolve()}")
             result = cmd([str(venv_python), "--version"], quiet=True)
-            verbose_print(f"Venv Python version: {result.decode().strip()}")
+            log.debug(f"Venv Python version: {result.decode().strip()}")
 
         # Create symlink for tool compatibility
         # (e.g., IDEs, formatters, linters that expect .venv)
@@ -693,7 +751,7 @@ class AppEnv:
         if old_appenv.exists():
             for path in list(old_appenv.iterdir()):
                 if path.name != "venv" and path.name != ".uv":
-                    verbose_print(f"Removing old .appenv entry: {path.name} ...")
+                    log.debug(f"Removing old .appenv entry: {path.name} ...")
                     if path.is_dir():
                         shutil.rmtree(path)
                     else:
@@ -1136,7 +1194,7 @@ requires-python = ">={python_version}"
         if self.appenv_dir.exists():
             for path in list(self.appenv_dir.iterdir()):
                 if path.name not in (".uv", "venv"):
-                    verbose_print(f"Removing {path} ...")
+                    log.debug(f"Removing {path} ...")
                     if path.is_dir():
                         shutil.rmtree(path)
                     else:
@@ -1154,9 +1212,9 @@ requires-python = ">={python_version}"
 
         source_file = self.base / PYPROJECT_TOML
         lock_file = self.base / UV_LOCK
-        verbose_print("update_lockfile")
-        verbose_print(f"Reading: {source_file}")
-        verbose_print(f"Lockfile: {lock_file}")
+        log.debug("update_lockfile")
+        log.debug(f"Reading: {source_file}")
+        log.debug(f"Lockfile: {lock_file}")
 
         lock_file = self.base / UV_LOCK
 
@@ -1227,6 +1285,13 @@ requires-python = ">={python_version}"
                     print(f"{check} Updated ({added_str} / {removed_str} lines)")
 
 
+def _detect_command_name() -> str:
+    """Detect command name from sys.argv."""
+    if len(sys.argv) > 1 and not sys.argv[1].startswith("-"):
+        return sys.argv[1]
+    return Path(sys.argv[0]).stem
+
+
 def main():
     base = Path(__file__).parent
     original_cwd = Path.cwd()
@@ -1241,11 +1306,37 @@ def main():
     # Determine whether we're being called as appenv or as an application name
     application_name = Path(__file__).stem
 
+    if application_name == "appenv":
+        command_name = sys.argv[1] if len(sys.argv) > 1 else "help"
+        remaining = sys.argv[1:] if len(sys.argv) > 1 else [command_name]
+    else:
+        command_name = "run"
+        remaining = sys.argv[1:]
+
     appenv = AppEnv(base, original_cwd)
     if application_name == "appenv":
-        appenv.meta()
+        appenv.meta(remaining)
     else:
-        appenv.run(application_name, sys.argv[1:])
+        appenv.run(application_name, remaining)
+
+
+def find_project_base(base: Path, original_cwd: Path) -> Path:
+    """Find the project base directory by looking for pyproject.toml.
+
+    Start from the directory where appenv.py is located and
+    search upward in the filesystem tree for pyproject.toml.
+    """
+    # Check current directory
+    if (base / PYPROJECT_TOML).exists():
+        return base
+
+    # Check parent directories
+    for parent in base.parents:
+        if (parent / PYPROJECT_TOML).exists():
+            return parent
+
+    # Fallback to appenv.py directory if no pyproject.toml found
+    return base
 
 
 if __name__ == "__main__":  # pragma: no cover

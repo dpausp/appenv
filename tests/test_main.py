@@ -22,13 +22,17 @@ def mock_ensure_python(monkeypatch):
 
 
 def test_main_shows_usage_without_subcommand(monkeypatch, capsys):
+    """Test that calling appenv without subcommand shows usage."""
     mock_ensure_python(monkeypatch)
     monkeypatch.setattr("sys.argv", ["appenv"])
+    monkeypatch.setattr(appenv, "__file__", "/some/path/appenv")
 
-    appenv.main()
+    # Should exit with usage message
+    with pytest.raises(SystemExit):
+        appenv.main()
 
     captured = capsys.readouterr()
-    assert "usage:" in captured.out.lower()
+    assert "usage: appenv" in captured.out
 
 
 def test_main_clears_pythonpath(monkeypatch):
@@ -38,8 +42,10 @@ def test_main_clears_pythonpath(monkeypatch):
     monkeypatch.setenv("PYTHONPATH", "/some/path")
     assert "PYTHONPATH" in os.environ
 
-    appenv.main()
+    with pytest.raises(SystemExit):
+        appenv.main()
 
+    # PYTHONPATH should still be cleared before the exit
     assert "PYTHONPATH" not in os.environ
 
 
@@ -68,14 +74,16 @@ def test_main_calls_meta_when_appenv(monkeypatch):
     mock_ensure_python(monkeypatch)
 
     meta_called = []
-    monkeypatch.setattr(appenv.AppEnv, "meta", lambda self: meta_called.append(True))
+    monkeypatch.setattr(
+        appenv.AppEnv, "meta", lambda self, args: meta_called.append(args)
+    )
 
     monkeypatch.setattr("sys.argv", ["appenv"])
     monkeypatch.setattr(appenv, "__file__", "/some/path/appenv")
 
     appenv.main()
 
-    assert meta_called == [True]
+    assert meta_called == [["help"]]
 
 
 # cmd() tests
@@ -1178,7 +1186,7 @@ def test_main_calls_ensure_best_python(monkeypatch, workdir):
         "ensure_best_python",
         lambda b: called.append("pyproject"),
     )
-    monkeypatch.setattr(appenv.AppEnv, "meta", lambda self: None)
+    monkeypatch.setattr(appenv.AppEnv, "meta", lambda self, args: None)
     monkeypatch.setattr(appenv, "__file__", str(base / "appenv"))
     monkeypatch.setattr("sys.argv", ["appenv"])
 
