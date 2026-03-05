@@ -42,6 +42,7 @@ def patterns(request):
         def __init__(self, original):
             self._original = original
             self._merged = False
+            self._current_key = None
 
         def merge(self, *args, **kwargs):
             result = self._original.merge(*args, **kwargs)
@@ -53,20 +54,29 @@ def patterns(request):
 
                 # Store in global collection
                 key = f"{test_file}::{test_name}"
+                self._current_key = key
                 if key not in _pattern_examples:
                     _pattern_examples[key] = {
                         "file": test_file,
                         "test": test_name,
                         "examples": [],
                     }
-                _pattern_examples[key]["examples"].append(example)
+                # Store as dict with expected, actual will be filled in __eq__
+                _pattern_examples[key]["examples"].append(
+                    {"expected": example, "actual": None}
+                )
             except Exception:
                 pass  # Silently ignore if example generation fails
 
             return result
 
-        def __eq__(self, other):
-            return self._original == other
+        def __eq__(self, actual):
+            # Store actual output when comparison happens
+            if self._current_key and self._current_key in _pattern_examples:
+                examples = _pattern_examples[self._current_key]["examples"]
+                if examples and examples[-1].get("actual") is None:
+                    examples[-1]["actual"] = actual
+            return self._original == actual
 
         def __getattr__(self, name):
             return getattr(self._original, name)
@@ -120,7 +130,17 @@ def pytest_sessionfinish(session, exitstatus):
                 f.write(f"### {test_display}\n\n")
 
                 for example in test_data["examples"]:
-                    f.write(f"```\n{example}\n```\n\n")
+                    # Handle both old format (string) and new format (dict)
+                    if isinstance(example, dict):
+                        f.write("**Expected:**\n\n")
+                        f.write(f"```\n{example.get('expected', 'N/A')}\n```\n\n")
+                        actual = example.get("actual")
+                        if actual is not None:
+                            f.write("**Actual:**\n\n")
+                            f.write(f"```\n{actual}\n```\n\n")
+                    else:
+                        # Legacy format
+                        f.write(f"```\n{example}\n```\n\n")
 
             f.write("---\n\n")
 
