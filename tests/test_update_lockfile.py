@@ -33,7 +33,7 @@ def _setup_pyproject_project(workdir, name="ducker", deps=None):
     return base
 
 
-def test_update_lockfile_pyproject_workflow(workdir, monkeypatch, capsys):
+def test_update_lockfile_pyproject_workflow(workdir, monkeypatch, capsys, patterns):
     """pyproject.toml mode should use uv lock and create uv.lock.
 
     The working directory is set correctly via os.chdir, so uv finds
@@ -80,7 +80,10 @@ dependencies = ["click"]
 
     # Verify it detected pyproject mode
     captured = capsys.readouterr()
-    assert "update_lockfile" in captured.out
+    patterns.any.optional("...")
+    patterns.main.merge("any")
+    patterns.main.in_order("update_lockfile")
+    assert patterns.main == captured.out
 
     # Verify uv.lock was created
     assert (app_dir / "uv.lock").exists()
@@ -119,9 +122,14 @@ def test_update_lockfile_verbose_output(workdir, monkeypatch, capsys, patterns):
     env.update_lockfile()
 
     captured = capsys.readouterr()
-    # Check output contains key info
-    assert "Reading:" in captured.out
-    assert "Lockfile:" in captured.out
+    patterns.any.optional("...")
+    patterns.main.merge("any")
+    patterns.main.in_order(
+        """\
+...Reading:...
+...Lockfile:..."""
+    )
+    assert patterns.main == captured.out
 
 
 # captured unused - removed

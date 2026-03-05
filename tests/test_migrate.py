@@ -8,7 +8,7 @@ import appenv
 
 
 def test_migrate_uses_python_preference_from_requirements(
-    tmp_path, monkeypatch, capsys
+    tmp_path, monkeypatch, capsys, patterns
 ):
     """migrate reads python preference from requirements.txt."""
     monkeypatch.chdir(tmp_path)
@@ -32,11 +32,19 @@ def test_migrate_uses_python_preference_from_requirements(
 
     # Check output mentions the preference
     captured = capsys.readouterr()
-    assert "python preference" in captured.out
-    assert "3.12" in captured.out
+    patterns.any.optional("...")
+    patterns.main.merge("any")
+    patterns.main.in_order(
+        """\
+...
+Found python preference: 3.12, 3.13, 3.14
+Using minimum version: 3.12
+..."""
+    )
+    assert patterns.main == captured.out
 
 
-def test_migrate_editable_warnings(tmp_path, monkeypatch, capsys):
+def test_migrate_editable_warnings(tmp_path, monkeypatch, capsys, patterns):
     """migrate warns about editable installs during migration."""
     monkeypatch.chdir(tmp_path)
     base = tmp_path
@@ -55,8 +63,14 @@ def test_migrate_editable_warnings(tmp_path, monkeypatch, capsys):
 
     # Check output mentions editable installs warning
     captured = capsys.readouterr()
-    assert "editable" in captured.out.lower()
-    assert "-e /path/to/local/pkg" in captured.out
+    patterns.any.optional("...")
+    patterns.main.merge("any")
+    patterns.main.in_order(
+        """\
+...warning: 2 editable install(s) skipped:...
+...-e /path/to/local/pkg..."""
+    )
+    assert patterns.main == captured.out.lower()
 
     # Check pyproject.toml was created without editable installs
     pyproject = (base / "pyproject.toml").read_text()
@@ -65,7 +79,7 @@ def test_migrate_editable_warnings(tmp_path, monkeypatch, capsys):
     assert "click" in pyproject
 
 
-def test_migrate_already_exists(tmp_path, monkeypatch, capsys):
+def test_migrate_already_exists(tmp_path, monkeypatch, capsys, patterns):
     """migrate returns early when pyproject.toml already exists."""
     monkeypatch.chdir(tmp_path)
     base = tmp_path
@@ -80,11 +94,19 @@ def test_migrate_already_exists(tmp_path, monkeypatch, capsys):
 
     # Check output mentions "already has [project]" message
     captured = capsys.readouterr()
-    assert "already has [project]" in captured.out
-    assert "Nothing to do" in captured.out
+    patterns.any.optional("...")
+    patterns.main.merge("any")
+    patterns.main.in_order(
+        """\
+...already has [project]...
+...Nothing to do."""
+    )
+    assert patterns.main == captured.out
 
 
-def test_migrate_merges_with_tool_only_pyproject(tmp_path, monkeypatch, capsys):
+def test_migrate_merges_with_tool_only_pyproject(
+    tmp_path, monkeypatch, capsys, patterns
+):
     """migrate adds [project] section to pyproject.toml with only tool configs."""
     monkeypatch.chdir(tmp_path)
     base = tmp_path
@@ -109,11 +131,17 @@ def test_migrate_merges_with_tool_only_pyproject(tmp_path, monkeypatch, capsys):
     assert '"requests>=2.0"' in pyproject
 
     captured = capsys.readouterr()
-    assert "Adding [project] section" in captured.out
-    assert "Updated pyproject.toml" in captured.out
+    patterns.any.optional("...")
+    patterns.main.merge("any")
+    patterns.main.in_order(
+        """\
+...Adding [project] section...
+...Updated pyproject.toml..."""
+    )
+    assert patterns.main == captured.out
 
 
-def test_migrate_existing_symlinks(tmp_path, monkeypatch, capsys):
+def test_migrate_existing_symlinks(tmp_path, monkeypatch, capsys, patterns):
     """migrate detects and preserves existing symlinks during migration."""
     monkeypatch.chdir(tmp_path)
     base = tmp_path
@@ -137,8 +165,13 @@ def test_migrate_existing_symlinks(tmp_path, monkeypatch, capsys):
 
     # Check output mentions existing symlink
     captured = capsys.readouterr()
-    assert "existing symlink" in captured.out.lower()
-    assert "myapp" in captured.out
+    patterns.any.optional("...")
+    patterns.main.merge("any")
+    patterns.main.in_order(
+        """\
+...existing symlink...myapp..."""
+    )
+    assert patterns.main == captured.out.lower()
 
     # Verify symlink still exists and points to appenv
     assert myapp_link.exists()
@@ -192,7 +225,7 @@ def test_migrate_uses_directory_name(tmp_path, monkeypatch, capsys):
     assert "Migrating" in captured.out
 
 
-def test_migrate_no_requirements_txt(workdir, monkeypatch, capsys):
+def test_migrate_no_requirements_txt(workdir, monkeypatch, capsys, patterns):
     """Lines 888-890: migrate() returns early when requirements.txt not found."""
     base = Path(workdir)
 
@@ -303,7 +336,9 @@ def test_extract_package_name_from_path_missing_dir(tmp_path):
 # Tests for init_pyproject with editable installs
 
 
-def test_migrate_editable_with_valid_local_package(tmp_path, monkeypatch, capsys):
+def test_migrate_editable_with_valid_local_package(
+    tmp_path, monkeypatch, capsys, patterns
+):
     """init_pyproject converts -e ./path to proper uv.sources entry."""
     monkeypatch.chdir(tmp_path)
     base = tmp_path
@@ -336,8 +371,8 @@ def test_migrate_editable_with_valid_local_package(tmp_path, monkeypatch, capsys
 
     # Check output mentions editable
     captured = capsys.readouterr()
-    assert "editable" in captured.out.lower()
-    assert "my-local-lib" in captured.out
+    assert "editable install" in captured.out.lower()
+    assert "my-local-lib" in captured.out.lower()
 
 
 def test_migrate_editable_with_setup_py(tmp_path, monkeypatch, capsys):
@@ -466,7 +501,9 @@ def test_migrate_editable_with_extras(tmp_path, monkeypatch, capsys):
     assert "[tool.uv.sources]" in pyproject
 
 
-def test_migrate_editable_missing_package_warns(tmp_path, monkeypatch, capsys):
+def test_migrate_editable_missing_package_warns(
+    tmp_path, monkeypatch, capsys, patterns
+):
     """init_pyproject warns when editable path has no package metadata."""
     monkeypatch.chdir(tmp_path)
     base = tmp_path
@@ -486,8 +523,9 @@ def test_migrate_editable_missing_package_warns(tmp_path, monkeypatch, capsys):
 
     # Check warning in output
     captured = capsys.readouterr()
+    assert "warning" in captured.out.lower()
     assert "skipped" in captured.out.lower()
-    assert "empty-dir" in captured.out
+    assert "empty-dir" in captured.out.lower()
 
     # pyproject.toml should still have requests
     pyproject = (base / "pyproject.toml").read_text()
@@ -495,7 +533,7 @@ def test_migrate_editable_missing_package_warns(tmp_path, monkeypatch, capsys):
     assert "[tool.uv.sources]" not in pyproject
 
 
-def test_migrate_editable_git_url_warns(tmp_path, monkeypatch, capsys):
+def test_migrate_editable_git_url_warns(tmp_path, monkeypatch, capsys, patterns):
     """init_pyproject warns for git URL editable (not supported)."""
     monkeypatch.chdir(tmp_path)
     base = tmp_path
@@ -513,6 +551,7 @@ def test_migrate_editable_git_url_warns(tmp_path, monkeypatch, capsys):
 
     # Check warning
     captured = capsys.readouterr()
+    assert "warning" in captured.out.lower()
     assert "skipped" in captured.out.lower()
     assert "unsupported format" in captured.out.lower()
 
@@ -580,7 +619,9 @@ def test_migrate_editable_bare_path_gets_prefix(tmp_path, monkeypatch, capsys):
     assert 'path = "./bare-pkg"' in pyproject
 
 
-def test_migrate_editable_mixed_valid_and_invalid(tmp_path, monkeypatch, capsys):
+def test_migrate_editable_mixed_valid_and_invalid(
+    tmp_path, monkeypatch, capsys, patterns
+):
     """init_pyproject handles mix of valid and invalid editables."""
     monkeypatch.chdir(tmp_path)
     base = tmp_path
@@ -613,11 +654,12 @@ def test_migrate_editable_mixed_valid_and_invalid(tmp_path, monkeypatch, capsys)
 
     # Check warning for invalid
     captured = capsys.readouterr()
+    assert "warning" in captured.out.lower()
     assert "skipped" in captured.out.lower()
-    assert "empty-dir" in captured.out
+    assert "empty-dir" in captured.out.lower()
 
 
-def test_migrate_editable_warnings_updated(tmp_path, monkeypatch, capsys):
+def test_migrate_editable_warnings_updated(tmp_path, monkeypatch, capsys, patterns):
     """init_pyproject warns about unsupported editable formats (git URLs, etc)."""
     monkeypatch.chdir(tmp_path)
     base = tmp_path
@@ -638,8 +680,15 @@ def test_migrate_editable_warnings_updated(tmp_path, monkeypatch, capsys):
 
     # Check output mentions editable installs warning
     captured = capsys.readouterr()
-    assert "editable" in captured.out.lower()
-    assert "skipped" in captured.out.lower()
+    patterns.any.optional("...")
+    patterns.main.merge("any")
+    patterns.main.in_order(
+        """\
+...
+warning: 2 editable install(s) skipped:
+..."""
+    )
+    assert patterns.main == captured.out.lower()
 
     # Check pyproject.toml was created with only regular deps
     pyproject = (base / "pyproject.toml").read_text()

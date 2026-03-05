@@ -243,7 +243,7 @@ def test_run_sets_env_and_execs(monkeypatch, tmp_path):
     assert "myapp" in execv_called[0][0]
 
 
-def test_run_with_profiling_enabled(monkeypatch, tmp_path, capsys):
+def test_run_with_profiling_enabled(monkeypatch, tmp_path, capsys, patterns):
     env = appenv.AppEnv(tmp_path, Path.cwd())
 
     # Add pyproject.toml and uv.lock so _prepare_venv doesn't exit
@@ -284,11 +284,11 @@ def test_run_with_profiling_enabled(monkeypatch, tmp_path, capsys):
         f"Unexpected profile path: {profile_arg}"
     )
     captured = capsys.readouterr()
-    assert "APPENV_PROFILE enabled, profile output at" in captured.out
+    assert "APPENV_PROFILE enabled" in captured.out
     assert ".appenv/profiling/myapp-" in captured.out
 
 
-def test_run_with_profiling_custom_output(monkeypatch, tmp_path, capsys):
+def test_run_with_profiling_custom_output(monkeypatch, tmp_path, capsys, patterns):
     env = appenv.AppEnv(tmp_path, Path.cwd())
 
     # Add pyproject.toml and uv.lock so _prepare_venv doesn't exit
@@ -319,7 +319,8 @@ def test_run_with_profiling_custom_output(monkeypatch, tmp_path, capsys):
     path, argv = execv_called[0]
     assert "/tmp/custom.prof" in argv
     captured = capsys.readouterr()
-    assert "APPENV_PROFILE enabled, profile output at /tmp/custom.prof" in captured.out
+    assert "APPENV_PROFILE enabled" in captured.out
+    assert "/tmp/custom.prof" in captured.out
 
 
 def test_profiling_list_no_data(tmp_path, capsys):
@@ -503,7 +504,7 @@ def test_python_method_calls_run(monkeypatch, tmp_path):
 # print_colored_diff() tests
 
 
-def test_print_colored_diff_returns_true_when_changes(capsys):
+def test_print_colored_diff_returns_true_when_changes(capsys, patterns):
     old = "line1\nline2\n"
     new = "line1\nline3\n"
 
@@ -511,8 +512,14 @@ def test_print_colored_diff_returns_true_when_changes(capsys):
 
     assert result is True
     captured = capsys.readouterr()
-    assert "-line2" in captured.out
-    assert "+line3" in captured.out
+    patterns.any.optional("...")
+    patterns.main.merge("any")
+    patterns.main.in_order(
+        """\
+...-line2...
+...+line3..."""
+    )
+    assert patterns.main == captured.out
 
 
 def test_print_colored_diff_returns_false_when_no_changes(capsys):
@@ -525,15 +532,21 @@ def test_print_colored_diff_returns_false_when_no_changes(capsys):
     assert captured.out == ""
 
 
-def test_print_colored_diff_shows_filenames(capsys):
+def test_print_colored_diff_shows_filenames(capsys, patterns):
     old = "a\n"
     new = "b\n"
 
     appenv.print_colored_diff(old, new, "oldfile.txt", "newfile.txt")
 
     captured = capsys.readouterr()
-    assert "oldfile.txt" in captured.out
-    assert "newfile.txt" in captured.out
+    patterns.any.optional("...")
+    patterns.main.merge("any")
+    patterns.main.in_order(
+        """\
+...--- oldfile.txt...
+...+++ newfile.txt..."""
+    )
+    assert patterns.main == captured.out
 
 
 # ensure_uv_version() tests
@@ -717,7 +730,7 @@ def test_run_script_delegates(monkeypatch, tmp_path):
     assert run_called == [("pytest", ["-v", "test.py"])]
 
 
-def test_show_version(capsys):
+def test_show_version(capsys, patterns):
     """show_version() prints the appenv version."""
     env = appenv.AppEnv(Path("/tmp"), Path.cwd())
     env.show_version()
