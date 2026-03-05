@@ -15,7 +15,7 @@
 # - provide a `clone` meta command to create a new project based on this one
 #   maybe use an entry point to allow further initialisation of the clone.
 
-__version__ = "2026.2.0"
+__version__ = "2026.3.5"
 
 import argparse
 import difflib
@@ -565,13 +565,12 @@ class AppEnv:
             args.func(args, remaining)
 
     def run(self, command, argv):
-        env_dir = Path(self.prepare())
+        env_dir = Path(self._prepare_venv())
         cmd_path = env_dir / "bin" / command
         argv = [str(cmd_path)] + argv
         os.environ["APPENV_BASEDIR"] = str(self.base)
         os.chdir(self.original_cwd)
 
-        # Profiling support via APPENV_PROFILE=1
         if os.environ.get("APPENV_PROFILE"):
             if os.environ.get("APPENV_PROFILE_OUTPUT"):
                 profile_output = os.environ["APPENV_PROFILE_OUTPUT"]
@@ -580,7 +579,7 @@ class AppEnv:
                 profiling_dir.mkdir(parents=True, exist_ok=True)
                 timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
                 profile_output = str(profiling_dir / f"{command}-{timestamp}.prof")
-            print(f"Profile written to: {profile_output}")
+            print(f"APPENV_PROFILE enabled, profile output at {profile_output}")
             venv_python = env_dir / "bin" / "python"
             os.execv(
                 str(venv_python),
@@ -591,18 +590,19 @@ class AppEnv:
                     "-o",
                     profile_output,
                     str(cmd_path),
-                ]
-                + argv[1:],
+                    *argv[1:],
+                ],
             )
         else:
             os.execv(str(cmd_path), argv)
 
-    def _prepare_venv(self, include_dev=False, frozen=True):
+    def _prepare_venv(self, dev_mode=False):
         """Shared venv preparation logic.
 
         Args:
-            include_dev: If True, include dev dependency groups.
-            frozen: If True, use --frozen flag for strict lockfile adherence.
+            dev_mode:
+              - If True, include dev dependency group
+              - If False, use --frozen flag for strict lockfile adherence.
         """
         if not has_pyproject(self.base):
             print(f"No {PYPROJECT_TOML} found.")
@@ -615,8 +615,6 @@ class AppEnv:
         lock_file = self.base / UV_LOCK
         old_appenv = self.appenv_dir
         pyproject_file = self.base / PYPROJECT_TOML
-
-        verbose_print("Workflow: pyproject.toml (uv native)")
 
         # Ensure uv.lock exists
         if not lock_file.exists():
@@ -635,6 +633,7 @@ class AppEnv:
         verbose_print(f"venv: {venv_real}")
         verbose_print(f"uv binary: {uv_bin}")
         verbose_print(f"Python: {Path(sys.executable).resolve()}")
+        verbose_print(f"Dev mode: {dev_mode}")
 
         # Ensure .appenv directory exists
         if not self.appenv_dir.exists():
@@ -647,37 +646,24 @@ class AppEnv:
                 shutil.rmtree(venv_real)
             verbose_print("Creating venv with uv ...")
             # Use current Python (already selected by ensure_best_python)
-            # Explicit path avoids uv downloading its own (breaks on NixOS)
+            # Explicit path avoids uv downloading its own (breaks on NixOS, for example)
             uv_cmd(["venv", "--python", sys.executable, str(venv_real)])
 
         # Sync dependencies (idempotent)
+        sync_args = ["sync"]
+
+        if not dev_mode:
+            sync_args.extend(["--no-dev", "--frozen"])
+
         extras = [
             e.strip()
             for e in os.environ.get("APPENV_EXTRAS", "").split(",")
             if e.strip()
         ]
-        sync_args = ["sync"]
-        if frozen:
-            sync_args.append("--frozen")
-        if include_dev:
-            sync_args.extend(["--group", "dev"])
-            if frozen:
-                verbose_print(
-                    "Syncing with dev dependencies (uv sync --frozen --group dev) ..."
-                )
-            else:
-                verbose_print("Syncing with dev dependencies (uv sync --group dev) ...")
-        else:
-            sync_args.append("--no-dev")
-            if frozen:
-                verbose_print("Syncing dependencies (uv sync --frozen --no-dev) ...")
-            else:
-                verbose_print("Syncing dependencies (uv sync --no-dev) ...")
+        verbose_print(f"prepare_venv activated extras/optional deps: {extras}")
+        sync_args.extend([arg for e in extras for arg in ("--extra", e)])
 
-        if extras:
-            sync_args.extend([arg for e in extras for arg in ("--extra", e)])
-            verbose_print(f"  with extras: {', '.join(extras)}")
-
+        verbose_print(f"prepare_venv uv args: {sync_args}")
         uv_cmd(sync_args)
 
         # Show venv python info AFTER sync (version may have changed)
@@ -716,12 +702,12 @@ class AppEnv:
         return str(venv_real)
 
     def prepare(self, args=None, remaining=None):
-        """Prepare the venv with production dependencies only."""
-        return self._prepare_venv(include_dev=False)
+        """Prepare venv with production dependencies only."""
+        return self._prepare_venv()
 
     def develop(self, args=None, remaining=None):
         """Prepare the venv with dev dependencies."""
-        return self._prepare_venv(include_dev=True, frozen=False)
+        return self._prepare_venv(dev_mode=True)
 
     def init(self, args=None, remaining=None):
         """Create a new pyproject.toml project."""
@@ -1245,7 +1231,6 @@ def main():
     base = Path(__file__).parent
     original_cwd = Path.cwd()
 
-    # Select best Python for pyproject.toml workflow
     ensure_best_python(base)
 
     # Clear PYTHONPATH to ensure clean isolated environment.
