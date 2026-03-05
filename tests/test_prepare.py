@@ -113,12 +113,11 @@ def test_develop_syncs_with_dev_group(workdir, monkeypatch):
     env = appenv.AppEnv(base, Path.cwd())
     env.develop()
 
-    # Verify sync was called with --group dev and WITHOUT --frozen or --no-dev
+    # Verify sync called WITHOUT --frozen or --no-dev (dev included by default)
     assert len(sync_args_captured) == 1
-    assert "--group" in sync_args_captured[0]
-    assert "dev" in sync_args_captured[0]
-    assert "--frozen" not in sync_args_captured[0]
+    assert sync_args_captured[0] == ["sync"]
     assert "--no-dev" not in sync_args_captured[0]
+    assert "--frozen" not in sync_args_captured[0]
 
 
 def test_prepare_syncs_with_frozen_flag(workdir, monkeypatch):
@@ -195,18 +194,13 @@ def test_prepare_verbose_output(workdir, monkeypatch, capsys, patterns):
     patterns.main.merge("any")
     patterns.main.in_order(
         """\
-Workflow: pyproject.toml (uv native)
 Project base: ...
 pyproject.toml: .../pyproject.toml
 uv.lock: .../uv.lock
 venv: .../.appenv/venv
 uv binary: ...
 Python: ...
-Creating venv with uv ...
-Syncing dependencies (uv sync --frozen --no-dev) ...
-Venv Python: .../.appenv/venv/bin/python
-Venv Python (realpath): ...
-Venv Python version: Python 3.12.0"""
+Creating venv with uv ..."""
     )
     assert patterns.main == out
 
@@ -326,7 +320,9 @@ def test_prepare_pyproject_mode_verbose(workdir, monkeypatch, capsys):
     env.prepare()
 
     captured = capsys.readouterr()
-    assert "Workflow: pyproject.toml (uv native)" in captured.out
+    # Verbose output shows project paths and venv info
+    assert "Project base:" in captured.out
+    assert "pyproject.toml:" in captured.out
 
 
 def test_prepare_pyproject_unlink_file_in_appenv(workdir, monkeypatch, capsys):

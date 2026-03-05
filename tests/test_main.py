@@ -209,6 +209,10 @@ def test_meta_calls_run_script(monkeypatch, tmp_path):
 def test_run_sets_env_and_execs(monkeypatch, tmp_path):
     env = appenv.AppEnv(tmp_path, Path.cwd())
 
+    # Add pyproject.toml and uv.lock so _prepare_venv doesn't exit
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"\n')
+    (tmp_path / "uv.lock").write_text("version = 1\n")
+
     env_dir = tmp_path / ".appenv" / "abc123"
     env_dir.mkdir(parents=True)
     bin_dir = env_dir / "bin"
@@ -233,6 +237,10 @@ def test_run_sets_env_and_execs(monkeypatch, tmp_path):
 
 def test_run_with_profiling_enabled(monkeypatch, tmp_path, capsys):
     env = appenv.AppEnv(tmp_path, Path.cwd())
+
+    # Add pyproject.toml and uv.lock so _prepare_venv doesn't exit
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"\n')
+    (tmp_path / "uv.lock").write_text("version = 1\n")
 
     env_dir = tmp_path / ".appenv" / "abc123"
     env_dir.mkdir(parents=True)
@@ -268,12 +276,16 @@ def test_run_with_profiling_enabled(monkeypatch, tmp_path, capsys):
         f"Unexpected profile path: {profile_arg}"
     )
     captured = capsys.readouterr()
-    assert "Profile written to:" in captured.out
+    assert "APPENV_PROFILE enabled, profile output at" in captured.out
     assert ".appenv/profiling/myapp-" in captured.out
 
 
 def test_run_with_profiling_custom_output(monkeypatch, tmp_path, capsys):
     env = appenv.AppEnv(tmp_path, Path.cwd())
+
+    # Add pyproject.toml and uv.lock so _prepare_venv doesn't exit
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"\n')
+    (tmp_path / "uv.lock").write_text("version = 1\n")
 
     env_dir = tmp_path / ".appenv" / "abc123"
     env_dir.mkdir(parents=True)
@@ -299,7 +311,7 @@ def test_run_with_profiling_custom_output(monkeypatch, tmp_path, capsys):
     path, argv = execv_called[0]
     assert "/tmp/custom.prof" in argv
     captured = capsys.readouterr()
-    assert "Profile written to: /tmp/custom.prof" in captured.out
+    assert "APPENV_PROFILE enabled, profile output at /tmp/custom.prof" in captured.out
 
 
 def test_profiling_list_no_data(tmp_path, capsys):
