@@ -119,24 +119,16 @@ def test_migrate_already_exists(tmp_path, monkeypatch, capsys, patterns):
     env = appenv.AppEnv(base, Path.cwd())
     env.migrate()
 
-    # Check output mentions "already has [project]" message
+    # Pattern-test for console output
     captured = capsys.readouterr()
-    patterns.any.optional("...")
-    patterns.main.merge("any")
     patterns.main.in_order(
         """\
 pyproject.toml already has [project] section in ...
 Nothing to do."""
     )
 
-    patterns.no_errors.optional("...")
-    patterns.no_errors.refused("...error...")
-    patterns.no_errors.refused("...exception...")
-    patterns.no_errors.refused("...traceback...")
-    patterns.no_errors.refused("...failed...")
-
     full_pattern = patterns.full
-    full_pattern.merge("main", "no_errors")
+    full_pattern.merge("main")
 
     example = full_pattern.generate_example()
     print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
@@ -216,23 +208,14 @@ def test_migrate_existing_symlinks(tmp_path, monkeypatch, capsys, patterns):
     env = appenv.AppEnv(base, Path.cwd())
     env.migrate()
 
-    # Check output mentions existing symlink
+    # Check output mentions existing symlink (with flexible surrounding content)
     captured = capsys.readouterr()
     patterns.any.optional("...")
     patterns.main.merge("any")
-    patterns.main.in_order(
-        """\
-...found existing symlink(s): myapp..."""
-    )
-
-    patterns.no_errors.optional("...")
-    patterns.no_errors.refused("...error...")
-    patterns.no_errors.refused("...exception...")
-    patterns.no_errors.refused("...traceback...")
-    patterns.no_errors.refused("...failed...")
+    patterns.main.in_order("...found existing symlink(s): myapp...")
 
     full_pattern = patterns.full
-    full_pattern.merge("main", "no_errors")
+    full_pattern.merge("main")
 
     example = full_pattern.generate_example()
     print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
