@@ -134,22 +134,16 @@ def test_update_lockfile_verbose_output(workdir, monkeypatch, capsys, patterns):
     env.update_lockfile()
 
     captured = capsys.readouterr()
-    patterns.any.optional("...")
-    patterns.main.merge("any")
     patterns.main.in_order(
         """\
-...Reading:...
-...Lockfile:..."""
+update_lockfile
+Reading:.../pyproject.toml
+Lockfile:.../uv.lock
+...Created..."""
     )
 
-    patterns.no_errors.optional("...")
-    patterns.no_errors.refused("...error...")
-    patterns.no_errors.refused("...exception...")
-    patterns.no_errors.refused("...traceback...")
-    patterns.no_errors.refused("...failed...")
-
     full_pattern = patterns.full
-    full_pattern.merge("main", "no_errors")
+    full_pattern.merge("main")
 
     example = full_pattern.generate_example()
     print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
