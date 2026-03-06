@@ -512,12 +512,16 @@ def test_print_colored_diff_returns_true_when_changes(capsys, patterns):
 
     assert result is True
     captured = capsys.readouterr()
-    patterns.any.optional("...")
-    patterns.main.merge("any")
+    output = re.sub(r"\x1b\[[0-9;]*m", "", captured.out)
+
     patterns.main.in_order(
         """\
-...-line2...
-...+line3..."""
+--- old.txt
++++ new.txt
+@@ -1,2 +1,2 @@
+ line1
+-line2
++line3"""
     )
 
     patterns.no_errors.optional("...")
@@ -532,7 +536,7 @@ def test_print_colored_diff_returns_true_when_changes(capsys, patterns):
     example = full_pattern.generate_example()
     print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
 
-    assert full_pattern == captured.out
+    assert full_pattern == output
 
 
 def test_print_colored_diff_returns_false_when_no_changes(capsys):
@@ -552,12 +556,15 @@ def test_print_colored_diff_shows_filenames(capsys, patterns):
     appenv.print_colored_diff(old, new, "oldfile.txt", "newfile.txt")
 
     captured = capsys.readouterr()
-    patterns.any.optional("...")
-    patterns.main.merge("any")
+    output = re.sub(r"\x1b\[[0-9;]*m", "", captured.out)
+
     patterns.main.in_order(
         """\
-...--- oldfile.txt...
-...+++ newfile.txt..."""
+--- oldfile.txt
++++ newfile.txt
+@@ -1 +1 @@
+-a
++b"""
     )
 
     patterns.no_errors.optional("...")
@@ -572,7 +579,7 @@ def test_print_colored_diff_shows_filenames(capsys, patterns):
     example = full_pattern.generate_example()
     print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
 
-    assert full_pattern == captured.out
+    assert full_pattern == output
 
 
 # ensure_uv_version() tests
@@ -856,6 +863,7 @@ def test_settings_shows_set_values(patterns, monkeypatch):
         "APPENV_PROFILE_OUTPUT",
         "APPENV_BASEDIR",
         "APPENV_BEST_PYTHON",
+        "UV_PROJECT_ENVIRONMENT",
     ]:
         monkeypatch.delenv(var, raising=False)
 
@@ -892,15 +900,14 @@ appenv environment:
   APPENV_BEST_PYTHON: (not set)
     Selected Python interpreter
 <empty-line>
-  UV_PROJECT_ENVIRONMENT: ...
+  UV_PROJECT_ENVIRONMENT: (not set)
     uv venv location
 <empty-line>
-  PYTHONPATH: ...
+  PYTHONPATH: (not set)
     Python module search path
 <empty-line>
   Base directory: /project
-  Current working directory: ...
-"""
+  Current working directory: ..."""
     )
 
     patterns.no_errors.optional("...")
