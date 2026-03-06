@@ -89,13 +89,25 @@ def test_migrate_editable_warnings(tmp_path, monkeypatch, capsys, patterns):
 
     # Pattern-test for console output
     captured = capsys.readouterr()
-    patterns.any.optional("...")
-    patterns.main.merge("any")
     patterns.main.in_order(
         """\
-...warning: 2 editable install(s) skipped:
-...-e /path/to/local/pkg...
-...-e ../another-pkg..."""
+migrating from requirements.txt to pyproject.toml...
+
+<empty-line>
+warning: 2 editable install(s) skipped:
+  - -e /path/to/local/pkg (no pyproject.toml or setup.py found)
+  - -e ../another-pkg (no pyproject.toml or setup.py found)
+add them manually to pyproject.toml if needed.
+
+<empty-line>
+found 2 dependency(ies): requests, click
+
+<empty-line>
+created pyproject.toml...
+...done. pyproject.toml created...
+
+<empty-line>
+requirements.txt kept as legacy..."""
     )
 
     patterns.no_errors.optional("...")
