@@ -244,7 +244,14 @@ def test_migrate_existing_symlinks(tmp_path, monkeypatch, capsys, patterns):
     captured = capsys.readouterr()
     patterns.any.optional("...")
     patterns.main.merge("any")
-    patterns.main.in_order("...found existing symlink(s): myapp...")
+    patterns.main.in_order(
+        """\
+...created pyproject.toml
+found existing symlink(s): myapp
+
+<empty-line>
+done. pyproject.toml created..."""
+    )
 
     full_pattern = patterns.full
     full_pattern.merge("main")
