@@ -174,8 +174,16 @@ def test_migrate_merges_with_tool_only_pyproject(
     patterns.main.merge("any")
     patterns.main.in_order(
         """\
-Adding [project] section to existing pyproject.toml...
-...Updated pyproject.toml..."""
+Adding [project] section to existing pyproject.toml.
+
+<empty-line>
+Migrating from requirements.txt to pyproject.toml...
+
+<empty-line>
+Found 1 dependency(ies): requests>=2.0
+
+<empty-line>
+Updated pyproject.toml..."""
     )
 
     patterns.no_errors.optional("...")
