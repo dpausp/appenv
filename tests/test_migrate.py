@@ -55,6 +55,20 @@ Using minimum version: 3.12..."""
 
     assert full_pattern == captured.out
 
+    # Pattern-test for pyproject.toml content with python preference
+    patterns.toml_pyproject.optional("...")
+    patterns.toml_pyproject.in_order(
+        """\
+...[project]...
+..."requests"...
+...requires-python = ">=3.12"..."""
+    )
+
+    example_toml = patterns.toml_pyproject.generate_example()
+    print(f"\n=== TOML Python Preference Pattern ===\n{example_toml}\n=== End ===\n")
+
+    assert patterns.toml_pyproject == pyproject
+
 
 def test_migrate_editable_warnings(tmp_path, monkeypatch, capsys, patterns):
     """migrate warns about editable installs during migration."""
@@ -178,12 +192,22 @@ Adding [project] section to existing pyproject.toml...
 
     assert full_pattern == captured.out
 
-    # Classic assertions for pyproject.toml structure
-    assert "[tool.ruff]" in pyproject
-    assert "[tool.pytest]" in pyproject
-    assert "[project]" in pyproject
-    assert 'name = "' in pyproject
-    assert '"requests>=2.0"' in pyproject
+    # Pattern-test for pyproject.toml content
+    patterns.toml_content.optional("...")
+    patterns.toml_content.in_order(
+        """\
+...[tool.ruff]...
+...[tool.pytest]...
+...[project]...
+...name =...
+...dependencies...
+..."requests>=2.0"..."""
+    )
+
+    example_toml = patterns.toml_content.generate_example()
+    print(f"\n=== TOML Pattern Example ===\n{example_toml}\n=== End ===\n")
+
+    assert patterns.toml_content == pyproject
 
 
 def test_migrate_existing_symlinks(tmp_path, monkeypatch, capsys, patterns):
@@ -449,6 +473,22 @@ found 2 dependency(ies): requests>=2.0, my-local-lib..."""
     print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
 
     assert full_pattern == captured.out.lower()
+
+    # Pattern-test for pyproject.toml content with uv.sources
+    patterns.toml_uvsources.optional("...")
+    patterns.toml_uvsources.in_order(
+        """\
+...[project]...
+..."requests>=2.0"...
+..."my-local-lib"...
+...[tool.uv.sources]...
+...my-local-lib = { path = "./local-lib", editable = true }..."""
+    )
+
+    example_toml = patterns.toml_uvsources.generate_example()
+    print(f"\n=== TOML uv.sources Pattern ===\n{example_toml}\n=== End ===\n")
+
+    assert patterns.toml_uvsources == pyproject
 
 
 def test_migrate_editable_with_setup_py(tmp_path, monkeypatch, capsys):

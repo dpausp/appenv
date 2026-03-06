@@ -26,7 +26,7 @@ _pattern_examples = {}
 
 @pytest.fixture
 def patterns(request):
-    """Enhanced patterns fixture that collects examples."""
+    """Enhanced patterns fixture that collects examples from all patterns."""
     from pytest_patterns.plugin import PatternsLib
 
     patterns_obj = PatternsLib()
@@ -35,55 +35,89 @@ def patterns(request):
     test_name = request.node.name
     test_file = request.node.fspath.basename
 
-    # Wrap the full pattern to collect examples
-    original_full = patterns_obj.full
-
     class PatternCollector:
-        def __init__(self, original):
-            self._original = original
+        """Wraps any pattern section to collect examples on merge or comparison."""
+
+        def __init__(self, original_pattern, section_name):
+            self._original = original_pattern
+            self._section_name = section_name
             self._merged = False
             self._current_key = None
+            self._collected = False
 
         def merge(self, *args, **kwargs):
             result = self._original.merge(*args, **kwargs)
             self._merged = True
+            self._collect_example()
+            return result
 
-            # Collect example after merge
+        def __eq__(self, actual):
+            # Collect example on first comparison if not already collected
+            if not self._collected:
+                self._collect_example()
+
+            # Store actual output when comparison happens
+            if self._current_key and self._current_key in _pattern_examples:
+                examples = _pattern_examples[self._current_key]["examples"]
+                if examples and examples[-1].get("actual") is None:
+                    examples[-1]["actual"] = actual
+
+            # Perform the actual comparison
+            result = self._original == actual
+            return result
+
+        def _collect_example(self):
+            """Collect example to global collection."""
+            if self._collected:
+                return
+
             try:
                 example = self._original.generate_example()
 
-                # Store in global collection
+                # Store in global collection with section label
                 key = f"{test_file}::{test_name}"
-                self._current_key = key
+                self._current_key = key  # Set key BEFORE appending to list
                 if key not in _pattern_examples:
                     _pattern_examples[key] = {
                         "file": test_file,
                         "test": test_name,
                         "examples": [],
                     }
-                # Store as dict with expected, actual will be filled in __eq__
+                # Store with section name for labeling
                 _pattern_examples[key]["examples"].append(
-                    {"expected": example, "actual": None}
+                    {
+                        "expected": example,
+                        "actual": None,
+                        "section": self._section_name,
+                    }
                 )
+                self._collected = True
             except Exception:
                 pass  # Silently ignore if example generation fails
-
-            return result
-
-        def __eq__(self, actual):
-            # Store actual output when comparison happens
-            if self._current_key and self._current_key in _pattern_examples:
-                examples = _pattern_examples[self._current_key]["examples"]
-                if examples and examples[-1].get("actual") is None:
-                    examples[-1]["actual"] = actual
-            return self._original == actual
 
         def __getattr__(self, name):
             return getattr(self._original, name)
 
-    patterns_obj.full = PatternCollector(original_full)  # type: ignore[attr-defined-but-dynamic]
+    class PatternsWrapper:
+        """Wraps PatternsLib to auto-collect all pattern sections."""
 
-    return patterns_obj
+        def __init__(self, original_obj):
+            self._original = original_obj
+            self._pattern_cache = {}
+
+        def __getattr__(self, name):
+            # Get original pattern section
+            original_pattern = getattr(self._original, name)
+
+            # Wrap it with collector if not already wrapped
+            if name not in self._pattern_cache:
+                self._pattern_cache[name] = PatternCollector(
+                    original_pattern, section_name=name
+                )
+
+            return self._pattern_cache[name]
+
+    return PatternsWrapper(patterns_obj)
 
 
 def pytest_sessionfinish(session, exitstatus):
@@ -132,6 +166,11 @@ def pytest_sessionfinish(session, exitstatus):
                 for example in test_data["examples"]:
                     # Handle both old format (string) and new format (dict)
                     if isinstance(example, dict):
+                        # Add section label if available
+                        section = example.get("section")
+                        if section and section != "full":
+                            f.write(f"**Pattern: {section}**\n\n")
+
                         f.write("**Expected:**\n\n")
                         f.write(f"```\n{example.get('expected', 'N/A')}\n```\n\n")
                         actual = example.get("actual")
