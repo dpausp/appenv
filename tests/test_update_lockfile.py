@@ -267,7 +267,10 @@ dependencies = ["click"]
 Checking lockfile changes ...
 --- uv.lock
 +++ uv.lock (new)
-...
+@@ -1,4 +1,4 @@
+ version = 1
+ [[package]]
+ name = 'click'
 -version = '8.0.0'
 +version = '8.1.0'"""
     )
