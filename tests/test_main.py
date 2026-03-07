@@ -898,7 +898,6 @@ appenv environment:
   Current working directory: ..."""
     )
 
-    patterns.no_errors.optional("...")
     patterns.no_errors.refused("...error...")
     patterns.no_errors.refused("...exception...")
     patterns.no_errors.refused("...traceback...")
@@ -906,9 +905,6 @@ appenv environment:
 
     full_pattern = patterns.full
     full_pattern.merge("set_values", "no_errors")
-
-    example = full_pattern.generate_example()
-    print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
 
     assert full_pattern == result
 
