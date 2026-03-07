@@ -727,8 +727,15 @@ def test_migrate_editable_git_url_warns(tmp_path, monkeypatch, capsys, patterns)
     patterns.main.merge("any")
     patterns.main.in_order(
         """\
-...warning...skipped...
-...git+https://github.com/user/repo.git..."""
+migrating from requirements.txt to pyproject.toml...
+
+<empty-line>
+warning: 1 editable install(s) skipped:
+  - -e ./empty-dir (no pyproject.toml or setup.py found)
+add them manually to pyproject.toml if needed.
+
+<empty-line>
+found 1 dependency(ies): requests..."""
     )
 
     patterns.no_errors.optional("...")
