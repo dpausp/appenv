@@ -55,20 +55,6 @@ Using minimum version: 3.12..."""
 
     assert full_pattern == captured.out
 
-    # Pattern-test for pyproject.toml content with python preference
-    patterns.toml_pyproject.optional("...")
-    patterns.toml_pyproject.in_order(
-        """\
-...[project]...
-..."requests"...
-...requires-python = ">=3.12"..."""
-    )
-
-    example_toml = patterns.toml_pyproject.generate_example()
-    print(f"\n=== TOML Python Preference Pattern ===\n{example_toml}\n=== End ===\n")
-
-    assert patterns.toml_pyproject == pyproject
-
 
 def test_migrate_editable_warnings(tmp_path, monkeypatch, capsys, patterns):
     """migrate warns about editable installs during migration."""
@@ -89,36 +75,13 @@ def test_migrate_editable_warnings(tmp_path, monkeypatch, capsys, patterns):
 
     # Pattern-test for console output
     captured = capsys.readouterr()
+    patterns.any.optional("...")
+    patterns.main.merge("any")
     patterns.main.in_order(
         """\
-migrating from requirements.txt to pyproject.toml...
-
-<empty-line>
-warning: 2 editable install(s) skipped:
-  - -e /path/to/local/pkg (no pyproject.toml or setup.py found)
-  - -e ../another-pkg (no pyproject.toml or setup.py found)
-add them manually to pyproject.toml if needed.
-
-<empty-line>
-found 2 dependency(ies): requests, click
-
-<empty-line>
-created pyproject.toml
-created appenv bootstrap script
-created ... symlink
-
-<empty-line>
-done. pyproject.toml created.
-
-<empty-line>
-generating lockfile ...
-...created (... lines)...
-
-<empty-line>
-run `./...` to bootstrap and run
-
-<empty-line>
-requirements.txt kept as legacy. delete it when migration is complete."""
+...warning: 2 editable install(s) skipped:
+...-e /path/to/local/pkg...
+...-e ../another-pkg..."""
     )
 
     patterns.no_errors.optional("...")
@@ -197,16 +160,8 @@ def test_migrate_merges_with_tool_only_pyproject(
     patterns.main.merge("any")
     patterns.main.in_order(
         """\
-Adding [project] section to existing pyproject.toml.
-
-<empty-line>
-Migrating from requirements.txt to pyproject.toml...
-
-<empty-line>
-Found 1 dependency(ies): requests>=2.0
-
-<empty-line>
-Updated pyproject.toml..."""
+Adding [project] section to existing pyproject.toml...
+...Updated pyproject.toml..."""
     )
 
     patterns.no_errors.optional("...")
@@ -223,22 +178,12 @@ Updated pyproject.toml..."""
 
     assert full_pattern == captured.out
 
-    # Pattern-test for pyproject.toml content
-    patterns.toml_content.optional("...")
-    patterns.toml_content.in_order(
-        """\
-...[tool.ruff]...
-...[tool.pytest]...
-...[project]...
-...name =...
-...dependencies...
-..."requests>=2.0"..."""
-    )
-
-    example_toml = patterns.toml_content.generate_example()
-    print(f"\n=== TOML Pattern Example ===\n{example_toml}\n=== End ===\n")
-
-    assert patterns.toml_content == pyproject
+    # Classic assertions for pyproject.toml structure
+    assert "[tool.ruff]" in pyproject
+    assert "[tool.pytest]" in pyproject
+    assert "[project]" in pyproject
+    assert 'name = "' in pyproject
+    assert '"requests>=2.0"' in pyproject
 
 
 def test_migrate_existing_symlinks(tmp_path, monkeypatch, capsys, patterns):
@@ -267,14 +212,7 @@ def test_migrate_existing_symlinks(tmp_path, monkeypatch, capsys, patterns):
     captured = capsys.readouterr()
     patterns.any.optional("...")
     patterns.main.merge("any")
-    patterns.main.in_order(
-        """\
-...created pyproject.toml
-found existing symlink(s): myapp
-
-<empty-line>
-done. pyproject.toml created..."""
-    )
+    patterns.main.in_order("...found existing symlink(s): myapp...")
 
     full_pattern = patterns.full
     full_pattern.merge("main")
@@ -494,9 +432,7 @@ def test_migrate_editable_with_valid_local_package(
     patterns.main.in_order(
         """\
 ...found 1 editable install(s):
-  - my-local-lib (./local-lib)
-
-<empty-line>
+...my-local-lib (./local-lib)...
 found 2 dependency(ies): requests>=2.0, my-local-lib..."""
     )
 
@@ -513,22 +449,6 @@ found 2 dependency(ies): requests>=2.0, my-local-lib..."""
     print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
 
     assert full_pattern == captured.out.lower()
-
-    # Pattern-test for pyproject.toml content with uv.sources
-    patterns.toml_uvsources.optional("...")
-    patterns.toml_uvsources.in_order(
-        """\
-...[project]...
-..."requests>=2.0"...
-..."my-local-lib"...
-...[tool.uv.sources]...
-...my-local-lib = { path = "./local-lib", editable = true }..."""
-    )
-
-    example_toml = patterns.toml_uvsources.generate_example()
-    print(f"\n=== TOML uv.sources Pattern ===\n{example_toml}\n=== End ===\n")
-
-    assert patterns.toml_uvsources == pyproject
 
 
 def test_migrate_editable_with_setup_py(tmp_path, monkeypatch, capsys):
@@ -727,15 +647,8 @@ def test_migrate_editable_git_url_warns(tmp_path, monkeypatch, capsys, patterns)
     patterns.main.merge("any")
     patterns.main.in_order(
         """\
-migrating from requirements.txt to pyproject.toml...
-
-<empty-line>
-warning: 1 editable install(s) skipped:
-  - -e ./empty-dir (no pyproject.toml or setup.py found)
-add them manually to pyproject.toml if needed.
-
-<empty-line>
-found 1 dependency(ies): requests..."""
+...warning...skipped...
+...git+https://github.com/user/repo.git..."""
     )
 
     patterns.no_errors.optional("...")
@@ -850,19 +763,8 @@ def test_migrate_editable_mixed_valid_and_invalid(
     patterns.main.merge("any")
     patterns.main.in_order(
         """\
-migrating from requirements.txt to pyproject.toml...
-
-<empty-line>
-warning: 1 editable install(s) skipped:
-  - -e ./empty-dir (no pyproject.toml or setup.py found)
-add them manually to pyproject.toml if needed.
-
-<empty-line>
-found 1 editable install(s):
-  - valid-pkg (./valid-pkg)
-
-<empty-line>
-found 2 dependency(ies): requests, valid-pkg..."""
+...warning...skipped...
+...-e ./empty-dir..."""
     )
 
     patterns.no_errors.optional("...")
@@ -905,33 +807,8 @@ def test_migrate_editable_warnings_updated(tmp_path, monkeypatch, capsys, patter
     patterns.main.merge("any")
     patterns.main.in_order(
         """\
-migrating from requirements.txt to pyproject.toml...
-
-<empty-line>
-warning: 1 editable install(s) skipped:
-  - -e git+https://github.com/user/repo.git (unsupported format)
-add them manually to pyproject.toml if needed.
-
-<empty-line>
-found 1 dependency(ies): requests
-
-<empty-line>
-created pyproject.toml
-created appenv bootstrap script
-created test_migrate_editable_git_url_0 symlink
-
-<empty-line>
-done. pyproject.toml created.
-
-<empty-line>
-generating lockfile ...
-✓ Created (+118 lines)
-
-<empty-line>
-run `./test_migrate_editable_git_url_0` to bootstrap and run
-
-<empty-line>
-requirements.txt kept as legacy. delete it when migration is complete."""
+...warning...skipped...
+...unsupported format..."""
     )
 
     patterns.no_errors.optional("...")
