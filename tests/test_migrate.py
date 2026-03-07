@@ -103,11 +103,22 @@ add them manually to pyproject.toml if needed.
 found 2 dependency(ies): requests, click
 
 <empty-line>
-created pyproject.toml...
-...done. pyproject.toml created...
+created pyproject.toml
+created appenv bootstrap script
+created ... symlink
 
 <empty-line>
-requirements.txt kept as legacy..."""
+done. pyproject.toml created.
+
+<empty-line>
+generating lockfile ...
+...created (... lines)...
+
+<empty-line>
+run `./...` to bootstrap and run
+
+<empty-line>
+requirements.txt kept as legacy. delete it when migration is complete."""
     )
 
     patterns.no_errors.optional("...")
