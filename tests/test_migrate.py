@@ -905,8 +905,33 @@ def test_migrate_editable_warnings_updated(tmp_path, monkeypatch, capsys, patter
     patterns.main.merge("any")
     patterns.main.in_order(
         """\
-...warning...skipped...
-...unsupported format..."""
+migrating from requirements.txt to pyproject.toml...
+
+<empty-line>
+warning: 1 editable install(s) skipped:
+  - -e git+https://github.com/user/repo.git (unsupported format)
+add them manually to pyproject.toml if needed.
+
+<empty-line>
+found 1 dependency(ies): requests
+
+<empty-line>
+created pyproject.toml
+created appenv bootstrap script
+created test_migrate_editable_git_url_0 symlink
+
+<empty-line>
+done. pyproject.toml created.
+
+<empty-line>
+generating lockfile ...
+✓ Created (+118 lines)
+
+<empty-line>
+run `./test_migrate_editable_git_url_0` to bootstrap and run
+
+<empty-line>
+requirements.txt kept as legacy. delete it when migration is complete."""
     )
 
     patterns.no_errors.optional("...")
