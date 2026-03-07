@@ -850,8 +850,19 @@ def test_migrate_editable_mixed_valid_and_invalid(
     patterns.main.merge("any")
     patterns.main.in_order(
         """\
-...warning...skipped...
-...-e ./empty-dir..."""
+migrating from requirements.txt to pyproject.toml...
+
+<empty-line>
+warning: 1 editable install(s) skipped:
+  - -e ./empty-dir (no pyproject.toml or setup.py found)
+add them manually to pyproject.toml if needed.
+
+<empty-line>
+found 1 editable install(s):
+  - valid-pkg (./valid-pkg)
+
+<empty-line>
+found 2 dependency(ies): requests, valid-pkg..."""
     )
 
     patterns.no_errors.optional("...")
