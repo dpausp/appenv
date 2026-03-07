@@ -494,7 +494,9 @@ def test_migrate_editable_with_valid_local_package(
     patterns.main.in_order(
         """\
 ...found 1 editable install(s):
-...my-local-lib (./local-lib)...
+  - my-local-lib (./local-lib)
+
+<empty-line>
 found 2 dependency(ies): requests>=2.0, my-local-lib..."""
     )
 
