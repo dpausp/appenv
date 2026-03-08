@@ -290,10 +290,10 @@ def parse_uv_version(version_str):
         return (0, 0, 0)
 
 
-def check_uv_version(uv_bin):
-    """Check uv version and return version tuple.
+def get_uv_version(uv_bin):
+    """Get uv version string if uv meets minimum version.
 
-    Exits with error if version is too old.
+    Returns version string like '0.5.11' or None if invalid/too old.
     """
     try:
         result = subprocess.run(
@@ -302,7 +302,30 @@ def check_uv_version(uv_bin):
             text=True,
             check=True,
         )
-        # Output format: "uv 0.10.3 (c75a0c625 2026-02-16)"
+        version_str = result.stdout.strip().split()[1]
+        version = parse_uv_version(version_str)
+
+        if version >= UV_MIN_VERSION:
+            return version_str
+
+        return None
+    except (subprocess.CalledProcessError, IndexError, ValueError):
+        return None
+
+
+def ensure_uv(base=None):
+    """Ensure uv is available and meets minimum version.
+
+    Exits with error if uv is not available or too old.
+    """
+    uv_bin = get_uv_bin(base)
+    try:
+        result = subprocess.run(
+            [uv_bin, "--version"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
         version_str = result.stdout.strip().split()[1]
         version = parse_uv_version(version_str)
 
@@ -321,13 +344,12 @@ def check_uv_version(uv_bin):
             print("Or remove outdated local uv:")
             print("  rm -rf .appenv/.uv")
             sys.exit(EXIT_CODE_UNAVAILABLE)
-
-        return version
     except (subprocess.CalledProcessError, IndexError, ValueError) as e:
         print(f"Warning: Could not determine uv version: {e}")
         print(f"  uv binary: {uv_bin}")
         print("  Proceeding anyway - sync operations may fail if uv is too old")
-        return (0, 0, 0)
+
+    return uv_bin
 
 
 def get_uv_bin(base=None):
@@ -346,43 +368,23 @@ def get_uv_bin(base=None):
     uv_in_path = shutil.which("uv")
     if uv_in_path:
         uv_bin = Path(uv_in_path)
-        # Verify PATH uv meets minimum version requirement
-        version = parse_uv_version(
-            subprocess.run(
-                [uv_bin, "--version"],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            .stdout.strip()
-            .split()[1]
-        )
-        if version >= UV_MIN_VERSION:
-            # PATH uv is suitable - use it and cleanup any leftover .appenv/.uv
+        if get_uv_version(uv_bin):
             _UV_BIN_CACHE = uv_bin
             if base:
                 appenv_uv = base / ".appenv" / ".uv"
                 if appenv_uv.exists():
                     shutil.rmtree(appenv_uv)
             return uv_bin
-        # PATH uv too old - fall through to alternatives
 
     # 2. Check if we have a cached .appenv/.uv from previous run that still works
-    if base and _UV_BIN_CACHE and str(_UV_BIN_CACHE).startswith(str(base)):
-        if _UV_BIN_CACHE.exists():
-            version = parse_uv_version(
-                subprocess.run(
-                    [_UV_BIN_CACHE, "--version"],
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                )
-                .stdout.strip()
-                .split()[1]
-            )
-            if version >= UV_MIN_VERSION:
-                return _UV_BIN_CACHE
-        # Cached uv doesn't exist or too old - clear cache and try alternatives
+    if (
+        base
+        and _UV_BIN_CACHE
+        and str(_UV_BIN_CACHE).startswith(str(base))
+        and _UV_BIN_CACHE.exists()
+    ):
+        if get_uv_version(_UV_BIN_CACHE):
+            return _UV_BIN_CACHE
         _UV_BIN_CACHE = None
 
     # 3. Build with nix (only if needed)
@@ -392,23 +394,10 @@ def get_uv_bin(base=None):
 
         # Check if we already have a valid .appenv/.uv
         if uv_local.exists():
-            try:
-                version_result = subprocess.run(
-                    [str(uv_local), "--version"],
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                )
-                version_str = version_result.stdout.strip().split()[1]
-                version = parse_uv_version(version_str)
-
-                if version >= UV_MIN_VERSION:
-                    _UV_BIN_CACHE = uv_local
-                    return uv_local
-
-                log.debug(f".appenv/.uv version {version_str} too old, updating ...")
-            except (subprocess.CalledProcessError, IndexError, ValueError):
-                log.debug("Could not determine .appenv/.uv version, rebuilding ...")
+            if get_uv_version(uv_local):
+                _UV_BIN_CACHE = uv_local
+                return uv_local
+            log.debug(".appenv/.uv version too old, updating ...")
 
         # Need to build/update uv with nix
         verbose_print("Building uv with nix ...")
@@ -421,27 +410,10 @@ def get_uv_bin(base=None):
 
         # Check if version is recent enough (>= 0.5)
         if result.returncode == 0 and uv_local.exists():
-            try:
-                version_result = subprocess.run(
-                    [str(uv_local), "--version"],
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                )
-                version_str = version_result.stdout.strip().split()[1]
-                version = parse_uv_version(version_str)
-
-                if version >= UV_MIN_VERSION:
-                    _UV_BIN_CACHE = uv_local
-                    return uv_local
-
-                log.debug(
-                    f"nix-build uv version {version_str} too old, trying nix build ..."
-                )
-            except (subprocess.CalledProcessError, IndexError, ValueError):
-                log.debug(
-                    "Could not determine nix-build uv version, trying nix build ..."
-                )
+            if get_uv_version(uv_local):
+                _UV_BIN_CACHE = uv_local
+                return uv_local
+            log.debug("nix-build uv version too old, trying nix build ...")
 
         # Fallback: expensive but fresh nix build from nixpkgs flake
         subprocess.run(
@@ -461,19 +433,8 @@ def get_uv_bin(base=None):
     uv_in_path = shutil.which("uv")
     if uv_in_path:
         uv_bin = Path(uv_in_path)
-        version = parse_uv_version(
-            subprocess.run(
-                [uv_bin, "--version"],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            .stdout.strip()
-            .split()[1]
-        )
-        if version >= UV_MIN_VERSION:
+        if get_uv_version(uv_bin):
             _UV_BIN_CACHE = uv_bin
-            # Cleanup any leftover .appenv/.uv
             if base:
                 appenv_uv = base / ".appenv" / ".uv"
                 if appenv_uv.exists():
@@ -481,13 +442,6 @@ def get_uv_bin(base=None):
             return uv_bin
 
     raise RuntimeError("uv not found and could not be installed.")
-
-
-def ensure_uv(base=None):
-    """Ensure uv is available and has a usable version"""
-    uv_bin = get_uv_bin(base)
-    check_uv_version(uv_bin)
-    return uv_bin
 
 
 def uv_cmd(args, verbose=False, **kwargs):
