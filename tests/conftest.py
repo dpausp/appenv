@@ -131,7 +131,7 @@ def pytest_sessionfinish(session, exitstatus):
 
     # Group by test file
     by_file = {}
-    for _key, data in _pattern_examples.items():
+    for data in _pattern_examples.values():
         filename = data["file"]
         if filename not in by_file:
             by_file[filename] = []

@@ -77,10 +77,7 @@ def main():
     """Fix whitespace in files."""
     root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(".")
 
-    if root.is_file():
-        files = [root]
-    else:
-        files = find_files(root)
+    files = [root] if root.is_file() else find_files(root)
 
     modified = 0
     for path in files:

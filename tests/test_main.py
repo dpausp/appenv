@@ -326,7 +326,7 @@ def test_run_with_profiling_custom_output(monkeypatch, tmp_path, capsys, pattern
     env.run("myapp", ["--help"])
 
     assert len(execv_called) == 1
-    path, argv = execv_called[0]
+    _path, argv = execv_called[0]
     assert "/tmp/custom.prof" in argv
     captured = capsys.readouterr()
     assert "APPENV_PROFILE enabled" in captured.out
@@ -483,7 +483,7 @@ def test_profiling_snakeviz_specific_file(tmp_path, monkeypatch):
     env.profiling_snakeviz(args)
 
     assert len(execv_called) == 1
-    path, argv = execv_called[0]
+    _path, argv = execv_called[0]
     assert str(profile) in argv
 
 

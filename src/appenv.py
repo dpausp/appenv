@@ -183,7 +183,7 @@ def ensure_best_python(base):
             continue
 
         # Re-exec with this Python
-        argv = [Path(path).name] + sys.argv
+        argv = [Path(path).name, *sys.argv]
         os.environ["APPENV_BEST_PYTHON"] = path
         os.execv(path, argv)
 
@@ -703,7 +703,7 @@ class AppEnv:
     def run(self, command, argv):
         env_dir = Path(self._prepare_venv())
         cmd_path = env_dir / "bin" / command
-        argv = [str(cmd_path)] + argv
+        argv = [str(cmd_path), *argv]
         os.environ["APPENV_BASEDIR"] = str(self.base)
         os.chdir(self.original_cwd)
 
@@ -1118,7 +1118,7 @@ requires-python = ">={python_version}"
         venv_real = self.appenv_dir / "venv"
         os.environ["UV_PROJECT_ENVIRONMENT"] = str(venv_real)
 
-        uv_argv = [uv_bin] + remaining
+        uv_argv = [uv_bin, *remaining]
         os.chdir(self.base)
         os.execv(uv_bin, uv_argv)
 
@@ -1302,11 +1302,11 @@ requires-python = ">={python_version}"
         if lock_file.exists():
             if verbose:
                 print(f"Reading existing lockfile: {lock_file}")
-            old_lines = set(
+            old_lines = {
                 stripped
                 for line in lock_file.read_text().splitlines()
                 if (stripped := line.strip()) and not stripped.startswith("#")
-            )
+            }
 
         if args and args.diff:
             print("Checking lockfile changes ...")
@@ -1335,11 +1335,11 @@ requires-python = ">={python_version}"
 
             # Read new content
             new_content = lock_file.read_text() if lock_file.exists() else ""
-            new_lines = set(
+            new_lines = {
                 stripped
                 for line in new_content.splitlines()
                 if (stripped := line.strip()) and not stripped.startswith("#")
-            )
+            }
 
             # Show summary
             added = new_lines - old_lines
