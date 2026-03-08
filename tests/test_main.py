@@ -4,6 +4,7 @@ import argparse
 import io
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -126,6 +127,15 @@ def test_get_uv_bin_uses_path(monkeypatch):
     monkeypatch.setattr(
         "shutil.which", lambda name: "/usr/bin/uv" if name == "uv" else None
     )
+
+    # Mock subprocess.run to return version
+    def mock_run(cmd, **kwargs):
+        text_mode = kwargs.get("text", False)
+        stdout = "uv 0.5.0\n" if text_mode else b"uv 0.5.0\n"
+        return subprocess.CompletedProcess(cmd, 0, stdout, b"")
+
+    monkeypatch.setattr(subprocess, "run", mock_run)
+
     assert str(appenv.get_uv_bin()) == "/usr/bin/uv"
 
 
@@ -1227,6 +1237,49 @@ def test_get_uv_bin_pip_fallback_success(tmp_path, monkeypatch):
         appenv.get_uv_bin(tmp_path)
 
     assert any("pip" in str(cmd) and "uv" in str(cmd) for cmd in pip_called)
+    appenv._UV_BIN_CACHE = None
+
+
+def test_get_uv_bin_pip_fallback_finds_installed_uv(tmp_path, monkeypatch):
+    """pip install fallback finds uv after installation."""
+    appenv._UV_BIN_CACHE = None
+
+    which_calls = []
+
+    def mock_which(name):
+        which_calls.append(name)
+        if name == "uv":
+            # First call: no uv in PATH
+            # After pip install: uv is available
+            if len(which_calls) > 2:  # After pip install attempt
+                return "/usr/bin/uv"
+            return None
+        if name == "nix":
+            return None  # No nix available
+        return shutil.which(name)
+
+    monkeypatch.setattr(shutil, "which", mock_which)
+
+    run_calls = []
+
+    def mock_run(cmd, **kwargs):
+        run_calls.append(list(cmd))
+        text_mode = kwargs.get("text", False)
+        # pip install succeeds
+        if "pip" in str(cmd) and "install" in str(cmd):
+            return subprocess.CompletedProcess(cmd, 0, b"", b"")
+        # uv --version check after pip install
+        if "--version" in str(cmd):
+            stdout = "uv 0.5.0\n" if text_mode else b"uv 0.5.0\n"
+            return subprocess.CompletedProcess(cmd, 0, stdout, b"")
+        return subprocess.CompletedProcess(cmd, 0, b"", b"")
+
+    monkeypatch.setattr(subprocess, "run", mock_run)
+
+    result = appenv.get_uv_bin(tmp_path)
+
+    assert str(result) == "/usr/bin/uv"
+    assert any("pip" in str(cmd) and "install" in str(cmd) for cmd in run_calls)
     appenv._UV_BIN_CACHE = None
 
 
