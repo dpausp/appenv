@@ -174,3 +174,7 @@ dmypy.json
 # Pyre type checker
 .pyre/
 .ty-symbols.db
+
+# Complexipy analysis artifacts
+.complexipy_cache/
+complexipy_results_*.json
