@@ -143,4 +143,4 @@ pytest_add_cli_args_test_selection = [
 ]
 
 [tool.uv.sources]
-pytest-patterns = { path = "../pytest-patterns", editable=true }
+pytest-patterns = { git = "https://github.com/dpausp/pytest-patterns" }

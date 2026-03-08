@@ -71,6 +71,11 @@ def patterns(request):
             if self._collected:
                 return
 
+            # generate_example() removed in pytest-patterns 0.3.0
+            if not hasattr(self._original, "generate_example"):
+                self._collected = True
+                return
+
             try:
                 example = self._original.generate_example()
 
@@ -94,6 +99,10 @@ def patterns(request):
                 self._collected = True
             except Exception:
                 pass  # Silently ignore if example generation fails
+
+        def generate_example(self):
+            """Dummy for pytest-patterns 0.3.0 compatibility."""
+            return ""  # generate_example() removed in 0.3.0
 
         def __getattr__(self, name):
             return getattr(self._original, name)
