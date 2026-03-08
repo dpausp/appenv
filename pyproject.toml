@@ -54,9 +54,18 @@ test = [
     "mutmut @ git+https://github.com/boxed/mutmut.git@fix-macos-segfault",
 ]
 lint = ["ruff", "ty", "vulture"]
+docs = [
+    "sphinx>=7.0",
+    "sphinx-autoapi",
+    "myst-parser",
+    "furo",
+    "sphinx-autodoc-typehints",
+    "sphinx-copybutton",
+]
 dev = [
     {include-group = "test"},
     {include-group = "lint"},
+    {include-group = "docs"},
     "pyproject-fmt>=2.16.2",
     "tox",
     "tox-uv-bare",
