@@ -622,6 +622,178 @@ def extract_package_name_from_path(path, base_dir):
     return None
 
 
+def _parse_requirements_file(content):
+    """Parse requirements.txt content into dependencies and editable specs.
+
+    Returns tuple of (dependencies, editable_specs).
+    """
+    all_deps = [
+        line.strip()
+        for line in content.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    editable_specs = [d for d in all_deps if d.startswith("-e ")]
+    dependencies = [d for d in all_deps if not d.startswith("-e ")]
+    return (dependencies, editable_specs)
+
+
+def _parse_python_preference(content):
+    """Parse python preference from requirements.txt content.
+
+    Returns minimum Python version from preference comment, or "3.10" default.
+    """
+    for line in content.splitlines():
+        if line.startswith("# appenv-python-preference: "):
+            raw = line.split(":")[1]
+            preferences = [x.strip() for x in raw.split(",") if x.strip()]
+            if preferences:
+                preferences_sorted = sorted(
+                    preferences, key=lambda s: [int(u) for u in s.split(".")]
+                )
+                return preferences_sorted[0]
+    return "3.10"
+
+
+def _generate_pyproject_content(
+    project_name,
+    description,
+    dependencies,
+    python_version,
+    editable_sources,
+    existing_content=None,
+):
+    """Generate pyproject.toml content string.
+
+    Args:
+        existing_content: If provided, merge [project] section into existing
+    """
+    # Generate [project] section
+    if dependencies:
+        deps_toml = ",\n    ".join(f'"{dep}"' for dep in dependencies)
+        deps_block = f"[\n    {deps_toml},\n]"
+    else:
+        deps_block = "[]"
+
+    project_section = f"""[project]
+name = "{project_name}"
+version = "0.1.0"
+description = "{description}"
+dependencies = {deps_block}
+requires-python = ">={python_version}"
+"""
+
+    # Generate [tool.uv.sources] section if needed
+    sources_section = ""
+    if editable_sources:
+        sources_lines = ["[tool.uv.sources]"]
+        for pkg_name, src_config in sorted(editable_sources.items()):
+            path = src_config["path"]
+            sources_lines.append(f'{pkg_name} = {{ path = "{path}", editable = true }}')
+        sources_section = "\n" + "\n".join(sources_lines) + "\n"
+
+    # Merge with existing content or create new
+    if existing_content:
+        pyproject_content = existing_content.rstrip() + "\n\n" + project_section
+        if sources_section:
+            pyproject_content += sources_section
+    else:
+        pyproject_content = project_section + sources_section
+
+    return pyproject_content
+
+
+def _process_editable_installs(specs, base_dir):
+    """Process editable install specs.
+
+    Returns:
+        tuple of (editable_sources, dependency_strings, warnings)
+        - editable_sources: {package_name: {path: str, editable: bool}}
+        - dependency_strings: list of package names (with extras) to add
+        - warnings: list of warning messages for skipped specs
+    """
+    editable_sources = {}
+    dependency_strings = []
+    warnings = []
+
+    for spec in specs:
+        parsed = parse_editable_spec(spec)
+        if not parsed:
+            warnings.append(f"{spec} (unsupported format)")
+            continue
+
+        package_name = extract_package_name_from_path(parsed["path"], base_dir)
+        if not package_name:
+            warnings.append(f"{spec} (no pyproject.toml or setup.py found)")
+            continue
+
+        # Build dependency string with extras if present
+        dep_str = package_name
+        if parsed["extras"]:
+            dep_str = f"{package_name}[{','.join(parsed['extras'])}]"
+        dependency_strings.append(dep_str)
+
+        # Build source config
+        path = parsed["path"]
+        if not path.startswith(("./", "../", "/")):
+            path = "./" + path
+        editable_sources[package_name] = {"path": path, "editable": True}
+
+    return (editable_sources, dependency_strings, warnings)
+
+
+def _cleanup_old_appenv_entries(appenv_dir, log):
+    """Remove old hash-based venvs and files from .appenv directory.
+
+    Keeps: venv, .uv, logs, profiling
+    """
+    keep = {"venv", ".uv", "logs", "profiling"}
+    if appenv_dir.exists():
+        for path in list(appenv_dir.iterdir()):
+            if path.name not in keep:
+                log.debug(f"Removing old .appenv entry: {path.name} ...")
+                if path.is_dir():
+                    shutil.rmtree(path)
+                else:
+                    path.unlink()
+
+
+def _setup_command_symlink(target, command_name, appenv_script, project_name):
+    """Setup command symlink to appenv.
+
+    Args:
+        target: Project directory
+        command_name: Explicit name, or None to detect existing symlinks
+        appenv_script: Path to appenv script
+        project_name: Fallback name for new symlink
+
+    Returns:
+        The command name (either provided or detected/created)
+    """
+    if command_name:
+        # Fresh project: create new symlink
+        command_link = target / command_name
+        if command_link.is_symlink() or command_link.exists():
+            command_link.unlink(missing_ok=True)
+        command_link.symlink_to("appenv")
+        print(f"Created {command_name} symlink")
+        return command_name
+    else:
+        # Migration: find existing symlinks
+        existing_symlinks = [
+            path.name
+            for path in target.iterdir()
+            if path.is_symlink() and path.resolve() == appenv_script.resolve()
+        ]
+        if existing_symlinks:
+            print(f"Found existing symlink(s): {', '.join(existing_symlinks)}")
+            return existing_symlinks[0]
+        else:
+            command_link = target / project_name
+            command_link.symlink_to("appenv")
+            print(f"Created {project_name} symlink")
+            return project_name
+
+
 class AppEnv:
     def __init__(self, base, original_cwd):
         self.base = Path(base).resolve()
@@ -870,16 +1042,7 @@ class AppEnv:
             current_link.unlink()
 
         # Cleanup old .appenv hash-based venvs
-        # But keep .appenv/venv (current venv), .uv (local uv), logs, and profiling
-        keep = {"venv", ".uv", "logs", "profiling"}
-        if old_appenv.exists():
-            for path in list(old_appenv.iterdir()):
-                if path.name not in keep:
-                    log.debug(f"Removing old .appenv entry: {path.name} ...")
-                    if path.is_dir():
-                        shutil.rmtree(path)
-                    else:
-                        path.unlink()
+        _cleanup_old_appenv_entries(old_appenv, log)
 
         return str(venv_real)
 
@@ -963,41 +1126,13 @@ class AppEnv:
         deps_content = requirements_file.read_text().strip()
 
         # Parse dependencies - separate editable from regular
-        all_deps = [
-            line.strip()
-            for line in deps_content.splitlines()
-            if line.strip() and not line.strip().startswith("#")
-        ]
-        editable_specs = [d for d in all_deps if d.startswith("-e ")]
-        dependencies = [d for d in all_deps if not d.startswith("-e ")]
+        dependencies, editable_specs = _parse_requirements_file(deps_content)
 
         # Process editable installs
-        editable_sources = {}
-        editable_warnings = []
-        for spec in editable_specs:
-            parsed = parse_editable_spec(spec)
-            if not parsed:
-                editable_warnings.append(f"{spec} (unsupported format)")
-                continue
-
-            package_name = extract_package_name_from_path(parsed["path"], target)
-            if not package_name:
-                editable_warnings.append(
-                    f"{spec} (no pyproject.toml or setup.py found)"
-                )
-                continue
-
-            # Build dependency string with extras if present
-            dep_str = package_name
-            if parsed["extras"]:
-                dep_str = f"{package_name}[{','.join(parsed['extras'])}]"
-            dependencies.append(dep_str)
-
-            # Build source config
-            path = parsed["path"]
-            if not path.startswith(("./", "../", "/")):
-                path = "./" + path
-            editable_sources[package_name] = {"path": path, "editable": True}
+        editable_sources, editable_dep_strings, editable_warnings = (
+            _process_editable_installs(editable_specs, target)
+        )
+        dependencies.extend(editable_dep_strings)
 
         if editable_warnings:
             print(f"Warning: {len(editable_warnings)} editable install(s) skipped:")
@@ -1014,19 +1149,16 @@ class AppEnv:
         print(f"Found {len(dependencies)} dependency(ies): {', '.join(dependencies)}")
 
         # Parse python preference from requirements.txt
-        python_version = "3.10"
-        for line in deps_content.splitlines():
-            if line.startswith("# appenv-python-preference: "):
-                raw = line.split(":")[1]
-                preferences = [x.strip() for x in raw.split(",") if x.strip()]
-                if preferences:
-                    preferences_sorted = sorted(
-                        preferences, key=lambda s: [int(u) for u in s.split(".")]
-                    )
-                    python_version = preferences_sorted[0]
+        python_version = _parse_python_preference(deps_content)
+        if python_version != "3.10":
+            # Show preference info if non-default was found
+            for line in deps_content.splitlines():
+                if line.startswith("# appenv-python-preference: "):
+                    raw = line.split(":")[1]
+                    preferences = [x.strip() for x in raw.split(",") if x.strip()]
                     print(f"Found python preference: {', '.join(preferences)}")
                     print(f"Using minimum version: {python_version}")
-                break
+                    break
 
         # Use directory name as project name
         project_name = target.name
@@ -1069,41 +1201,19 @@ class AppEnv:
         pyproject_file = target / PYPROJECT_TOML
         appenv_script = target / "appenv"
 
-        # Generate [project] section
-        if dependencies:
-            deps_toml = ",\n    ".join(f'"{dep}"' for dep in dependencies)
-            deps_block = f"[\n    {deps_toml},\n]"
-        else:
-            deps_block = "[]"
+        # Generate pyproject.toml content
+        pyproject_content = _generate_pyproject_content(
+            project_name=project_name,
+            description=description,
+            dependencies=dependencies,
+            python_version=python_version,
+            editable_sources=editable_sources,
+            existing_content=existing_content,
+        )
 
-        project_section = f"""[project]
-name = "{project_name}"
-version = "0.1.0"
-description = "{description}"
-dependencies = {deps_block}
-requires-python = ">={python_version}"
-"""
-
-        # Generate [tool.uv.sources] section if needed
-        sources_section = ""
-        if editable_sources:
-            sources_lines = ["[tool.uv.sources]"]
-            for pkg_name, src_config in sorted(editable_sources.items()):
-                path = src_config["path"]
-                sources_lines.append(
-                    f'{pkg_name} = {{ path = "{path}", editable = true }}'
-                )
-            sources_section = "\n" + "\n".join(sources_lines) + "\n"
-
-        # Merge with existing content or create new
         if existing_content:
-            # Ensure existing content ends with newline for clean merge
-            pyproject_content = existing_content.rstrip() + "\n\n" + project_section
-            if sources_section:
-                pyproject_content += sources_section
             print(f"\nUpdated {PYPROJECT_TOML}")
         else:
-            pyproject_content = project_section + sources_section
             print(f"\nCreated {PYPROJECT_TOML}")
 
         pyproject_file.write_text(pyproject_content)
@@ -1116,28 +1226,12 @@ requires-python = ">={python_version}"
             print("Created appenv bootstrap script")
 
         # Handle symlink
-        if command_name:
-            # Fresh project: create new symlink
-            command_link = target / command_name
-            if command_link.is_symlink() or command_link.exists():
-                command_link.unlink(missing_ok=True)
-            command_link.symlink_to("appenv")
-            print(f"Created {command_name} symlink")
-        else:
-            # Migration: find existing symlinks
-            existing_symlinks = [
-                path.name
-                for path in target.iterdir()
-                if path.is_symlink() and path.resolve() == appenv_script.resolve()
-            ]
-            if existing_symlinks:
-                print(f"Found existing symlink(s): {', '.join(existing_symlinks)}")
-                command_name = existing_symlinks[0]
-            else:
-                command_link = target / project_name
-                command_link.symlink_to("appenv")
-                print(f"Created {project_name} symlink")
-                command_name = project_name
+        command_name = _setup_command_symlink(
+            target=target,
+            command_name=command_name,
+            appenv_script=appenv_script,
+            project_name=project_name,
+        )
 
         print("\nDone. pyproject.toml created.")
 
