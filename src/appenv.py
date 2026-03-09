@@ -293,13 +293,10 @@ def get_uv_version(uv_bin):
     Returns version string like '0.5.11' or None if invalid/too old.
     """
     try:
-        result = subprocess.run(
-            [uv_bin, "--version"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        version_str = result.stdout.strip().split()[1]
+        version_str = _get_uv_version_raw(uv_bin)
+        if version_str is None:
+            return None
+
         version = parse_uv_version(version_str)
 
         if version >= UV_MIN_VERSION:
@@ -310,12 +307,11 @@ def get_uv_version(uv_bin):
         return None
 
 
-def ensure_uv(base=None):
-    """Ensure uv is available and meets minimum version.
+def _get_uv_version_raw(uv_bin):
+    """Get raw uv version string without validation.
 
-    Exits with error if uv is not available or too old.
+    Returns version string like '0.5.11' or None on error.
     """
-    uv_bin = get_uv_bin(base)
     try:
         result = subprocess.run(
             [uv_bin, "--version"],
@@ -323,28 +319,42 @@ def ensure_uv(base=None):
             text=True,
             check=True,
         )
-        version_str = result.stdout.strip().split()[1]
-        version = parse_uv_version(version_str)
+        return result.stdout.strip().split()[1]
+    except (subprocess.CalledProcessError, IndexError):
+        return None
 
-        if version < UV_MIN_VERSION:
-            min_str = ".".join(str(v) for v in UV_MIN_VERSION)
-            print(f"Error: uv version {version_str} is too old.")
-            print(f"Minimum required version: {min_str}")
-            print(f"uv binary: {uv_bin}")
-            print()
-            print("To upgrade uv:")
-            print("  curl -LsSf https://astral.sh/uv/install.sh | sh")
-            print()
-            print("Or with nix:")
-            print("  nix profile install nixpkgs#uv")
-            print()
-            print("Or remove outdated local uv:")
-            print("  rm -rf .appenv/.uv")
-            sys.exit(EXIT_CODE_UNAVAILABLE)
-    except (subprocess.CalledProcessError, IndexError, ValueError) as e:
-        print(f"Warning: Could not determine uv version: {e}")
+
+def ensure_uv(base=None):
+    """Ensure uv is available and meets minimum version.
+
+    Exits with error if uv is not available or too old.
+    """
+    uv_bin = get_uv_bin(base)
+    version_str = _get_uv_version_raw(uv_bin)
+
+    if version_str is None:
+        print(f"Warning: Could not determine uv version")
         print(f"  uv binary: {uv_bin}")
         print("  Proceeding anyway - sync operations may fail if uv is too old")
+        return uv_bin
+
+    version = parse_uv_version(version_str)
+
+    if version < UV_MIN_VERSION:
+        min_str = ".".join(str(v) for v in UV_MIN_VERSION)
+        print(f"Error: uv version {version_str} is too old.")
+        print(f"Minimum required version: {min_str}")
+        print(f"uv binary: {uv_bin}")
+        print()
+        print("To upgrade uv:")
+        print("  curl -LsSf https://astral.sh/uv/install.sh | sh")
+        print()
+        print("Or with nix:")
+        print("  nix profile install nixpkgs#uv")
+        print()
+        print("Or remove outdated local uv:")
+        print("  rm -rf .appenv/.uv")
+        sys.exit(EXIT_CODE_UNAVAILABLE)
 
     return uv_bin
 
@@ -1149,32 +1159,44 @@ requires-python = ">={python_version}"
                 f"  {i:3}. {profile.name}  ({size:,} bytes, {mtime:%Y-%m-%d %H:%M:%S})"
             )
 
-    def profiling_show(self, args, remaining=None):
-        """Show profile with pstats."""
+    def _find_profile(
+        self, args_file: str | None, message_prefix: str = "Showing"
+    ) -> Path:
+        """Find profile file from args or latest.
+
+        Returns Path to profile. Exits on error if not found.
+        """
         profiling_dir = self.appenv_dir / "profiling"
 
-        if args.file:
-            profile_path = profiling_dir / args.file
+        if args_file:
+            profile_path = profiling_dir / args_file
             if not profile_path.exists():
-                print(f"Profile not found: {args.file}")
+                print(f"Profile not found: {args_file}")
                 sys.exit(EXIT_CODE_NOINPUT)
-        else:
-            if not profiling_dir.exists():
-                print("No profiling data found.")
-                sys.exit(EXIT_CODE_NOINPUT)
+            return profile_path
 
-            profiles = sorted(
-                profiling_dir.glob("*.prof"),
-                key=lambda p: p.stat().st_mtime,
-                reverse=True,
-            )
+        # Find latest profile
+        if not profiling_dir.exists():
+            print("No profiling data found.")
+            sys.exit(EXIT_CODE_NOINPUT)
 
-            if not profiles:
-                print("No profiling data found.")
-                sys.exit(EXIT_CODE_NOINPUT)
+        profiles = sorted(
+            profiling_dir.glob("*.prof"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
 
-            profile_path = profiles[0]
-            print(f"Showing latest profile: {profile_path.name}\n")
+        if not profiles:
+            print("No profiling data found.")
+            sys.exit(EXIT_CODE_NOINPUT)
+
+        profile_path = profiles[0]
+        print(f"{message_prefix} latest profile: {profile_path.name}\n")
+        return profile_path
+
+    def profiling_show(self, args, remaining=None):
+        """Show profile with pstats."""
+        profile_path = self._find_profile(args.file, "Showing")
 
         import pstats
 
@@ -1184,30 +1206,7 @@ requires-python = ">={python_version}"
 
     def profiling_snakeviz(self, args, remaining=None):
         """Show profile with snakeviz (interactive web UI)."""
-        profiling_dir = self.appenv_dir / "profiling"
-
-        if args.file:
-            profile_path = profiling_dir / args.file
-            if not profile_path.exists():
-                print(f"Profile not found: {args.file}")
-                sys.exit(EXIT_CODE_NOINPUT)
-        else:
-            if not profiling_dir.exists():
-                print("No profiling data found.")
-                sys.exit(EXIT_CODE_NOINPUT)
-
-            profiles = sorted(
-                profiling_dir.glob("*.prof"),
-                key=lambda p: p.stat().st_mtime,
-                reverse=True,
-            )
-
-            if not profiles:
-                print("No profiling data found.")
-                sys.exit(EXIT_CODE_NOINPUT)
-
-            profile_path = profiles[0]
-            print(f"Opening latest profile: {profile_path.name}")
+        profile_path = self._find_profile(args.file, "Opening")
 
         os.execv(
             sys.executable,
