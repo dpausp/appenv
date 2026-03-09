@@ -109,7 +109,6 @@ def test_cmd_with_list_no_shell():
 
 
 def test_uv_cmd_raises_when_uv_not_found(monkeypatch):
-    appenv._UV_BIN_CACHE = None  # Reset cache
 
     # Mock ensure_uv to raise RuntimeError
     def fake_ensure_uv(base=None):
@@ -123,7 +122,6 @@ def test_uv_cmd_raises_when_uv_not_found(monkeypatch):
 
 def test_get_uv_bin_uses_path(monkeypatch):
     """get_uv_bin returns uv from PATH if available."""
-    appenv._UV_BIN_CACHE = None  # Reset cache
     monkeypatch.setattr(
         "shutil.which", lambda name: "/usr/bin/uv" if name == "uv" else None
     )
@@ -141,7 +139,6 @@ def test_get_uv_bin_uses_path(monkeypatch):
 
 def test_get_uv_bin_uses_pip_fallback(monkeypatch, tmp_path):
     """get_uv_bin installs uv via pip if not in PATH and no nix."""
-    appenv._UV_BIN_CACHE = None  # Reset cache
     monkeypatch.setattr("shutil.which", lambda name: None)  # no uv, no nix
 
     pip_called = []
@@ -1092,7 +1089,6 @@ def test_uv_cmd_verbose_flag_and_output(monkeypatch, capsys):
     monkeypatch.setenv("APPENV_VERBOSE", "1")
     monkeypatch.setattr(appenv, "ensure_uv", lambda: Path("/usr/bin/uv"))
     monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/uv")
-    appenv._UV_BIN_CACHE = Path("/usr/bin/uv")
 
     cmd_calls = []
 
@@ -1111,9 +1107,6 @@ def test_uv_cmd_verbose_flag_and_output(monkeypatch, capsys):
     # Verify output is printed when APPENV_VERBOSE is set
     captured = capsys.readouterr()
     assert "verbose output from uv" in captured.out
-
-    # Reset cache
-    appenv._UV_BIN_CACHE = None
 
 
 # ==============================================================================
@@ -1237,7 +1230,6 @@ def test_ensure_best_python_broken_python(tmp_path, monkeypatch):
 
 def test_get_uv_bin_pip_fallback_success(tmp_path, monkeypatch):
     """pip install fallback raises RuntimeError when uv still not found."""
-    appenv._UV_BIN_CACHE = None
 
     which_calls = []
 
@@ -1258,12 +1250,10 @@ def test_get_uv_bin_pip_fallback_success(tmp_path, monkeypatch):
         appenv.get_uv_bin(tmp_path)
 
     assert any("pip" in str(cmd) and "uv" in str(cmd) for cmd in pip_called)
-    appenv._UV_BIN_CACHE = None
 
 
 def test_get_uv_bin_pip_fallback_finds_installed_uv(tmp_path, monkeypatch):
     """pip install fallback finds uv after installation."""
-    appenv._UV_BIN_CACHE = None
 
     which_calls = []
 
@@ -1301,7 +1291,6 @@ def test_get_uv_bin_pip_fallback_finds_installed_uv(tmp_path, monkeypatch):
 
     assert str(result) == "/usr/bin/uv"
     assert any("pip" in str(cmd) and "install" in str(cmd) for cmd in run_calls)
-    appenv._UV_BIN_CACHE = None
 
 
 def test_main_calls_ensure_best_python(monkeypatch, workdir):

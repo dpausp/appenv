@@ -14,8 +14,6 @@ EXIT_CODE_DATAERR: int
 EXIT_CODE_NOINPUT: int
 EXIT_CODE_UNAVAILABLE: int
 
-_UV_BIN_CACHE: Path | None
-
 def cmd(
     c: str | list[str],
     *,

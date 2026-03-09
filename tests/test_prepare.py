@@ -1004,9 +1004,6 @@ def test_ensure_uv_builds_with_nix(tmp_path, monkeypatch):
 
     (base / "pyproject.toml").write_text("[project]\nname = 'test'\n")
 
-    # Reset cache
-    appenv._UV_BIN_CACHE = None
-
     # Pre-create the uv binary at the expected location
     uv_out = base / ".appenv" / ".uv"
     uv_bin = uv_out / "bin" / "uv"
@@ -1046,9 +1043,6 @@ def test_ensure_uv_builds_with_nix(tmp_path, monkeypatch):
     assert result == uv_bin
     assert any("nix-build" in c for c in run_calls)
 
-    # Reset cache
-    appenv._UV_BIN_CACHE = None
-
 
 def test_ensure_uv_nix_version_too_old_fallback(tmp_path, monkeypatch):
     """get_uv_bin falls back to nix build when nix-build version too old."""
@@ -1056,9 +1050,6 @@ def test_ensure_uv_nix_version_too_old_fallback(tmp_path, monkeypatch):
     base = tmp_path
 
     (base / "pyproject.toml").write_text("[project]\nname = 'test'\n")
-
-    # Reset cache
-    appenv._UV_BIN_CACHE = None
 
     # Pre-create the uv binary at the expected location
     uv_out = base / ".appenv" / ".uv"
@@ -1103,9 +1094,6 @@ def test_ensure_uv_nix_version_too_old_fallback(tmp_path, monkeypatch):
     assert any("nix-build" in str(c) for c in run_calls)
     assert any("nix" in str(c) and "build" in str(c) for c in run_calls)
 
-    # Reset cache
-    appenv._UV_BIN_CACHE = None
-
 
 def test_ensure_uv_nix_version_parse_error_fallback(tmp_path, monkeypatch):
     """get_uv_bin falls back to nix build when version cannot be parsed."""
@@ -1113,9 +1101,6 @@ def test_ensure_uv_nix_version_parse_error_fallback(tmp_path, monkeypatch):
     base = tmp_path
 
     (base / "pyproject.toml").write_text("[project]\nname = 'test'\n")
-
-    # Reset cache
-    appenv._UV_BIN_CACHE = None
 
     # Pre-create the uv binary at the expected location
     uv_out = base / ".appenv" / ".uv"
@@ -1155,6 +1140,3 @@ def test_ensure_uv_nix_version_parse_error_fallback(tmp_path, monkeypatch):
     assert result == uv_bin
     # Should have tried nix-build, failed to parse version, then fallen back
     assert any("nix" in str(c) and "build" in str(c) for c in run_calls)
-
-    # Reset cache
-    appenv._UV_BIN_CACHE = None
