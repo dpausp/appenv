@@ -654,6 +654,23 @@ def _parse_python_preference(content):
     return "3.10"
 
 
+def _print_migration_info(editable_warnings, editable_sources, dependencies):
+    """Print migration summary for editable installs and dependencies."""
+    if editable_warnings:
+        print(f"Warning: {len(editable_warnings)} editable install(s) skipped:")
+        for warn in editable_warnings:
+            print(f"  - {warn}")
+        print("Add them manually to pyproject.toml if needed.\n")
+
+    if editable_sources:
+        print(f"Found {len(editable_sources)} editable install(s):")
+        for name, src in editable_sources.items():
+            print(f"  - {name} ({src['path']})")
+        print()
+
+    print(f"Found {len(dependencies)} dependency(ies): {', '.join(dependencies)}")
+
+
 def _generate_pyproject_content(
     project_name,
     description,
@@ -1134,19 +1151,8 @@ class AppEnv:
         )
         dependencies.extend(editable_dep_strings)
 
-        if editable_warnings:
-            print(f"Warning: {len(editable_warnings)} editable install(s) skipped:")
-            for warn in editable_warnings:
-                print(f"  - {warn}")
-            print("Add them manually to pyproject.toml if needed.\n")
-
-        if editable_sources:
-            print(f"Found {len(editable_sources)} editable install(s):")
-            for name, src in editable_sources.items():
-                print(f"  - {name} ({src['path']})")
-            print()
-
-        print(f"Found {len(dependencies)} dependency(ies): {', '.join(dependencies)}")
+        # Print migration summary
+        _print_migration_info(editable_warnings, editable_sources, dependencies)
 
         # Parse python preference from requirements.txt
         python_version = _parse_python_preference(deps_content)

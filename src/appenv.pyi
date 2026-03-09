@@ -68,6 +68,11 @@ def _generate_pyproject_content(
 def _process_editable_installs(
     specs: list[str], base_dir: Path
 ) -> tuple[dict[str, Any], list[str], list[str]]: ...
+def _print_migration_info(
+    editable_warnings: list[str],
+    editable_sources: dict[str, Any],
+    dependencies: list[str],
+) -> None: ...
 def _cleanup_old_appenv_entries(appenv_dir: Path, log: logging.Logger) -> None: ...
 def _setup_command_symlink(
     target: Path,
