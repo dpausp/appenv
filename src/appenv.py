@@ -528,15 +528,16 @@ def get_uv_bin(base=None):
     raise RuntimeError("uv not found and could not be installed")
 
 
-def uv_cmd(args, verbose=False, **kwargs):
+def uv_cmd(args, verbose=False, base=None, **kwargs):
     """Execute uv command.
 
     Args:
         args: Command arguments for uv
         verbose: If True, pass -v flag to uv for verbose output and print it
+        base: Base directory for uv discovery (passed to ensure_uv)
         **kwargs: Additional arguments passed to cmd()
     """
-    uv_bin = ensure_uv()
+    uv_bin = ensure_uv(base)
     cmd_args = [str(uv_bin)]
     if verbose:
         cmd_args.append("-v")
@@ -821,7 +822,7 @@ class AppEnv:
             log.debug("Creating venv with uv ...")
             # Use current Python (already selected by ensure_best_python)
             # Explicit path avoids uv downloading its own (breaks on NixOS, for example)
-            uv_cmd(["venv", "--python", sys.executable, str(venv_real)])
+            uv_cmd(["venv", "--python", sys.executable, str(venv_real)], base=self.base)
 
         # Sync dependencies (idempotent)
         sync_args = ["sync"]
@@ -839,7 +840,7 @@ class AppEnv:
 
         log.debug(f"prepare_venv activated extras/optional deps: {extras}")
         log.debug(f"prepare_venv uv args: {sync_args}")
-        uv_cmd(sync_args)
+        uv_cmd(sync_args, base=self.base)
 
         # Show venv python info AFTER sync (version may have changed)
         venv_python = venv_real / "bin" / "python"
@@ -1390,7 +1391,7 @@ requires-python = ">={python_version}"
             # Run uv lock to update
             if verbose:
                 print("Running: uv lock")
-            uv_cmd(["lock"], verbose=verbose)
+            uv_cmd(["lock"], verbose=verbose, base=self.base)
 
             # Read new content and show summary
             new_lines = self._read_lockfile_lines(lock_file)

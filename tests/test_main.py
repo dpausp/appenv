@@ -1087,7 +1087,7 @@ def test_parse_requires_python_with_upper_bound(tmp_path):
 def test_uv_cmd_verbose_flag_and_output(monkeypatch, capsys):
     """uv_cmd adds -v flag when verbose=True and prints output."""
     monkeypatch.setenv("APPENV_VERBOSE", "1")
-    monkeypatch.setattr(appenv, "ensure_uv", lambda: Path("/usr/bin/uv"))
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base=None: Path("/usr/bin/uv"))
     monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/uv")
 
     cmd_calls = []
@@ -1107,6 +1107,25 @@ def test_uv_cmd_verbose_flag_and_output(monkeypatch, capsys):
     # Verify output is printed when APPENV_VERBOSE is set
     captured = capsys.readouterr()
     assert "verbose output from uv" in captured.out
+
+
+def test_uv_cmd_passes_base_to_ensure_uv(monkeypatch):
+    """uv_cmd should pass base parameter to ensure_uv."""
+    from unittest.mock import MagicMock
+
+    mock_ensure_uv = MagicMock(return_value=Path("/usr/bin/uv"))
+    monkeypatch.setattr(appenv, "ensure_uv", mock_ensure_uv)
+    monkeypatch.setattr(appenv, "cmd", lambda c, **kwargs: b"")
+
+    test_base = Path("/some/project")
+
+    # Without base
+    appenv.uv_cmd(["sync"])
+    mock_ensure_uv.assert_called_with(None)
+
+    # With base
+    appenv.uv_cmd(["sync"], base=test_base)
+    mock_ensure_uv.assert_called_with(test_base)
 
 
 # ==============================================================================
