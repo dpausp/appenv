@@ -4,11 +4,13 @@ dynamic = ["version"]
 description = "Self-contained bootstrapping/updating of Python applications deployed through shared repositories."
 readme = "README.md"
 license = "BSD-3-Clause"
+license-files = ["LICENSE*"]
 authors = [
     {name = "Christian Theune", email = "ct@flyingcircus.io"},
 ]
 keywords = ["deployment"]
 classifiers = [
+    "Development Status :: 5 - Production/Stable",
     "License :: OSI Approved :: BSD License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
@@ -23,12 +25,14 @@ dependencies = []
 
 [project.urls]
 Homepage = "https://github.com/flyingcircusio/appenv/"
+Repository = "https://github.com/flyingcircusio/appenv.git"
+Issues = "https://github.com/flyingcircusio/appenv/issues"
 
 [project.scripts]
 appenv = "appenv:main"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling >= 1.26"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
