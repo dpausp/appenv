@@ -10,3 +10,13 @@ design_file = "./design/lsp-symbol-cache.md"
 feature_file = null  # No BDD features yet
 created = "2026-03-03"
 status = "draft"
+
+[features."002"]
+slug = "appenv-complexity-reduction"
+name = "appenv Complexity Reduction Refactoring"
+description = "Extract helper methods to reduce cyclomatic complexity in migrate, _prepare_venv, and _init_project"
+requirements_file = null  # No SRS - this is internal refactoring
+design_file = "./design/appenv-complexity-reduction.md"
+feature_file = null
+created = "2026-03-09"
+status = "approved"
