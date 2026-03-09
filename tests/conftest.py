@@ -46,10 +46,11 @@ def patterns(request):
             self._collected = False
 
         def merge(self, *args, **kwargs):
-            result = self._original.merge(*args, **kwargs)
+            # merge() modifies in-place and returns None
+            self._original.merge(*args, **kwargs)
             self._merged = True
             self._collect_example()
-            return result
+            return self
 
         def __eq__(self, actual):
             # Collect example on first comparison if not already collected
@@ -129,8 +130,20 @@ def patterns(request):
     return PatternsWrapper(patterns_obj)
 
 
+def pytest_addoption(parser):
+    """Add pytest command line options."""
+    parser.addoption(
+        "--generate-pattern-examples",
+        action="store_true",
+        default=False,
+        help="Generate .pytest-patterns-examples.md with pattern examples",
+    )
+
+
 def pytest_sessionfinish(session, exitstatus):
     """Write collected pattern examples to Markdown file."""
+    if not session.config.getoption("--generate-pattern-examples"):
+        return
     if not _pattern_examples:
         return
 
