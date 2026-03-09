@@ -189,9 +189,7 @@ def test_prepare_pyproject_mode_verbose(workdir, monkeypatch, capsys, patterns):
 
     captured = capsys.readouterr()
 
-    patterns.any.optional("...")
-    patterns.main.merge("any")
-    patterns.main.in_order(
+    patterns.verbose_project_info.in_order(
         """\
 Project base: ...
 pyproject.toml: .../pyproject.toml
@@ -209,14 +207,14 @@ Venv Python (realpath): ...
 Venv Python version: Python 3.12.0"""
     )
 
-    patterns.no_errors.optional("...")
-    patterns.no_errors.refused("...error...")
-    patterns.no_errors.refused("...exception...")
-    patterns.no_errors.refused("...traceback...")
-    patterns.no_errors.refused("...failed...")
+    patterns.clean_output.optional("...")
+    patterns.clean_output.refused("...error...")
+    patterns.clean_output.refused("...exception...")
+    patterns.clean_output.refused("...traceback...")
+    patterns.clean_output.refused("...failed...")
 
     full_pattern = patterns.full
-    full_pattern.merge("main", "no_errors")
+    full_pattern.merge("verbose_project_info", "clean_output")
 
     example = full_pattern.generate_example()
     print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
@@ -252,9 +250,7 @@ def test_prepare_pyproject_unlink_file_in_appenv(
     assert not old_file.exists()
     captured = capsys.readouterr()
 
-    patterns.any.optional("...")
-    patterns.main.merge("any")
-    patterns.main.in_order(
+    patterns.cleanup_verbose_output.in_order(
         """\
 Project base: ...
 pyproject.toml: .../pyproject.toml
@@ -270,14 +266,14 @@ prepare_venv uv args: ['sync', '--no-dev', '--frozen']
 Removing old .appenv entry: old_file.txt ..."""
     )
 
-    patterns.no_errors.optional("...")
-    patterns.no_errors.refused("...error...")
-    patterns.no_errors.refused("...exception...")
-    patterns.no_errors.refused("...traceback...")
-    patterns.no_errors.refused("...failed...")
+    patterns.clean_output.optional("...")
+    patterns.clean_output.refused("...error...")
+    patterns.clean_output.refused("...exception...")
+    patterns.clean_output.refused("...traceback...")
+    patterns.clean_output.refused("...failed...")
 
     full_pattern = patterns.full
-    full_pattern.merge("main", "no_errors")
+    full_pattern.merge("cleanup_verbose_output", "clean_output")
 
     example = full_pattern.generate_example()
     print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")

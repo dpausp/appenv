@@ -523,7 +523,7 @@ def test_print_colored_diff_returns_true_when_changes(capsys, patterns):
     captured = capsys.readouterr()
     output = re.sub(r"\x1b\[[0-9;]*m", "", captured.out)
 
-    patterns.main.in_order(
+    patterns.diff_output.in_order(
         """\
 --- old.txt
 +++ new.txt
@@ -533,13 +533,13 @@ def test_print_colored_diff_returns_true_when_changes(capsys, patterns):
 +line3"""
     )
 
-    patterns.no_errors.refused("...error...")
-    patterns.no_errors.refused("...exception...")
-    patterns.no_errors.refused("...traceback...")
-    patterns.no_errors.refused("...failed...")
+    patterns.clean_output.refused("...error...")
+    patterns.clean_output.refused("...exception...")
+    patterns.clean_output.refused("...traceback...")
+    patterns.clean_output.refused("...failed...")
 
     full_pattern = patterns.full
-    full_pattern.merge("main", "no_errors")
+    full_pattern.merge("diff_output", "clean_output")
 
     assert full_pattern == output
 

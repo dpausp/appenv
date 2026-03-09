@@ -33,22 +33,20 @@ def test_migrate_uses_python_preference_from_requirements(
 
     # Pattern-test for console output
     captured = capsys.readouterr()
-    patterns.any.optional("...")
-    patterns.main.merge("any")
-    patterns.main.in_order(
+    patterns.python_pref.in_order(
         """\
 ...Found python preference: 3.12, 3.13, 3.14
 Using minimum version: 3.12..."""
     )
 
-    patterns.no_errors.optional("...")
-    patterns.no_errors.refused("...error...")
-    patterns.no_errors.refused("...exception...")
-    patterns.no_errors.refused("...traceback...")
-    patterns.no_errors.refused("...failed...")
+    patterns.clean_output.optional("...")
+    patterns.clean_output.refused("...error...")
+    patterns.clean_output.refused("...exception...")
+    patterns.clean_output.refused("...traceback...")
+    patterns.clean_output.refused("...failed...")
 
     full_pattern = patterns.full
-    full_pattern.merge("main", "no_errors")
+    full_pattern.merge("python_pref", "clean_output")
 
     example = full_pattern.generate_example()
     print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
@@ -75,23 +73,21 @@ def test_migrate_editable_warnings(tmp_path, monkeypatch, capsys, patterns):
 
     # Pattern-test for console output
     captured = capsys.readouterr()
-    patterns.any.optional("...")
-    patterns.main.merge("any")
-    patterns.main.in_order(
+    patterns.editable_warnings.in_order(
         """\
 ...warning: 2 editable install(s) skipped:
 ...-e /path/to/local/pkg...
 ...-e ../another-pkg..."""
     )
 
-    patterns.no_errors.optional("...")
-    patterns.no_errors.refused("...error...")
-    patterns.no_errors.refused("...exception...")
-    patterns.no_errors.refused("...traceback...")
-    patterns.no_errors.refused("...failed...")
+    patterns.clean_output.optional("...")
+    patterns.clean_output.refused("...error...")
+    patterns.clean_output.refused("...exception...")
+    patterns.clean_output.refused("...traceback...")
+    patterns.clean_output.refused("...failed...")
 
     full_pattern = patterns.full
-    full_pattern.merge("main", "no_errors")
+    full_pattern.merge("editable_warnings", "clean_output")
 
     example = full_pattern.generate_example()
     print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
@@ -126,22 +122,20 @@ def test_migrate_merges_with_tool_only_pyproject(
 
     # Pattern-test for console output
     captured = capsys.readouterr()
-    patterns.any.optional("...")
-    patterns.main.merge("any")
-    patterns.main.in_order(
+    patterns.merge_tool_config.in_order(
         """\
 Adding [project] section to existing pyproject.toml...
 ...Updated pyproject.toml..."""
     )
 
-    patterns.no_errors.optional("...")
-    patterns.no_errors.refused("...error...")
-    patterns.no_errors.refused("...exception...")
-    patterns.no_errors.refused("...traceback...")
-    patterns.no_errors.refused("...failed...")
+    patterns.clean_output.optional("...")
+    patterns.clean_output.refused("...error...")
+    patterns.clean_output.refused("...exception...")
+    patterns.clean_output.refused("...traceback...")
+    patterns.clean_output.refused("...failed...")
 
     full_pattern = patterns.full
-    full_pattern.merge("main", "no_errors")
+    full_pattern.merge("merge_tool_config", "clean_output")
 
     example = full_pattern.generate_example()
     print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
@@ -180,12 +174,11 @@ def test_migrate_existing_symlinks(tmp_path, monkeypatch, capsys, patterns):
 
     # Check output mentions existing symlink (with flexible surrounding content)
     captured = capsys.readouterr()
-    patterns.any.optional("...")
-    patterns.main.merge("any")
-    patterns.main.in_order("...found existing symlink(s): myapp...")
+    patterns.symlink_detection.optional("...")
+    patterns.symlink_detection.in_order("...found existing symlink(s): myapp...")
 
     full_pattern = patterns.full
-    full_pattern.merge("main")
+    full_pattern.merge("symlink_detection")
 
     example = full_pattern.generate_example()
     print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
@@ -373,23 +366,21 @@ def test_migrate_editable_with_valid_local_package(
     # Pattern-test for console output
     captured = capsys.readouterr()
 
-    patterns.any.optional("...")
-    patterns.main.merge("any")
-    patterns.main.in_order(
+    patterns.editable_found.in_order(
         """\
 ...found 1 editable install(s):
 ...my-local-lib (./local-lib)...
 found 2 dependency(ies): requests>=2.0, my-local-lib..."""
     )
 
-    patterns.no_errors.optional("...")
-    patterns.no_errors.refused("...error...")
-    patterns.no_errors.refused("...exception...")
-    patterns.no_errors.refused("...traceback...")
-    patterns.no_errors.refused("...failed...")
+    patterns.clean_output.optional("...")
+    patterns.clean_output.refused("...error...")
+    patterns.clean_output.refused("...exception...")
+    patterns.clean_output.refused("...traceback...")
+    patterns.clean_output.refused("...failed...")
 
     full_pattern = patterns.full
-    full_pattern.merge("main", "no_errors")
+    full_pattern.merge("editable_found", "clean_output")
 
     example = full_pattern.generate_example()
     print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
