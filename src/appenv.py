@@ -639,9 +639,9 @@ class AppEnv:
         project_base = find_project_base(self.base, self.original_cwd)
         setup_logging(command_name, project_base)
 
-    def meta(self, remaining_args: list[str] | None = None):
+    def meta(self, remaining_args: list[str] | None = None, prog: str = "appenv"):
         # Parse the appenv arguments
-        parser = argparse.ArgumentParser()
+        parser = argparse.ArgumentParser(prog=prog)
         subparsers = parser.add_subparsers()
         p = subparsers.add_parser("update-lockfile", help="Update the lock file.")
         p.add_argument(
@@ -1434,7 +1434,7 @@ def main():
 
     appenv = AppEnv(base, original_cwd)
     if application_name == "appenv":
-        appenv.meta(remaining)
+        appenv.meta(remaining, application_name)
     else:
         appenv.run(application_name, remaining)
 

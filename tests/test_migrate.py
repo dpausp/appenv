@@ -106,7 +106,6 @@ def test_migrate_editable_warnings(tmp_path, monkeypatch, capsys, patterns):
     assert "[tool.uv.sources]" not in pyproject
 
 
-
 def test_migrate_merges_with_tool_only_pyproject(
     tmp_path, monkeypatch, capsys, patterns
 ):
@@ -243,7 +242,6 @@ def test_migrate_uses_directory_name(tmp_path, monkeypatch, capsys):
 
     captured = capsys.readouterr()
     assert "Migrating" in captured.out
-
 
 
 # Tests for parse_editable_spec
@@ -527,8 +525,6 @@ def test_migrate_editable_with_extras(tmp_path, monkeypatch, capsys, patterns):
     )
 
 
-
-
 def test_migrate_editable_relative_parent_path(tmp_path, monkeypatch, capsys):
     """init_pyproject handles -e ../sibling style paths."""
     base = tmp_path
@@ -585,6 +581,3 @@ def test_migrate_editable_bare_path_gets_prefix(tmp_path, monkeypatch, capsys):
     assert '"bare-pkg"' in pyproject
     # Should have ./ prefix in source path
     assert 'path = "./bare-pkg"' in pyproject
-
-
-

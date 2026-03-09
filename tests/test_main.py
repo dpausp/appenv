@@ -76,7 +76,9 @@ def test_main_calls_meta_when_appenv(monkeypatch):
 
     meta_called = []
     monkeypatch.setattr(
-        appenv.AppEnv, "meta", lambda self, args: meta_called.append(args)
+        appenv.AppEnv,
+        "meta",
+        lambda self, args, prog="appenv": meta_called.append(args),
     )
 
     monkeypatch.setattr("sys.argv", ["appenv"])
@@ -811,9 +813,6 @@ def test_run_script_delegates(monkeypatch, tmp_path):
     assert run_called == [("pytest", ["-v", "test.py"])]
 
 
-
-
-
 def test_settings_no_error_lines(patterns, monkeypatch):
     """settings() output contains no error or exception lines."""
     env = appenv.AppEnv(Path("/project"), Path.cwd())
@@ -1145,7 +1144,7 @@ def test_main_calls_ensure_best_python(monkeypatch, workdir):
         "ensure_best_python",
         lambda b: called.append("pyproject"),
     )
-    monkeypatch.setattr(appenv.AppEnv, "meta", lambda self, args: None)
+    monkeypatch.setattr(appenv.AppEnv, "meta", lambda self, args, prog="appenv": None)
     monkeypatch.setattr(appenv, "__file__", str(base / "appenv"))
     monkeypatch.setattr("sys.argv", ["appenv"])
 
