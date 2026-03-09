@@ -349,67 +349,74 @@ def ensure_uv(base=None):
     return uv_bin
 
 
-def get_uv_bin(base=None):
-    """Get path to uv binary.
+def _cleanup_appenv_uv(base):
+    """Remove leftover .appenv/.uv directory."""
+    if base:
+        appenv_uv = base / ".appenv" / ".uv"
+        if appenv_uv.exists():
+            shutil.rmtree(appenv_uv)
 
-    Priority:
-    1. uv in PATH (>= 0.5.0) → use it (and cleanup .appenv/.uv if present)
-    2. .appenv/.uv from previous run (if still valid)
-    3. nix-build/nix build → build uv with nix
-    4. pip install uv → install via pip
-    """
-    # 1. Check PATH first
+
+def _try_uv_from_path(base):
+    """Try to find uv in PATH."""
     uv_in_path = shutil.which("uv")
     if uv_in_path:
         uv_bin = Path(uv_in_path)
         if get_uv_version(uv_bin):
-            # PATH uv is suitable - use it and cleanup any leftover .appenv/.uv
-            if base:
-                appenv_uv = base / ".appenv" / ".uv"
-                if appenv_uv.exists():
-                    shutil.rmtree(appenv_uv)
+            _cleanup_appenv_uv(base)
             return uv_bin
+    return None
 
-    # 2. Check .appenv/.uv from previous run
-    if base:
-        uv_local = base / ".appenv" / ".uv" / "bin" / "uv"
-        if uv_local.exists() and get_uv_version(uv_local):
-            return uv_local
 
-    # 3. Build with nix (only if needed)
-    if base and shutil.which("nix") is not None:
-        uv_local = base / ".appenv" / ".uv" / "bin" / "uv"
-        uv_out = base / ".appenv" / ".uv"
-
-        # Check if we already have a valid .appenv/.uv
-        if uv_local.exists():
-            if get_uv_version(uv_local):
-                return uv_local
-            log.debug(".appenv/.uv version too old, updating ...")
-
-        # Need to build/update uv with nix
-        verbose_print("Building uv with nix ...")
-
-        # Try cheap nix-build from local channel first
-        result = subprocess.run(
-            ["nix-build", "<nixpkgs>", "-A", "uv", "-o", str(uv_out)],
-            capture_output=True,
-        )
-
-        # Check if version is recent enough (>= 0.5)
-        if result.returncode == 0 and uv_local.exists():
-            if get_uv_version(uv_local):
-                return uv_local
-            log.debug("nix-build uv version too old, trying nix build ...")
-
-        # Fallback: expensive but fresh nix build from nixpkgs flake
-        subprocess.run(
-            ["nix", "build", "nixpkgs#uv", "--out-link", str(uv_out)],
-            check=True,
-        )
+def _try_uv_from_appenv_dir(base):
+    """Try to find uv in .appenv/.uv from previous run."""
+    if not base:
+        return None
+    uv_local = base / ".appenv" / ".uv" / "bin" / "uv"
+    if uv_local.exists() and get_uv_version(uv_local):
         return uv_local
+    return None
 
-    # 4. pip install fallback
+
+def _try_uv_from_nix(base):
+    """Try to build uv with nix."""
+    if not base or shutil.which("nix") is None:
+        return None
+
+    uv_local = base / ".appenv" / ".uv" / "bin" / "uv"
+    uv_out = base / ".appenv" / ".uv"
+
+    # Check if we already have a valid .appenv/.uv
+    if uv_local.exists():
+        if get_uv_version(uv_local):
+            return uv_local
+        log.debug(".appenv/.uv version too old, updating ...")
+
+    # Need to build/update uv with nix
+    verbose_print("Building uv with nix ...")
+
+    # Try cheap nix-build from local channel first
+    result = subprocess.run(
+        ["nix-build", "<nixpkgs>", "-A", "uv", "-o", str(uv_out)],
+        capture_output=True,
+    )
+
+    # Check if version is recent enough (>= 0.5)
+    if result.returncode == 0 and uv_local.exists():
+        if get_uv_version(uv_local):
+            return uv_local
+        log.debug("nix-build uv version too old, trying nix build ...")
+
+    # Fallback: expensive but fresh nix build from nixpkgs flake
+    subprocess.run(
+        ["nix", "build", "nixpkgs#uv", "--out-link", str(uv_out)],
+        check=True,
+    )
+    return uv_local
+
+
+def _try_uv_from_pip():
+    """Try to install uv via pip."""
     log.debug("Installing uv via pip ...")
     subprocess.run(
         [sys.executable, "-m", "pip", "install", "-q", "uv"],
@@ -420,12 +427,39 @@ def get_uv_bin(base=None):
     if uv_in_path:
         uv_bin = Path(uv_in_path)
         if get_uv_version(uv_bin):
-            # Use it and cleanup any leftover .appenv/.uv
-            if base:
-                appenv_uv = base / ".appenv" / ".uv"
-                if appenv_uv.exists():
-                    shutil.rmtree(appenv_uv)
             return uv_bin
+    return None
+
+
+def get_uv_bin(base=None):
+    """Get path to uv binary.
+
+    Priority:
+    1. uv in PATH (>= 0.5.0) → use it (and cleanup .appenv/.uv if present)
+    2. .appenv/.uv from previous run (if still valid)
+    3. nix-build/nix build → build uv with nix
+    4. pip install uv → install via pip
+    """
+    # 1. Check PATH first
+    uv_bin = _try_uv_from_path(base)
+    if uv_bin:
+        return uv_bin
+
+    # 2. Check .appenv/.uv from previous run
+    uv_bin = _try_uv_from_appenv_dir(base)
+    if uv_bin:
+        return uv_bin
+
+    # 3. Build with nix
+    uv_bin = _try_uv_from_nix(base)
+    if uv_bin:
+        return uv_bin
+
+    # 4. pip install fallback
+    uv_bin = _try_uv_from_pip()
+    if uv_bin:
+        _cleanup_appenv_uv(base)
+        return uv_bin
 
     raise RuntimeError("uv not found and could not be installed.")
 
