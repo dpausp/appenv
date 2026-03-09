@@ -1253,6 +1253,65 @@ requires-python = ">={python_version}"
                     else:
                         path.unlink()
 
+    def _read_lockfile_lines(self, lock_file: Path) -> set[str]:
+        """Read lockfile and return non-comment lines as a set."""
+        if not lock_file.exists():
+            return set()
+        return {
+            stripped
+            for line in lock_file.read_text().splitlines()
+            if (stripped := line.strip()) and not stripped.startswith("#")
+        }
+
+    def _run_uv_lock_diff(self, base: Path, verbose: bool) -> bool:
+        """Run uv lock in temp directory and show diff.
+
+        Returns True if changes found.
+        """
+        lock_file = base / UV_LOCK
+        old_content = lock_file.read_text() if lock_file.exists() else ""
+
+        print("Checking lockfile changes ...")
+        if verbose:
+            print("Running uv lock in temp directory (dry run)")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_pyproject = Path(tmpdir) / PYPROJECT_TOML
+            tmp_lock = Path(tmpdir) / UV_LOCK
+            shutil.copy(base / PYPROJECT_TOML, tmp_pyproject)
+            uv_cmd(["lock"], verbose=verbose, cwd=tmpdir)
+            new_content = tmp_lock.read_text() if tmp_lock.exists() else ""
+
+        has_changes = print_colored_diff(
+            old_content, new_content, UV_LOCK, f"{UV_LOCK} (new)"
+        )
+        if not has_changes:
+            print("No changes")
+        return has_changes
+
+    def _print_lockfile_summary(self, old_lines: set[str], new_lines: set[str]) -> None:
+        """Print summary of lockfile changes."""
+        added = new_lines - old_lines
+        removed = old_lines - new_lines
+        n_added = len(added)
+        n_removed = len(removed)
+
+        green = "\033[32m"
+        red = "\033[31m"
+        reset = "\033[0m"
+        check = green + "✓" + reset
+
+        is_new = len(old_lines) == 0
+        if n_added == 0 and n_removed == 0 and not is_new:
+            print("No changes")
+        else:
+            added_str = f"{green}+{n_added}{reset}"
+            removed_str = f"{red}-{n_removed}{reset}"
+            if is_new:
+                print(f"{check} Created ({added_str} lines)")
+            else:
+                print(f"{check} Updated ({added_str} / {removed_str} lines)")
+
     def update_lockfile(self, args=None, remaining=None):
         verbose: bool = bool(args and getattr(args, "verbose", False))
 
@@ -1269,73 +1328,20 @@ requires-python = ">={python_version}"
         log.debug(f"Reading: {source_file}")
         log.debug(f"Lockfile: {lock_file}")
 
-        lock_file = self.base / UV_LOCK
-
         # Read existing lockfile for comparison
-        old_lines: set[str] = set()
-        if lock_file.exists():
-            if verbose:
-                print(f"Reading existing lockfile: {lock_file}")
-            old_lines = {
-                stripped
-                for line in lock_file.read_text().splitlines()
-                if (stripped := line.strip()) and not stripped.startswith("#")
-            }
+        old_lines = self._read_lockfile_lines(lock_file)
 
         if args and args.diff:
-            print("Checking lockfile changes ...")
-            if verbose:
-                print("Running uv lock in temp directory (dry run)")
-            old_content = lock_file.read_text() if lock_file.exists() else ""
-
-            # Run uv lock in temp directory to avoid modifying real lockfile
-            with tempfile.TemporaryDirectory() as tmpdir:
-                tmp_pyproject = Path(tmpdir) / PYPROJECT_TOML
-                tmp_lock = Path(tmpdir) / UV_LOCK
-                shutil.copy(self.base / PYPROJECT_TOML, tmp_pyproject)
-                uv_cmd(["lock"], verbose=verbose, cwd=tmpdir)
-                new_content = tmp_lock.read_text() if tmp_lock.exists() else ""
-
-            has_changes = print_colored_diff(
-                old_content, new_content, UV_LOCK, f"{UV_LOCK} (new)"
-            )
-            if not has_changes:
-                print("No changes")
+            self._run_uv_lock_diff(self.base, verbose)
         else:
             # Run uv lock to update
             if verbose:
                 print("Running: uv lock")
             uv_cmd(["lock"], verbose=verbose)
 
-            # Read new content
-            new_content = lock_file.read_text() if lock_file.exists() else ""
-            new_lines = {
-                stripped
-                for line in new_content.splitlines()
-                if (stripped := line.strip()) and not stripped.startswith("#")
-            }
-
-            # Show summary
-            added = new_lines - old_lines
-            removed = old_lines - new_lines
-            n_added = len(added)
-            n_removed = len(removed)
-
-            green = "\033[32m"
-            red = "\033[31m"
-            reset = "\033[0m"
-            check = green + "✓" + reset
-
-            is_new = len(old_lines) == 0
-            if n_added == 0 and n_removed == 0 and not is_new:
-                print("No changes")
-            else:
-                added_str = f"{green}+{n_added}{reset}"
-                removed_str = f"{red}-{n_removed}{reset}"
-                if is_new:
-                    print(f"{check} Created ({added_str} lines)")
-                else:
-                    print(f"{check} Updated ({added_str} / {removed_str} lines)")
+            # Read new content and show summary
+            new_lines = self._read_lockfile_lines(lock_file)
+            self._print_lockfile_summary(old_lines, new_lines)
 
 
 def _detect_command_name() -> str:

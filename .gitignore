@@ -178,3 +178,6 @@ dmypy.json
 # Complexipy analysis artifacts
 .complexipy_cache/
 complexipy_results_*.json
+
+# uv cache
+.uv/
