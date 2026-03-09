@@ -10,11 +10,6 @@
 #   - system has usable uv (see UV_MIN_VERSION) or has Nix to install uv on-demand
 #   - pyproject.toml next to the appenv file
 
-# TODO
-#
-# - provide a `clone` meta command to create a new project based on this one
-#   maybe use an entry point to allow further initialisation of the clone.
-
 __version__ = "2026.3.5"
 
 import argparse
@@ -45,6 +40,7 @@ EXIT_CODE_UNAVAILABLE = 68
 
 
 def cmd(c, merge_stderr=True, quiet=False, cwd=None):
+    # SPEC: SRS-F001-cmd-wrapper - Enrich subprocess errors with command output context
     try:
         is_shell = isinstance(c, str)
         cmd_list = cast("list[str]", [c] if is_shell else c)
@@ -238,12 +234,6 @@ def cleanup_old_logs(log_dir: Path, max_age_days: int = 7) -> None:
     for log_file in log_dir.glob("*.log"):
         if datetime.fromtimestamp(log_file.stat().st_mtime) < cutoff:
             log_file.unlink()
-
-
-def verbose_print(*args, **kwargs):
-    """DEPRECATED: Use log.debug() instead."""
-    if os.environ.get("APPENV_VERBOSE"):
-        print(*args, **kwargs, flush=True)
 
 
 def print_colored_diff(old_content, new_content, fromfile, tofile):

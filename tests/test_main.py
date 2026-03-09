@@ -771,26 +771,6 @@ def test_version_satisfies_constraints_edge_cases():
     )  # [3,10] < [3,10,0]
 
 
-def test_verbose_print_with_env(monkeypatch, capsys):
-    """verbose_print outputs when APPENV_VERBOSE is set."""
-    monkeypatch.setenv("APPENV_VERBOSE", "1")
-
-    appenv.verbose_print("test message")
-
-    captured = capsys.readouterr()
-    assert "test message" in captured.out
-
-
-def test_verbose_print_without_env(monkeypatch, capsys):
-    """verbose_print outputs nothing when APPENV_VERBOSE is not set."""
-    monkeypatch.delenv("APPENV_VERBOSE", raising=False)
-
-    appenv.verbose_print("test message")
-
-    captured = capsys.readouterr()
-    assert captured.out == ""
-
-
 def test_run_script_delegates(monkeypatch, tmp_path):
     """run_script() delegates to AppEnv.run() with script name."""
     env = appenv.AppEnv(tmp_path, Path.cwd())

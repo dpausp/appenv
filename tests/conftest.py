@@ -99,7 +99,11 @@ def patterns(request):
                 )
                 self._collected = True
             except Exception:
-                pass  # Silently ignore if example generation fails
+                # Broad exception acceptable in test infrastructure:
+                # Example generation is optional metadata collection for pattern
+                # comparison. Failures should not break test execution, and
+                # missing examples are non-critical (comparison tools handle None).
+                pass
 
         def generate_example(self):
             """Dummy for pytest-patterns 0.3.0 compatibility."""
