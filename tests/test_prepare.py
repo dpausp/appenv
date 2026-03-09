@@ -198,6 +198,7 @@ pyproject.toml: .../pyproject.toml
 uv.lock: .../uv.lock
 venv: .../.appenv/venv
 uv binary: ...
+uv version: unknown
 Python: ...
 Dev mode: False
 Creating venv with uv ...
@@ -264,6 +265,7 @@ pyproject.toml: .../pyproject.toml
 uv.lock: .../uv.lock
 venv: .../.appenv/venv
 uv binary: /usr/bin/uv
+uv version: unknown
 Python: ...
 Dev mode: False
 Creating venv with uv ...
@@ -296,10 +298,54 @@ Removing old .appenv entry: logs ..."""
 
 
 def test_prepare_pyproject_verbose(workdir, monkeypatch, capsys, patterns):
-    """Lines 639-642: Verbose output shows venv python info."""
-    base = Path(workdir)
+    """Test verbose output during pyproject workflow."""
+    base = Path(workdir) / "pyproject_verbose"
+    base.mkdir()
+    os.chdir(base)
+
     (base / "pyproject.toml").write_text(
-        '[project]\nname = "test"\ndependencies = []\n'
+        '[project]\nname = "pyproject_verbose"\ndependencies = ["click"]\n'
+    )
+    (base / "uv.lock").write_text("version = 1\n")
+
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base=None: Path("/usr/bin/uv"))
+
+    def mock_uv_cmd(args, **kwargs):
+        if "venv" in args:
+            venv = base / ".appenv" / "venv"
+            venv.mkdir(parents=True, exist_ok=True)
+            (venv / "bin").mkdir(exist_ok=True)
+            (venv / "bin" / "python").write_text("#!/bin/sh\n")
+        return b""
+
+    monkeypatch.setattr(appenv, "uv_cmd", mock_uv_cmd)
+    monkeypatch.setattr(appenv, "cmd", lambda c, **kwargs: b"Python 3.12.0")
+    monkeypatch.setenv("APPENV_VERBOSE", "1")
+
+    env = appenv.AppEnv(base, Path.cwd())
+    env.prepare()
+
+    captured = capsys.readouterr()
+
+    patterns.any.optional("...")
+    patterns.main.merge("any")
+    patterns.main.in_order(
+        """\
+Project base: ...
+pyproject.toml: .../pyproject.toml
+uv.lock: .../uv.lock
+venv: .../.appenv/venv
+uv binary: /usr/bin/uv
+uv version: unknown
+Python: ...
+Dev mode: False
+Creating venv with uv ...
+prepare_venv activated extras/optional deps: []
+prepare_venv uv args: ['sync', '--no-dev', '--frozen']
+Venv Python: .../.appenv/venv/bin/python
+Venv Python (realpath): ...
+Venv Python version: Python 3.12.0
+Removing old .appenv entry: logs ..."""
     )
     (base / "uv.lock").write_text("version = 1\n")
 
@@ -336,6 +382,7 @@ pyproject.toml: .../pyproject.toml
 uv.lock: .../uv.lock
 venv: .../.appenv/venv
 uv binary: /usr/bin/uv
+uv version: unknown
 Python: ...
 Dev mode: False
 Creating venv with uv ...
@@ -402,6 +449,7 @@ pyproject.toml: .../pyproject.toml
 uv.lock: .../uv.lock
 venv: .../.appenv/venv
 uv binary: /usr/bin/uv
+uv version: unknown
 Python: ...
 Dev mode: False
 Creating venv with uv ...

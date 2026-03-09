@@ -807,6 +807,11 @@ class AppEnv:
         log.debug(f"uv.lock: {lock_file}")
         log.debug(f"venv: {venv_real}")
         log.debug(f"uv binary: {uv_bin}")
+        try:
+            uv_version = get_uv_version(uv_bin)
+            log.debug(f"uv version: {uv_version or 'unknown'}")
+        except (OSError, subprocess.CalledProcessError):
+            log.debug("uv version: unknown")
         log.debug(f"Python: {Path(sys.executable).resolve()}")
         log.debug(f"Dev mode: {dev_mode}")
 
@@ -865,10 +870,11 @@ class AppEnv:
             current_link.unlink()
 
         # Cleanup old .appenv hash-based venvs
-        # But keep .appenv/venv (the current venv location) and .uv
+        # But keep .appenv/venv (current venv), .uv (local uv), logs, and profiling
+        keep = {"venv", ".uv", "logs", "profiling"}
         if old_appenv.exists():
             for path in list(old_appenv.iterdir()):
-                if path.name != "venv" and path.name != ".uv":
+                if path.name not in keep:
                     log.debug(f"Removing old .appenv entry: {path.name} ...")
                     if path.is_dir():
                         shutil.rmtree(path)
