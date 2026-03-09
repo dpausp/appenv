@@ -106,7 +106,7 @@ dev = [
     { name = "pyproject-fmt", specifier = ">=2.16.2" },
     { name = "pytest" },
     { name = "pytest-cov" },
-    { name = "pytest-deduplicate" },
+    { name = "pytest-deduplicate", git = "https://github.com/dpausp/pytest_deduplicate?branch=ts-ai" },
     { name = "pytest-patterns", git = "https://github.com/dpausp/pytest-patterns?branch=ts-ai" },
     { name = "pytest-ruff" },
     { name = "pytest-timeout" },
@@ -140,7 +140,7 @@ test = [
     { name = "pexpect" },
     { name = "pytest" },
     { name = "pytest-cov" },
-    { name = "pytest-deduplicate" },
+    { name = "pytest-deduplicate", git = "https://github.com/dpausp/pytest_deduplicate?branch=ts-ai" },
     { name = "pytest-patterns", git = "https://github.com/dpausp/pytest-patterns?branch=ts-ai" },
     { name = "pytest-ruff" },
     { name = "pytest-timeout" },
@@ -983,14 +983,10 @@ wheels = [
 [[package]]
 name = "pytest-deduplicate"
 version = "0.1.6"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/dpausp/pytest_deduplicate?branch=ts-ai#fb6591c160e2b189a909d41e74f3e0e468bb2996" }
 dependencies = [
     { name = "coverage" },
     { name = "pytest" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/f6/2a/66f7f131895df3e599897e65fa32fb7fcd17c2f10f3cad614eed8b59c472/pytest_deduplicate-0.1.6.tar.gz", hash = "sha256:581691c6a25918c558f0918e9f17d583b4f88f961b1304acf30d12b672dc73fb", size = 16210, upload-time = "2023-08-12T15:51:50.502Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/2a/53/6a7874c2603233494f80adf820905614c1a00974b88b46748df0f0bdac19/pytest_deduplicate-0.1.6-py3-none-any.whl", hash = "sha256:1b1e2f0fc143b814f5cc9d0827454002f498395f9c473cda667359c0edf32546", size = 16488, upload-time = "2023-08-12T15:51:48.557Z" },
 ]
 
 [[package]]

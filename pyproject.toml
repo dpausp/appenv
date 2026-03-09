@@ -144,3 +144,4 @@ pytest_add_cli_args_test_selection = [
 
 [tool.uv.sources]
 pytest-patterns = { git = "https://github.com/dpausp/pytest-patterns", branch = "ts-ai" }
+pytest-deduplicate = { git = "https://github.com/dpausp/pytest_deduplicate", branch = "ts-ai" }
