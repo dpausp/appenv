@@ -107,7 +107,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-deduplicate" },
-    { name = "pytest-patterns", git = "https://github.com/dpausp/pytest-patterns" },
+    { name = "pytest-patterns", git = "https://github.com/dpausp/pytest-patterns?branch=ts-ai" },
     { name = "pytest-ruff" },
     { name = "pytest-timeout" },
     { name = "pytest-ty" },
@@ -141,7 +141,7 @@ test = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-deduplicate" },
-    { name = "pytest-patterns", git = "https://github.com/dpausp/pytest-patterns" },
+    { name = "pytest-patterns", git = "https://github.com/dpausp/pytest-patterns?branch=ts-ai" },
     { name = "pytest-ruff" },
     { name = "pytest-timeout" },
     { name = "pytest-ty" },
@@ -995,8 +995,8 @@ wheels = [
 
 [[package]]
 name = "pytest-patterns"
-version = "0.3.0"
-source = { git = "https://github.com/dpausp/pytest-patterns#960300ff62cc64fd7a13a924b5cd979dcfaa2311" }
+version = "0.3.0.post1.dev67+gad4d6f74b"
+source = { git = "https://github.com/dpausp/pytest-patterns?branch=ts-ai#ad4d6f74b81cffa59ffbcd42670fc04de5733867" }
 dependencies = [
     { name = "pytest" },
 ]
