@@ -840,9 +840,9 @@ def test_run_script_delegates(monkeypatch, tmp_path):
     assert run_called == [("pytest", ["-v", "test.py"])]
 
 
-def test_show_version(capsys, patterns):
+def test_show_version(tmp_path, capsys, patterns):
     """show_version() prints the appenv version."""
-    env = appenv.AppEnv(Path("/tmp"), Path.cwd())
+    env = appenv.AppEnv(tmp_path, Path.cwd())
     env.show_version()
 
     captured = capsys.readouterr()
