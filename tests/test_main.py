@@ -513,7 +513,7 @@ def test_python_method_calls_run(monkeypatch, tmp_path):
 # print_colored_diff() tests
 
 
-def test_print_colored_diff_returns_true_when_changes(capsys, patterns):
+def test_print_colored_diff_returns_true_when_changes(capsys):
     old = "line1\nline2\n"
     new = "line1\nline3\n"
 
@@ -523,25 +523,15 @@ def test_print_colored_diff_returns_true_when_changes(capsys, patterns):
     captured = capsys.readouterr()
     output = re.sub(r"\x1b\[[0-9;]*m", "", captured.out)
 
-    patterns.diff_output.in_order(
-        """\
+    expected = """\
 --- old.txt
 +++ new.txt
 @@ -1,2 +1,2 @@
  line1
 -line2
-+line3"""
-    )
-
-    patterns.clean_output.refused("...error...")
-    patterns.clean_output.refused("...exception...")
-    patterns.clean_output.refused("...traceback...")
-    patterns.clean_output.refused("...failed...")
-
-    full_pattern = patterns.full
-    full_pattern.merge("diff_output", "clean_output")
-
-    assert full_pattern == output
++line3
+"""
+    assert output == expected
 
 
 def test_print_colored_diff_returns_false_when_no_changes(capsys):
@@ -813,7 +803,7 @@ def test_run_script_delegates(monkeypatch, tmp_path):
     assert run_called == [("pytest", ["-v", "test.py"])]
 
 
-def test_settings_no_error_lines(patterns, monkeypatch):
+def test_settings_no_error_lines(monkeypatch):
     """settings() output contains no error or exception lines."""
     env = appenv.AppEnv(Path("/project"), Path.cwd())
 
@@ -827,15 +817,12 @@ def test_settings_no_error_lines(patterns, monkeypatch):
 
     result = output.getvalue()
 
-    # Pattern: refuse common error indicators
-    p = patterns.clean_output
-    p.refused("...error...")
-    p.refused("...exception...")
-    p.refused("...traceback...")
-    p.refused("...failed...")
-    p.optional("...")  # Allow everything else
-
-    assert p == result
+    # Simple assertions: output should not contain error indicators
+    output_lower = result.lower()
+    assert "error" not in output_lower
+    assert "exception" not in output_lower
+    assert "traceback" not in output_lower
+    assert "failed" not in output_lower
 
 
 def test_get_uv_version_requires_uv_bin_argument(monkeypatch):

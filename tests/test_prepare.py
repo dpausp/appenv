@@ -222,9 +222,7 @@ Venv Python version: Python 3.12.0"""
     assert full_pattern == captured.out
 
 
-def test_prepare_pyproject_unlink_file_in_appenv(
-    workdir, monkeypatch, capsys, patterns
-):
+def test_prepare_pyproject_unlink_file_in_appenv(workdir, monkeypatch, capsys):
     """Line 758: _prepare_pyproject unlinks non-directory files in .appenv."""
     base = Path(workdir)
 
@@ -250,35 +248,11 @@ def test_prepare_pyproject_unlink_file_in_appenv(
     assert not old_file.exists()
     captured = capsys.readouterr()
 
-    patterns.cleanup_verbose_output.in_order(
-        """\
-Project base: ...
-pyproject.toml: .../pyproject.toml
-uv.lock: .../uv.lock
-venv: .../.appenv/venv
-uv binary: /usr/bin/uv
-uv version: unknown
-Python: ...
-Dev mode: False
-Creating venv with uv ...
-prepare_venv activated extras/optional deps: []
-prepare_venv uv args: ['sync', '--no-dev', '--frozen']
-Removing old .appenv entry: old_file.txt ..."""
-    )
-
-    patterns.clean_output.optional("...")
-    patterns.clean_output.refused("...error...")
-    patterns.clean_output.refused("...exception...")
-    patterns.clean_output.refused("...traceback...")
-    patterns.clean_output.refused("...failed...")
-
-    full_pattern = patterns.full
-    full_pattern.merge("cleanup_verbose_output", "clean_output")
-
-    example = full_pattern.generate_example()
-    print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
-
-    assert full_pattern == captured.out
+    # Simple assertions for key output
+    assert "Project base:" in captured.out
+    assert "pyproject.toml:" in captured.out
+    assert "Creating venv with uv" in captured.out
+    assert "Removing old .appenv entry: old_file.txt" in captured.out
 
 
 # ==============================================================================

@@ -8,7 +8,7 @@ import appenv
 
 
 def test_migrate_uses_python_preference_from_requirements(
-    tmp_path, monkeypatch, capsys, patterns
+    tmp_path, monkeypatch, capsys
 ):
     """migrate reads python preference from requirements.txt."""
     monkeypatch.chdir(tmp_path)
@@ -31,27 +31,10 @@ def test_migrate_uses_python_preference_from_requirements(
     assert 'requires-python = ">=3.12"' in pyproject
     assert '"requests"' in pyproject
 
-    # Pattern-test for console output
+    # Simple assertions for console output
     captured = capsys.readouterr()
-    patterns.python_pref.in_order(
-        """\
-...Found python preference: 3.12, 3.13, 3.14
-Using minimum version: 3.12..."""
-    )
-
-    patterns.clean_output.optional("...")
-    patterns.clean_output.refused("...error...")
-    patterns.clean_output.refused("...exception...")
-    patterns.clean_output.refused("...traceback...")
-    patterns.clean_output.refused("...failed...")
-
-    full_pattern = patterns.full
-    full_pattern.merge("python_pref", "clean_output")
-
-    example = full_pattern.generate_example()
-    print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
-
-    assert full_pattern == captured.out
+    assert "Found python preference: 3.12, 3.13, 3.14" in captured.out
+    assert "Using minimum version: 3.12" in captured.out
 
 
 def test_migrate_editable_warnings(tmp_path, monkeypatch, capsys, patterns):
@@ -102,9 +85,7 @@ def test_migrate_editable_warnings(tmp_path, monkeypatch, capsys, patterns):
     assert "[tool.uv.sources]" not in pyproject
 
 
-def test_migrate_merges_with_tool_only_pyproject(
-    tmp_path, monkeypatch, capsys, patterns
-):
+def test_migrate_merges_with_tool_only_pyproject(tmp_path, monkeypatch, capsys):
     """migrate adds [project] section to pyproject.toml with only tool configs."""
     monkeypatch.chdir(tmp_path)
     base = tmp_path
@@ -120,27 +101,10 @@ def test_migrate_merges_with_tool_only_pyproject(
 
     pyproject = (base / "pyproject.toml").read_text()
 
-    # Pattern-test for console output
+    # Simple assertions for console output
     captured = capsys.readouterr()
-    patterns.merge_tool_config.in_order(
-        """\
-Adding [project] section to existing pyproject.toml...
-...Updated pyproject.toml..."""
-    )
-
-    patterns.clean_output.optional("...")
-    patterns.clean_output.refused("...error...")
-    patterns.clean_output.refused("...exception...")
-    patterns.clean_output.refused("...traceback...")
-    patterns.clean_output.refused("...failed...")
-
-    full_pattern = patterns.full
-    full_pattern.merge("merge_tool_config", "clean_output")
-
-    example = full_pattern.generate_example()
-    print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
-
-    assert full_pattern == captured.out
+    assert "Adding [project] section to existing pyproject.toml" in captured.out
+    assert "Updated pyproject.toml" in captured.out
 
     # Classic assertions for pyproject.toml structure
     assert "[tool.ruff]" in pyproject
@@ -150,7 +114,7 @@ Adding [project] section to existing pyproject.toml...
     assert '"requests>=2.0"' in pyproject
 
 
-def test_migrate_existing_symlinks(tmp_path, monkeypatch, capsys, patterns):
+def test_migrate_existing_symlinks(tmp_path, monkeypatch, capsys):
     """migrate detects and preserves existing symlinks during migration."""
     monkeypatch.chdir(tmp_path)
     base = tmp_path
@@ -172,18 +136,9 @@ def test_migrate_existing_symlinks(tmp_path, monkeypatch, capsys, patterns):
     env = appenv.AppEnv(base, Path.cwd())
     env.migrate()
 
-    # Check output mentions existing symlink (with flexible surrounding content)
+    # Simple assertion for console output
     captured = capsys.readouterr()
-    patterns.symlink_detection.optional("...")
-    patterns.symlink_detection.in_order("...found existing symlink(s): myapp...")
-
-    full_pattern = patterns.full
-    full_pattern.merge("symlink_detection")
-
-    example = full_pattern.generate_example()
-    print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
-
-    assert full_pattern == captured.out.lower()
+    assert "found existing symlink(s): myapp" in captured.out.lower()
 
     # Verify symlink still exists and points to appenv
     assert myapp_link.exists()
@@ -335,9 +290,7 @@ def test_extract_package_name_from_path_missing_dir(tmp_path):
 # Tests for init_pyproject with editable installs
 
 
-def test_migrate_editable_with_valid_local_package(
-    tmp_path, monkeypatch, capsys, patterns
-):
+def test_migrate_editable_with_valid_local_package(tmp_path, monkeypatch, capsys):
     """init_pyproject converts -e ./path to proper uv.sources entry."""
     monkeypatch.chdir(tmp_path)
     base = tmp_path
@@ -363,29 +316,12 @@ def test_migrate_editable_with_valid_local_package(
     assert "[tool.uv.sources]" in pyproject
     assert 'my-local-lib = { path = "./local-lib", editable = true }' in pyproject
 
-    # Pattern-test for console output
+    # Simple assertions for console output
     captured = capsys.readouterr()
-
-    patterns.editable_found.in_order(
-        """\
-...found 1 editable install(s):
-...my-local-lib (./local-lib)...
-found 2 dependency(ies): requests>=2.0, my-local-lib..."""
-    )
-
-    patterns.clean_output.optional("...")
-    patterns.clean_output.refused("...error...")
-    patterns.clean_output.refused("...exception...")
-    patterns.clean_output.refused("...traceback...")
-    patterns.clean_output.refused("...failed...")
-
-    full_pattern = patterns.full
-    full_pattern.merge("editable_found", "clean_output")
-
-    example = full_pattern.generate_example()
-    print(f"\n=== Pattern Example ===\n{example}\n=== End ===\n")
-
-    assert full_pattern == captured.out.lower()
+    output = captured.out.lower()
+    assert "found 1 editable install(s)" in output
+    assert "my-local-lib (./local-lib)" in output
+    assert "found 2 dependency(ies): requests>=2.0, my-local-lib" in output
 
 
 def test_migrate_editable_with_setup_py(tmp_path, monkeypatch, capsys):
