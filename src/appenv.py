@@ -195,7 +195,7 @@ def has_pyproject(base):
     return (base / PYPROJECT_TOML).exists()
 
 
-def setup_logging(command_name: str, base: Path) -> None:
+def setup_logging(command_name, base):
     """Setup command-specific logging to file and optional console."""
     # Only setup logging if base directory exists
     if not base.exists():
@@ -227,7 +227,7 @@ def setup_logging(command_name: str, base: Path) -> None:
         log.addHandler(console_handler)
 
 
-def cleanup_old_logs(log_dir: Path, max_age_days: int = 7) -> None:
+def cleanup_old_logs(log_dir, max_age_days=7):
     """Remove logs older than max_age_days."""
     cutoff = datetime.now() - timedelta(days=max_age_days)
 
@@ -818,7 +818,7 @@ class AppEnv:
         project_base = find_project_base(self.base, self.original_cwd)
         setup_logging(command_name, project_base)
 
-    def meta(self, remaining_args: list[str] | None = None, prog: str = "appenv"):
+    def meta(self, remaining_args=None, prog="appenv"):
         # Parse the appenv arguments
         parser = argparse.ArgumentParser(prog=prog)
         subparsers = parser.add_subparsers()
@@ -1403,7 +1403,7 @@ class AppEnv:
                     else:
                         path.unlink()
 
-    def _read_lockfile_lines(self, lock_file: Path) -> set[str]:
+    def _read_lockfile_lines(self, lock_file):
         """Read lockfile and return non-comment lines as a set."""
         if not lock_file.exists():
             return set()
@@ -1413,7 +1413,7 @@ class AppEnv:
             if (stripped := line.strip()) and not stripped.startswith("#")
         }
 
-    def _run_uv_lock_diff(self, base: Path, verbose: bool) -> bool:
+    def _run_uv_lock_diff(self, base, verbose):
         """Run uv lock in temp directory and show diff.
 
         Returns True if changes found.
@@ -1439,7 +1439,7 @@ class AppEnv:
             print("No changes")
         return has_changes
 
-    def _print_lockfile_summary(self, old_lines: set[str], new_lines: set[str]) -> None:
+    def _print_lockfile_summary(self, old_lines, new_lines):
         """Print summary of lockfile changes."""
         added = new_lines - old_lines
         removed = old_lines - new_lines
@@ -1463,7 +1463,7 @@ class AppEnv:
                 print(f"{check} Updated ({added_str} / {removed_str} lines)")
 
     def update_lockfile(self, args=None, remaining=None):
-        verbose: bool = bool(args and getattr(args, "verbose", False))
+        verbose = bool(args and getattr(args, "verbose", False))
 
         ensure_uv(self.base)
         os.chdir(self.base)
@@ -1494,7 +1494,7 @@ class AppEnv:
             self._print_lockfile_summary(old_lines, new_lines)
 
 
-def _detect_command_name() -> str:
+def _detect_command_name():
     """Detect command name from sys.argv."""
     if len(sys.argv) > 1 and not sys.argv[1].startswith("-"):
         return sys.argv[1]
@@ -1529,7 +1529,7 @@ def main():
         appenv.run(application_name, remaining)
 
 
-def find_project_base(base: Path, original_cwd: Path) -> Path:
+def find_project_base(base, original_cwd):
     """Find the project base directory by looking for pyproject.toml.
 
     Start from the directory where appenv.py is located and
