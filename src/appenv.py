@@ -958,6 +958,12 @@ class AppEnv:
               - If True, include dev dependency group
               - If False, use --frozen flag for strict lockfile adherence.
         """
+        # Check for legacy project migration hint first
+        hint = get_migration_hint(self.base)
+        if hint:
+            print(hint)
+            sys.exit(EXIT_CODE_NOINPUT)
+
         if not has_pyproject(self.base):
             print(f"No {PYPROJECT_TOML} found.")
             sys.exit(EXIT_CODE_NOINPUT)
@@ -1118,7 +1124,7 @@ class AppEnv:
         existing_pyproject = None
         if has_pyproject(target):
             existing_pyproject = pyproject_file.read_text()
-            if self._has_project_section(existing_pyproject):
+            if _has_project_section(existing_pyproject):
                 print(f"pyproject.toml already has [project] section in {target}.")
                 print("Nothing to do.")
                 return
@@ -1172,15 +1178,6 @@ class AppEnv:
         print(
             "\nrequirements.txt kept as legacy. Delete it when migration is complete."
         )
-
-    @staticmethod
-    def _has_project_section(content):
-        """Check if TOML content has a [project] section."""
-        for line in content.splitlines():
-            stripped = line.strip()
-            if stripped == "[project]" or stripped.startswith("[project."):
-                return True
-        return False
 
     def _init_project(
         self,
@@ -1492,6 +1489,42 @@ class AppEnv:
             # Read new content and show summary
             new_lines = self._read_lockfile_lines(lock_file)
             self._print_lockfile_summary(old_lines, new_lines)
+
+
+def _has_project_section(content):
+    """Check if TOML content has a [project] section."""
+    for line in content.splitlines():
+        stripped = line.strip()
+        if stripped == "[project]" or stripped.startswith("[project."):
+            return True
+    return False
+
+
+def get_migration_hint(base):
+    """Check if migration from requirements.txt should be suggested.
+
+    Returns hint message string or None if no hint needed.
+    """
+    pyproject_path = base / PYPROJECT_TOML
+    requirements_path = base / "requirements.txt"
+
+    if not requirements_path.exists():
+        return None
+
+    if not pyproject_path.exists():
+        return (
+            f"No {PYPROJECT_TOML} found but requirements.txt exists.\n"
+            "Run: ./appenv migrate"
+        )
+
+    content = pyproject_path.read_text()
+    if not _has_project_section(content):
+        return (
+            f"{PYPROJECT_TOML} has no [project] section but requirements.txt exists.\n"
+            "Run: ./appenv migrate"
+        )
+
+    return None
 
 
 def _detect_command_name():
