@@ -23,7 +23,7 @@ import sys
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import cast
+from typing import ClassVar, cast
 
 # Global logger instance
 log = logging.getLogger("appenv")
@@ -37,6 +37,41 @@ UV_MIN_VERSION = (0, 5, 0)
 EXIT_CODE_DATAERR = 65
 EXIT_CODE_NOINPUT = 67
 EXIT_CODE_UNAVAILABLE = 68
+
+
+class GroupedHelpFormatter(argparse.HelpFormatter):
+    """Group subcommands by category in help output."""
+
+    GROUPS: ClassVar[list[tuple[str, list[str]]]] = [
+        ("Project", ["init", "migrate", "update-lockfile"]),
+        ("Venv", ["develop", "prepare", "reset"]),
+        ("Tools", ["python", "run", "uv"]),
+        ("Debug", ["version", "settings", "profiling"]),
+    ]
+
+    def _format_action(self, action):
+        # Handle subparsers action with grouped display
+        if isinstance(action, argparse._SubParsersAction):
+            # Build command -> help mapping from _choices_actions
+            cmd_help = {ca.metavar: ca.help or "" for ca in action._choices_actions}
+
+            # Build grouped subcommand list
+            lines = []
+            for group_name, commands in self.GROUPS:
+                lines.append(f"  {group_name}:")
+                for cmd in commands:
+                    if cmd in action.choices:
+                        help_text = cmd_help.get(cmd, "")
+                        # Truncate long help texts
+                        if len(help_text) > 50:
+                            help_text = help_text[:47] + "..."
+                        lines.append(f"    {cmd:<16}  {help_text}")
+                lines.append("")  # Empty line between groups
+
+            # Remove trailing empty line and return
+            return "\n".join(lines).rstrip() + "\n"
+
+        return super()._format_action(action)
 
 
 def cmd(c, merge_stderr=True, quiet=False, cwd=None):
@@ -820,8 +855,12 @@ class AppEnv:
 
     def meta(self, remaining_args=None, prog="appenv"):
         # Parse the appenv arguments
-        parser = argparse.ArgumentParser(prog=prog)
-        subparsers = parser.add_subparsers()
+        parser = argparse.ArgumentParser(
+            prog=prog,
+            usage="%(prog)s <COMMAND>",
+            formatter_class=GroupedHelpFormatter,
+        )
+        subparsers = parser.add_subparsers(title="Commands")
         p = subparsers.add_parser("update-lockfile", help="Update the lock file.")
         p.add_argument(
             "--diff",
@@ -907,13 +946,13 @@ class AppEnv:
 
         # Handle 'help' subcommand specially
         if remaining_args and remaining_args[0] == "help":
-            parser.print_usage()
+            parser.print_help()
             sys.exit(0)
 
         args, remaining = parser.parse_known_args(remaining_args)
 
         if not hasattr(args, "func"):
-            parser.print_usage()
+            parser.print_help()
             sys.exit(0)
         else:
             args.func(args, remaining)

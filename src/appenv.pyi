@@ -23,6 +23,12 @@ EditableSpec: TypeAlias = dict[str, str | list[str]]
 EditableSourceConfig: TypeAlias = dict[str, str | bool]
 EditableSources: TypeAlias = dict[str, EditableSourceConfig]
 
+class GroupedHelpFormatter(argparse.HelpFormatter):
+    """Group subcommands by category in help output."""
+
+    GROUPS: list[tuple[str, list[str]]]
+    def _format_action(self, action: argparse.Action) -> str: ...
+
 def cmd(
     c: str | list[str],
     *,
