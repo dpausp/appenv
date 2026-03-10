@@ -52,6 +52,29 @@ myproject/
     └── venv/         # Virtual environment
 ```
 
+## Locking Behavior
+
+appenv uses `uv.lock` for reproducible builds. A lockfile is **required** for all operations.
+
+| Command | uv.lock changes? | uv command | Description |
+|---------|------------------|------------|-------------|
+| `./mycommand` | No | `uv sync --no-dev --frozen` | Production run, strict lockfile |
+| `prepare` | No | `uv sync --no-dev --frozen` | Production dependencies only |
+| `develop` | Yes, possible | `uv sync` | With dev dependencies, may update lockfile |
+| `update-lockfile` | Yes | `uv lock` | Update lockfile from pyproject.toml |
+
+**Important:**
+- Running the application or `prepare` **requires** an existing `uv.lock`
+- `develop` may update the lockfile if dependencies changed (no `--frozen`)
+- Always commit `uv.lock` to version control for reproducible builds
+
+If `uv.lock` is missing:
+
+```
+$ ./http
+No uv.lock found. Run: ./appenv update-lockfile
+```
+
 ## Freezing dependencies for repeatable builds
 
 Use `update-lockfile` to create a lockfile for reproducible installs:
@@ -182,8 +205,10 @@ Removing .appenv/venv ...
 
 ### prepare
 
-Create the virtual environment and install production dependencies. Called automatically
-when running the application.
+Create the virtual environment and install production dependencies only.
+
+Uses `uv sync --no-dev --frozen` - requires an existing `uv.lock` and will not modify it.
+Called automatically when running the application via the symlink.
 
 ### develop
 
@@ -193,8 +218,8 @@ Create the virtual environment with dev dependencies (from `[dependency-groups] 
 $ ./appenv develop
 ```
 
-This runs `uv sync --group dev` to install both production and dev dependencies.
-Useful for development when you need tools like pytest, ruff, etc.
+Uses `uv sync` without `--frozen`, so the lockfile may be updated if `pyproject.toml`
+has changed. Useful for development when you need tools like pytest, ruff, etc.
 
 ### python
 
@@ -280,7 +305,7 @@ $ ./http GET https://example.org
 
 $ APPENV_VERBOSE=1 ./http GET https://example.org
 Running: /path/to/uv venv --python /usr/bin/python3.11 .appenv/venv
-Running: /path/to/uv sync --frozen
+Running: /path/to/uv sync --no-dev --frozen
 # ... HTTP response follows
 ```
 
