@@ -1,151 +1,144 @@
+[build-system]
+build-backend = "hatchling.build"
+requires = [ "hatchling>=1.26" ]
+
 [project]
 name = "appenv"
-dynamic = ["version"]
 description = "Self-contained bootstrapping/updating of Python applications deployed through shared repositories."
 readme = "README.md"
+keywords = [ "deployment" ]
 license = "BSD-3-Clause"
-license-files = ["LICENSE*"]
-authors = [
-    {name = "Christian Theune", email = "ct@flyingcircus.io"},
-]
-keywords = ["deployment"]
-classifiers = [
-    "Development Status :: 5 - Production/Stable",
-    "License :: OSI Approved :: BSD License",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Programming Language :: Python :: 3.14",
-    "Programming Language :: Python :: 3 :: Only",
-]
+license-files = [ "LICENSE" ]
+authors = [ { name = "Christian Theune", email = "ct@flyingcircus.io" } ]
 requires-python = ">=3.10"
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "License :: OSI Approved :: BSD License",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+]
+dynamic = [ "version" ]
 dependencies = []
-
-[project.urls]
-Homepage = "https://github.com/flyingcircusio/appenv/"
-Repository = "https://github.com/flyingcircusio/appenv.git"
-Issues = "https://github.com/flyingcircusio/appenv/issues"
-
-[project.scripts]
-appenv = "appenv:main"
-
-[build-system]
-requires = ["hatchling >= 1.26"]
-build-backend = "hatchling.build"
-
-[tool.hatch.build.targets.wheel]
-packages = ["src"]
-
-[tool.hatch.build]
-sources = ["src"]
-
-[tool.hatch.version]
-path = "src/appenv.py"
+urls.Homepage = "https://github.com/flyingcircusio/appenv/"
+urls.Issues = "https://github.com/flyingcircusio/appenv/issues"
+urls.Repository = "https://github.com/flyingcircusio/appenv.git"
+scripts.appenv = "appenv:main"
 
 [dependency-groups]
-test = [
-    "pytest",
-    "pytest-cov",
-    "pexpect",
-    "pytest-patterns",
-    "pytest-deduplicate",
-    "pytest-timeout",
-    "pytest-ty",
-    "pytest-ruff",
-    "pytest-xdist",
-    "mutmut @ git+https://github.com/boxed/mutmut.git@fix-macos-segfault",
-]
-lint = ["ruff", "ty", "vulture"]
-docs = [
-    "sphinx>=7.0",
-    "sphinx-autoapi",
-    "myst-parser",
-    "furo",
-    "sphinx-autodoc-typehints",
-    "sphinx-copybutton",
-]
 dev = [
-    {include-group = "test"},
-    {include-group = "lint"},
-    {include-group = "docs"},
-    "pyproject-fmt>=2.16.2",
-    "tox",
-    "tox-uv-bare",
+  "tox",
+  "tox-uv-bare",
+  { include-group = "docs" },
+  { include-group = "lint" },
+  { include-group = "test" },
+]
+test = [
+  "pexpect",
+  "pytest",
+  "pytest-cov",
+  "pytest-deduplicate",
+  "pytest-instafail>=0.5.0",
+  "pytest-patterns",
+  "pytest-ruff",
+  "pytest-timeout",
+  "pytest-ty",
+  "pytest-xdist",
+]
+docs = [
+  "furo",
+  "myst-parser",
+  "sphinx",
+  "sphinx-autoapi",
+  "sphinx-autodoc-typehints",
+  "sphinx-copybutton",
+]
+lint = [
+  "pyproject-fmt",
+  "ruff",
+  "ty",
+  "vulture",
 ]
 
-[tool.tox]
-env_list = ["fix", "cov", "3.10", "3.11", "3.12", "3.13", "3.14"]
-skip_missing_interpreters = true
+[tool.hatch]
+build.sources = [ "src" ]
+build.targets.wheel.packages = [ "src" ]
+version.path = "src/appenv.py"
 
-[tool.tox.env_run_base]
-package = "wheel"
-runner = "uv-venv-lock-runner"
-setenv = {APPENV_BEST_PYTHON = "{envpython}"}
-dependency_groups = ["test"]
-depends = ["fix"]
-commands = [["pytest", { replace = "posargs", extend = true }]]
-
-[tool.tox.env.fix]
-skip_install = true
-depends = []
-description = "Format, lint, fix whitespace, type-check, dead code"
-dependency_groups = ["test", "lint"]
-commands = [
-    ["ruff", "check", "--fix"],
-    ["vulture", "src/", "tests/", ".vulture_exclude", "--min-confidence=80"],
-    ["python", "scripts/fix_whitespace.py", "."],
-    ["ruff", "format"],
-]
-
-[tool.tox.env.cov]
-base_python = ["3.14"]
-package = "wheel"
-runner = "uv-venv-lock-runner"
-setenv = {APPENV_BEST_PYTHON = "{envpython}"}
-dependency_groups = ["test"]
-depends = ["fix"]
-description = "Tests with coverage and test deduplication check"
-commands = [
-    ["pytest", "--cov=appenv", "--cov-report=term-missing", "--cov-report=html"],
-    ["python", "-m", "pytest_deduplicate", "tests/", "--ignore=tests/integration"],
-]
-
-[tool.ty.environment]
-python-version = "3.14"
+[tool.uv]
+sources.pytest-deduplicate = { git = "https://github.com/dpausp/pytest_deduplicate", branch = "ts-ai" }
+sources.pytest-patterns = { git = "https://github.com/dpausp/pytest-patterns", branch = "ts-ai" }
 
 [tool.ruff]
 target-version = "py310"
+lint.select = [ "B", "C4", "E", "F", "FLY", "I", "N", "PERF", "RUF", "SIM", "UP", "W" ]
 
-[tool.ruff.lint]
-select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM", "RUF", "FLY", "PERF"]
-
-[tool.pytest.ini_options]
-addopts = [
-    "--timeout=25",
-    "-W", "error",
-    "--ruff",
-    "--ty",
-    "-m", "not slow",
+[tool.pytest]
+ini_options.addopts = [
+  "--cov=src",
+  "--cov-report=html",
+  "--junitxml=report.xml",
+  "--instafail",
+  "--import-mode=importlib",
+  "--timeout=120",
+  "-W",
+  "error",
+  "--ruff",
+  "--ty",
+  "-m",
+  "not slow",
 ]
-testpaths = ["tests"]
-markers = [
-    "slow: tests that install packages and take longer (run with: pytest -m slow)",
+ini_options.junit_family = "xunit2"
+ini_options.markers = [
+  "slow: tests that install packages and take longer (run with: pytest -m slow)",
 ]
+ini_options.testpaths = [ "tests" ]
 
-[tool.mutmut]
-paths_to_mutate = ["src/"]
-also_copy = ["README.md", "pyproject.toml", "uv.lock"]
-# WARNING: mutmut segfaults on macOS due to setproctitle+fork bug
-# (github.com/boxed/mutmut/issues/446, PR #450 pending)
-# Run mutation testing on Linux CI only.
-# Only run isolated unit tests (no subprocess/execv tests)
-pytest_add_cli_args_test_selection = [
-    "-k",
-    "parse_uv_version or print_colored_diff or parse_requires_python or extract_package_name or parse_editable_spec or find_available_pythons or version_satisfies or test_reset",
+[tool.coverage]
+run.branch = true
+run.source = [ "batou" ]
+report.precision = 2
+
+[tool.tox]
+env_list = [ "fix", "cov", "3.10", "3.11", "3.12", "3.13", "3.14" ]
+skip_missing_interpreters = true
+env.cov.base_python = [ "3.14" ]
+env.cov.package = "wheel"
+env.cov.runner = "uv-venv-lock-runner"
+env.cov.setenv = { APPENV_BEST_PYTHON = "{envpython}" }
+env.cov.dependency_groups = [ "test" ]
+env.cov.depends = [ "fix" ]
+env.cov.description = "Tests with coverage and test deduplication check"
+env.cov.commands = [
+  [ "pytest", "--cov=appenv", "--cov-report=term-missing", "--cov-report=html" ],
+  # [ "python", "-m", "pytest_deduplicate", "tests/", "--ignore=tests/integration" ],
 ]
+env.fix.skip_install = true
+env.fix.depends = []
+env.fix.description = "Format, lint, fix whitespace, type-check, dead code"
+env.fix.dependency_groups = [ "test", "lint" ]
+env.fix.commands = [
+  [ "ruff", "check", "--fix" ],
+  [ "vulture", "src/", "tests/", ".vulture_exclude", "--min-confidence=80" ],
+  [ "python", "scripts/fix_whitespace.py", "." ],
+  [ "ruff", "format" ],
+]
+env_run_base.package = "wheel"
+env_run_base.runner = "uv-venv-lock-runner"
+env_run_base.setenv = { APPENV_BEST_PYTHON = "{envpython}" }
+env_run_base.dependency_groups = [ "test" ]
+env_run_base.depends = [ "fix" ]
+env_run_base.commands = [ [ "pytest", { replace = "posargs", extend = true } ] ]
 
-[tool.uv.sources]
-pytest-patterns = { git = "https://github.com/dpausp/pytest-patterns", branch = "ts-ai" }
-pytest-deduplicate = { git = "https://github.com/dpausp/pytest_deduplicate", branch = "ts-ai" }
+[tool.scriv]
+format = "md"
+fragment_directory = "CHANGES.d"
+output_file = "CHANGES.md"
+version = "unreleased"
+entry_title_template = ""
+new_fragment_template = "- New changelog entry."
+insert_marker = "- Nothing changed yet."
+categories = ""

@@ -70,6 +70,7 @@ pip-log.txt
 pip-delete-this-directory.txt
 
 # Unit test / coverage reports
+report.xml
 htmlcov/
 .tox/
 .nox/
@@ -181,3 +182,5 @@ complexipy_results_*.json
 
 # uv cache
 .uv/
+
+
