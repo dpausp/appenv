@@ -36,6 +36,67 @@ def test_main_shows_usage_without_subcommand(monkeypatch, capsys):
     assert "usage: appenv" in captured.out
 
 
+def test_main_shows_grouped_help(monkeypatch, capsys):
+    """Test that help output shows commands grouped by category."""
+    mock_ensure_python(monkeypatch)
+    monkeypatch.setattr("sys.argv", ["appenv"])
+    monkeypatch.setattr(appenv, "__file__", "/some/path/appenv")
+
+    with pytest.raises(SystemExit):
+        appenv.main()
+
+    captured = capsys.readouterr()
+    output = captured.out
+
+    # Check for group headers
+    assert "Project:" in output
+    assert "Venv:" in output
+    assert "Tools:" in output
+    assert "Debug:" in output
+
+    # Check that commands are in correct groups
+    # Project group
+    assert "init" in output
+    assert "migrate" in output
+    assert "update-lockfile" in output
+
+    # Venv group
+    assert "develop" in output
+    assert "prepare" in output
+    assert "reset" in output
+
+    # Tools group
+    assert "python" in output
+    assert "run" in output
+
+    # Debug group
+    assert "version" in output
+    assert "settings" in output
+
+
+def test_help_same_as_no_args(monkeypatch, capsys):
+    """Test that --help shows same output as calling without arguments."""
+    mock_ensure_python(monkeypatch)
+    monkeypatch.setattr(appenv, "__file__", "/some/path/appenv")
+
+    # Get output without args
+    monkeypatch.setattr("sys.argv", ["appenv"])
+    with pytest.raises(SystemExit):
+        appenv.main()
+    captured_no_args = capsys.readouterr().out
+
+    # Get output with --help
+    monkeypatch.setattr("sys.argv", ["appenv", "--help"])
+    with pytest.raises(SystemExit):
+        appenv.main()
+    captured_help = capsys.readouterr().out
+
+    # Both should show full help (not just usage)
+    assert captured_no_args == captured_help
+    assert "Project:" in captured_no_args
+    assert "Commands:" in captured_no_args
+
+
 def test_main_clears_pythonpath(monkeypatch):
     mock_ensure_python(monkeypatch)
     monkeypatch.setattr("sys.argv", ["appenv"])

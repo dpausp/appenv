@@ -56,16 +56,34 @@ myproject/
 
 appenv uses `uv.lock` for reproducible builds. A lockfile is **required** for all operations.
 
-| Command | uv.lock changes? | uv command | Description |
-|---------|------------------|------------|-------------|
-| `./mycommand` | No | `uv sync --no-dev --frozen` | Production run, strict lockfile |
-| `prepare` | No | `uv sync --no-dev --frozen` | Production dependencies only |
-| `develop` | Yes, possible | `uv sync` | With dev dependencies, may update lockfile |
-| `update-lockfile` | Yes | `uv lock` | Update lockfile from pyproject.toml |
+### Understanding UV's Locking Model
+
+If you're new to UV, here's how it differs from pip:
+
+**Lockfiles are deterministic by default.** UV won't automatically upgrade packages when new versions are released. Once `uv.lock` exists, UV prefers the locked versions unless you explicitly request an upgrade. This ensures reproducible builds across machines and time.
+
+**Three sync modes:**
+
+| Flag | Behavior |
+|------|----------|
+| (none) | May update `uv.lock` if `pyproject.toml` changed |
+| `--frozen` | Uses existing lockfile, fails if missing |
+| `--locked` | Uses existing lockfile, fails if outdated |
+
+**Key insight:** A lockfile is "outdated" when `pyproject.toml` dependencies changed, NOT when new package versions are available upstream.
+
+### appenv Command Mapping
+
+| Command | Lockfile | UV Command | Description |
+|---------|----------|------------|-------------|
+| `./mycommand` | Frozen | `uv sync --no-dev --frozen` | Production run, exact versions |
+| `prepare` | Frozen | `uv sync --no-dev --frozen` | Production deps only |
+| `develop` | May update | `uv sync` | With dev deps, re-locks if needed |
+| `update-lockfile` | Updates | `uv lock` | Regenerate from pyproject.toml |
 
 **Important:**
 - Running the application or `prepare` **requires** an existing `uv.lock`
-- `develop` may update the lockfile if dependencies changed (no `--frozen`)
+- `develop` may update the lockfile if `pyproject.toml` changed (no `--frozen`)
 - Always commit `uv.lock` to version control for reproducible builds
 
 If `uv.lock` is missing:
@@ -73,6 +91,62 @@ If `uv.lock` is missing:
 ```
 $ ./http
 No uv.lock found. Run: ./appenv update-lockfile
+```
+
+### Adding Dependencies with `uv add`
+
+Use `./appenv uv add <package>` to add dependencies. This updates both `pyproject.toml` and `uv.lock` in one step:
+
+```
+$ ./appenv uv add requests
+Resolved 5 packages in 12ms
+Prepared 1 package in 45ms
+Installed 1 package in 23ms
+ + requests==2.32.3
+```
+
+**What changed:**
+
+`pyproject.toml` (before):
+```toml
+[project]
+name = "http"
+dependencies = ["httpie>=3.0.0"]
+```
+
+`pyproject.toml` (after):
+```toml
+[project]
+name = "http"
+dependencies = [
+    "httpie>=3.0.0",
+    "requests>=2.32.3",
+]
+```
+
+`uv.lock` gets the resolved version with all transitive dependencies:
+```
+name = "requests"
+version = "2.32.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "certifi" },
+    { name = "charset-normalizer" },
+    { name = "idna" },
+    { name = "urllib3" },
+]
+```
+
+### Upgrading Packages
+
+UV won't upgrade packages on new releases. To upgrade:
+
+```bash
+# Upgrade specific package
+$ ./appenv uv lock --upgrade-package requests
+
+# Upgrade all packages (within version constraints)
+$ ./appenv uv lock --upgrade
 ```
 
 ## Freezing dependencies for repeatable builds
@@ -244,8 +318,10 @@ $ ./appenv run pytest
 Run uv with appenv's configured environment:
 
 ```
-$ ./appenv uv pip install requests    # Install additional package
-$ ./appenv uv add black               # Add to dependencies
+$ ./appenv uv add requests            # Add dependency (updates pyproject.toml + uv.lock)
+$ ./appenv uv add --group dev pytest  # Add dev dependency
+$ ./appenv uv remove requests         # Remove dependency
+$ ./appenv uv lock --upgrade          # Upgrade all packages in lockfile
 $ ./appenv uv sync                    # Re-sync dependencies
 ```
 
