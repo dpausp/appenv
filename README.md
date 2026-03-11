@@ -205,31 +205,52 @@ Found 1 editable install(s):
 Created pyproject.toml
 ```
 
+Editable installs pointing to local packages are converted to `uv.sources` entries.
+Git URLs and other non-local editables are skipped with a warning:
+
+```
+$ ./appenv migrate
+Migrating from requirements.txt to pyproject.toml...
+
+Found 2 dependency(ies): requests, click
+warning: 2 editable install(s) skipped:
+  -e git+https://github.com/user/repo
+  -e package @ ./path
+
+Created pyproject.toml
+```
+
 The `requirements.txt` is kept as legacy. Delete it when migration is complete.
 
 ## Commands
 
 ```
 $ ./appenv --help
-usage: appenv [-h] {update-lockfile,init,migrate,reset,version,prepare,develop,python,run,uv,settings,profiling} ...
-
-positional arguments:
-  {update-lockfile,init,migrate,reset,version,prepare,develop,python,run,uv,settings,profiling}
-    update-lockfile     Update the lock file.
-    init                Create a new pyproject.toml project.
-    migrate             Migrate from requirements.txt to pyproject.toml.
-    reset               Reset the environment.
-    version             Show appenv version.
-    prepare             Prepare the venv.
-    develop             Prepare the venv with dev dependencies.
-    python              Spawn the embedded Python interpreter REPL.
-    run                 Run a script from the bin/ directory of the virtual env.
-    uv                  Run uv with appenv-configured environment.
-    settings            Show environment variables and settings.
-    profiling           Manage profiling data.
+usage: appenv <COMMAND>
 
 options:
-  -h, --help            show this help message and output
+  -h, --help            show this help message and exit
+
+Commands:
+  Project:
+    init              Create a new pyproject.toml project.
+    migrate           Migrate from requirements.txt to pyproject.toml.
+    update-lockfile   Update the lock file.
+
+  Venv:
+    develop           Prepare the venv with dev dependencies.
+    prepare           Prepare the venv.
+    reset             Reset the environment.
+
+  Tools:
+    python            Spawn the embedded Python interpreter REPL
+    run               Run a script from the bin/ directory of the vir...
+    uv                Run uv with the appenv-configured uv binary.
+
+  Debug:
+    version           Show appenv version.
+    settings          Show environment variables and settings.
+    profiling         Manage profiling data.
 ```
 
 ### init
@@ -253,9 +274,17 @@ Minimum Python version [3.13]: 3.14
 Created pyproject.toml
 ```
 
+If `pyproject.toml` already exists:
+
+```
+$ ./appenv init
+pyproject.toml already exists.
+Nothing to do.
+```
+
 ### migrate
 
-Convert an existing `requirements.txt` project to `pyproject.toml`.
+Convert an existing `requirements.txt` project to `pyproject.toml`. See [Migrating from requirements.txt](#migrating-from-requirementstxt) for details.
 
 ### update-lockfile
 
@@ -361,6 +390,35 @@ Enable profiling with `APPENV_PROFILE=1`:
 ```
 $ APPENV_PROFILE=1 ./http GET https://example.org
 Profile written to: .appenv/profiling/http-20260303-143022.prof
+```
+
+Example output:
+
+```
+$ ./appenv profiling list
+Showing 3 of 3 profiles:
+  http-20260310-120000.prof    2026-03-10 12:00
+  http-20260310-110000.prof    2026-03-10 11:00
+  batou-20260301-100000.prof   2026-03-01 10:00
+
+$ ./appenv profiling show
+Opening latest profile: .appenv/profiling/http-20260310-120000.prof
+         12345 function calls in 0.234 seconds
+
+   Ordered by: cumulative time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      ...
+```
+
+If no profiling data exists:
+
+```
+$ ./appenv profiling list
+No profiling data found in .appenv/profiling
+
+$ ./appenv profiling show nonexistent.prof
+Profile not found: nonexistent.prof
 ```
 
 ## Environment Variables
