@@ -594,94 +594,16 @@ def uv_cmd(uv_bin, args, verbose=False, **kwargs):
     return uv_output
 
 
-def parse_editable_spec(spec):
-    """Parse an editable install spec like '-e ./path' or '-e /absolute/path'.
-
-    Returns dict with 'path' and 'package_name', or None if parsing fails.
-
-    Supports:
-        -e ./relative/path
-        -e ../relative/path
-        -e /absolute/path
-        -e path  (no leading ./ or /)
-
-    Does NOT support:
-        -e git+... (git URLs)
-        -e package @ path (PEP 508 direct references)
-    """
-    if not spec.startswith("-e "):
-        return None
-
-    path_part = spec[3:].strip()
-
-    # Skip git URLs and PEP 508 direct references
-    if path_part.startswith(("git+", "git://", "hg+", "svn+")):
-        return None
-    if " @ " in path_part:
-        return None
-
-    # Handle extras like `-e ./path[extra]`
-    extras = []
-    if "[" in path_part and "]" in path_part:
-        start = path_part.index("[")
-        end = path_part.index("]")
-        extras_str = path_part[start + 1 : end]
-        extras = [e.strip() for e in extras_str.split(",") if e.strip()]
-        path_part = path_part[:start] + path_part[end + 1 :]
-
-    return {"path": path_part, "extras": extras}
-
-
-def extract_package_name_from_path(path, base_dir):
-    """Extract package name from a local path.
-
-    Checks for:
-    1. pyproject.toml with [project] name
-    2. setup.py with name= or name =
-
-    Returns package name or None if not found.
-    """
-    full_path = (base_dir / path).resolve()
-
-    # Try pyproject.toml first
-    pyproject_path = full_path / PYPROJECT_TOML
-    if pyproject_path.exists():
-        content = pyproject_path.read_text()
-        # Match name = "..." or name='...'
-        match = re.search(r'^name\s*=\s*["\']([^"\']+)["\']', content, re.MULTILINE)
-        if match:
-            return match.group(1)
-
-    # Try setup.py
-    setup_path = full_path / "setup.py"
-    if setup_path.exists():
-        content = setup_path.read_text()
-        # Match name="..." or name='...' or name = "..."
-        match = re.search(r'name\s*=\s*["\']([^"\']+)["\']', content)
-        if match:
-            return match.group(1)
-
-    return None
-
-
-# Type aliases for editable source structures
-EditableSpec: TypeAlias = dict[str, str | list[str]]
-EditableSourceConfig: TypeAlias = dict[str, str | bool]
-EditableSources: TypeAlias = dict[str, EditableSourceConfig]
-
-
 class RequirementsTxtInfo(NamedTuple):
     dependencies: list[str]
-    editable_sources: EditableSourceConfig
-    editable_dep_strings: list[str]
     editable_warnings: list[str]
     python_versions: list[str]
 
 
 def _parse_requirements_file(requirements_path):
-    """Parse requirements.txt content into dependencies and editable specs.
+    """Parse requirements.txt content into dependencies and warnings.
 
-    Returns tuple of (dependencies, editable_specs).
+    Editable installs (-e) are not supported and generate warnings.
     """
     content = requirements_path.read_text()
     all_deps = [
@@ -689,24 +611,15 @@ def _parse_requirements_file(requirements_path):
         for line in content.splitlines()
         if line.strip() and not line.strip().startswith("#")
     ]
+
     dependencies = [d for d in all_deps if not d.startswith("-e ")]
-
     editable_specs = [d for d in all_deps if d.startswith("-e ")]
+    editable_warnings = [
+        f"{spec} (editable installs not supported)" for spec in editable_specs
+    ]
 
-    editable_sources, editable_dep_strings, editable_warnings = (
-        _process_editable_installs(editable_specs, requirements_path.parent)
-    )
-    dependencies.extend(editable_dep_strings)
-
-    # XXX: inline preference search, one loop together with deps, iterating all lines
     python_versions = _parse_python_preference(content)
-    return RequirementsTxtInfo(
-        dependencies,
-        editable_sources,
-        editable_dep_strings,
-        editable_warnings,
-        python_versions,
-    )
+    return RequirementsTxtInfo(dependencies, editable_warnings, python_versions)
 
 
 def _parse_python_preference(content):
@@ -720,21 +633,13 @@ def _parse_python_preference(content):
     return ["3.10", "3.11", "3.12", "3.13", "3.14"]
 
 
-def _print_migration_info(
-    editable_warnings, editable_sources, dependencies, python_versions
-):
+def _print_migration_info(editable_warnings, dependencies, python_versions):
     """Print migration summary for editable installs and dependencies."""
     if editable_warnings:
         print(f"Warning: {len(editable_warnings)} editable install(s) skipped:")
         for warn in editable_warnings:
             print(f"  - {warn}")
         print("Add them manually to pyproject.toml if needed.\n")
-
-    if editable_sources:
-        print(f"Found {len(editable_sources)} editable install(s):")
-        for name, src in editable_sources.items():
-            print(f"  - {name} ({src['path']})")
-        print()
 
     if python_versions and len(python_versions) > 1:
         print(f"Found python preference: {', '.join(python_versions)}")
@@ -813,7 +718,6 @@ class Pyproject:
         description,
         dependencies,
         python_version,
-        editable_sources,
         existing_pyproject=None,
     ):
         # SPEC: SRS-F003-project-generation - Generate pyproject.toml content
@@ -824,7 +728,6 @@ class Pyproject:
             description=description,
             dependencies=dependencies,
             python_version=python_version,
-            editable_sources=editable_sources,
             existing_content=existing_content,
         )
         pyproject = Pyproject(
@@ -840,7 +743,6 @@ class Pyproject:
         # Print migration summary
         _print_migration_info(
             req_info.editable_warnings,
-            req_info.editable_sources,
             req_info.dependencies,
             req_info.python_versions,
         )
@@ -855,7 +757,6 @@ class Pyproject:
                 description=description,
                 dependencies=req_info.dependencies,
                 python_version=req_info.python_versions[0],
-                editable_sources=req_info.editable_sources,
                 existing_content=self.content,
             )
         )
@@ -922,7 +823,6 @@ def _generate_pyproject_content(
     description,
     dependencies,
     python_version,
-    editable_sources,
     existing_content=None,
 ):
     """Generate pyproject.toml content string.
@@ -945,64 +845,13 @@ dependencies = {deps_block}
 requires-python = ">={python_version}"
 """
 
-    # Generate [tool.uv.sources] section if needed
-    sources_section = ""
-    if editable_sources:
-        sources_lines = ["[tool.uv.sources]"]
-        for pkg_name, src_config in sorted(editable_sources.items()):
-            path = src_config["path"]
-            sources_lines.append(f'{pkg_name} = {{ path = "{path}", editable = true }}')
-        sources_section = "\n" + "\n".join(sources_lines) + "\n"
-
     # Merge with existing content or create new
     if existing_content:
         pyproject_content = existing_content.rstrip() + "\n\n" + project_section
-        if sources_section:
-            pyproject_content += sources_section
     else:
-        pyproject_content = project_section + sources_section
+        pyproject_content = project_section
 
     return pyproject_content
-
-
-def _process_editable_installs(specs, base_dir):
-    """Process editable install specs.
-
-    Returns:
-        tuple of (editable_sources, dependency_strings, warnings)
-        - editable_sources: {package_name: {path: str, editable: bool}}
-        - dependency_strings: list of package names (with extras) to add
-        - warnings: list of warning messages for skipped specs
-    """
-    editable_sources = {}
-    dependency_strings = []
-    warnings = []
-
-    for spec in specs:
-        parsed = parse_editable_spec(spec)
-        if not parsed:
-            warnings.append(f"{spec} (unsupported format)")
-            continue
-
-        package_name = extract_package_name_from_path(parsed["path"], base_dir)
-        if not package_name:
-            # XXX: ??
-            warnings.append(f"{spec} (no pyproject.toml or setup.py found)")
-            continue
-
-        # Build dependency string with extras if present
-        dep_str = package_name
-        if parsed["extras"]:
-            dep_str = f"{package_name}[{','.join(parsed['extras'])}]"
-        dependency_strings.append(dep_str)
-
-        # Build source config
-        path = parsed["path"]
-        if not path.startswith(("./", "../", "/")):
-            path = "./" + path
-        editable_sources[package_name] = {"path": path, "editable": True}
-
-    return (editable_sources, dependency_strings, warnings)
 
 
 def _cleanup_old_appenv_entries(appenv_dir, verbose=False):
@@ -1398,7 +1247,6 @@ class AppEnv:
             project_name=project_name,
             description=description,
             dependencies=dependencies,
-            editable_sources={},
             python_version=python_version,
             command_name=command_name,
         )
@@ -1445,7 +1293,6 @@ class AppEnv:
         project_name=None,
         description="",
         dependencies=None,
-        editable_sources=None,
         python_version=None,
         command_name=None,
     ):
@@ -1464,7 +1311,6 @@ class AppEnv:
                 description=description,
                 dependencies=dependencies or [],
                 python_version=python_version or "3.10",
-                editable_sources=editable_sources or {},
                 existing_pyproject=pyproject if pyproject.exists else None,
             )
 

@@ -126,22 +126,13 @@ class AppEnvSettings:
 
 ### RequirementsTxtInfo (NamedTuple)
 
-**Location:** lines 661-666
+**Location:** lines 673-676
 
 ```python
 class RequirementsTxtInfo(NamedTuple):
     dependencies: list[str]
-    editable_sources: EditableSourceConfig
-    editable_dep_strings: list[str]
     editable_warnings: list[str]
     python_versions: list[str]
-```
-
-**Type aliases (lines 656-658):**
-```python
-EditableSpec: TypeAlias = dict[str, str | list[str]]
-EditableSourceConfig: TypeAlias = dict[str, str | bool]
-EditableSources: TypeAlias = dict[str, EditableSourceConfig]
 ```
 
 **Purpose:** Structured return type for requirements.txt parsing, replaces tuple unpacking.
@@ -217,7 +208,7 @@ EditableSources: TypeAlias = dict[str, EditableSourceConfig]
 def _parse_requirements_file(requirements_path: Path) -> RequirementsTxtInfo:
     """Parse requirements.txt content into structured data.
 
-    Returns RequirementsTxtInfo with dependencies, editable sources, warnings.
+    Returns RequirementsTxtInfo with dependencies, warnings for editables, python versions.
     """
 ```
 
@@ -226,6 +217,7 @@ def _parse_requirements_file(requirements_path: Path) -> RequirementsTxtInfo:
 - Split content by lines
 - Filter non-empty, non-comment lines
 - Separate editable (`-e `) from regular dependencies
+- Generate warnings for editable installs (not supported)
 - Parse python preference comments
 - Returns: `RequirementsTxtInfo` named tuple
 
@@ -233,38 +225,7 @@ def _parse_requirements_file(requirements_path: Path) -> RequirementsTxtInfo:
 
 ---
 
-### 2. `_process_editable_installs`
-
-**Source:** `migrate` lines 974-1000
-
-**Signature:**
-```python
-def _process_editable_installs(
-    specs: list[str],
-    base_dir: Path
-) -> tuple[dict[str, dict], list[str]]:
-    """Process editable install specs.
-
-    Returns:
-        tuple of (editable_sources, warnings)
-        - editable_sources: {package_name: {path: str, editable: bool}}
-        - warnings: list of warning messages for skipped specs
-    """
-```
-
-**Logic:**
-- Iterate over editable specs
-- Call `parse_editable_spec` for each
-- Call `extract_package_name_from_path` to get package name
-- Build dependency string with extras
-- Build source config with path normalization
-- Collect warnings for unparseable specs
-
-**Complexity reduction:** Most complex extraction - removes loop with conditionals
-
----
-
-### 3. `_parse_python_preference`
+### 2. `_parse_python_preference`
 
 **Source:** `migrate` lines 1016-1029
 
@@ -287,7 +248,7 @@ def _parse_python_preference(content: str) -> list[str]:
 
 ---
 
-### 4. `_cleanup_old_appenv_entries`
+### 3. `_cleanup_old_appenv_entries`
 
 **Source:** `_prepare_venv` lines 866-882
 
@@ -310,7 +271,7 @@ def _cleanup_old_appenv_entries(appenv_dir: Path, log: logging.Logger) -> None:
 
 ---
 
-### 5. `_setup_command_symlink`
+### 4. `_setup_command_symlink`
 
 **Source:** `_init_project` lines 1118-1140
 
@@ -345,7 +306,7 @@ def _setup_command_symlink(
 
 ---
 
-### 6. `_generate_pyproject_content`
+### 5. `_generate_pyproject_content`
 
 **Source:** `_init_project` lines 1072-1107
 
@@ -356,7 +317,6 @@ def _generate_pyproject_content(
     description: str,
     dependencies: list[str],
     python_version: str,
-    editable_sources: dict[str, dict],
     existing_content: str | None = None
 ) -> str:
     """Generate pyproject.toml content.
@@ -368,7 +328,6 @@ def _generate_pyproject_content(
 
 **Logic:**
 - Generate `[project]` section with dependencies formatted as TOML array
-- Generate `[tool.uv.sources]` section if editable sources exist
 - Merge with existing content or return standalone
 - Returns: complete pyproject.toml content string
 
@@ -385,9 +344,6 @@ def _generate_pyproject_content(
    - `_cleanup_old_appenv_entries`
    - `_setup_command_symlink`
 
-3. **Phase 3: Complex Logic** (highest risk)
-   - `_process_editable_installs`
-
 ## Constraints
 
 - All 45 existing tests must pass unchanged
@@ -399,6 +355,6 @@ def _generate_pyproject_content(
 ## References
 
 - AGENTS.md - Project coding conventions
-- tests/test_migrate.py - Migration test coverage (18 tests)
-- tests/test_prepare.py - Prepare/venv test coverage (18 tests)
-- tests/test_init.py - Init command test coverage (7 tests)
+- tests/test_migrate.py - Migration test coverage
+- tests/test_prepare.py - Prepare/venv test coverage
+- tests/test_init.py - Init command test coverage
