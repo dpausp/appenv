@@ -33,6 +33,179 @@ Cynefin domain: Complicated - well-established refactoring patterns apply.
 - Decision: Extract in order: pure functions first, then side-effect operations
 - Consequences: Earlier extractions validate approach before tackling complex ones
 
+## New Classes and Data Structures
+
+### UvVersion (dataclass)
+
+**Location:** lines 322-351
+
+```python
+@dataclass(order=True, frozen=True)
+class UvVersion:
+    major: int
+    minor: int
+    patch: int
+
+    def __str__(self) -> str:
+        """Returns 'unknown' for (0,0,0), otherwise 'major.minor.patch'."""
+
+    @property
+    def valid(self) -> bool:
+        """Returns True if version >= minimum required (UV_MIN_VERSION)."""
+
+    @staticmethod
+    def unknown() -> UvVersion:
+        """Returns UvVersion(0, 0, 0) for unparseable versions."""
+
+    @staticmethod
+    def minimum() -> UvVersion:
+        """Returns UvVersion(*UV_MIN_VERSION) - the minimum required version."""
+
+    @staticmethod
+    def from_string(version_str: str) -> UvVersion:
+        """Parse 'major.minor.patch' string. Raises InvalidVersionError on failure."""
+```
+
+**Purpose:** Type-safe version comparison, replaces string-based version handling.
+
+---
+
+### Pyproject (class)
+
+**Location:** lines 786-829
+
+```python
+class Pyproject:
+    def __init__(self, base: Path) -> None:
+        """Initialize with base directory. Sets path and requirements_txt attributes."""
+
+    def migrate_from_requirements_txt(self) -> Self:
+        """Create pyproject.toml from requirements.txt. Returns new Pyproject instance."""
+
+    @cached_property
+    def content(self) -> str:
+        """Returns file content or empty string if not exists."""
+
+    @cached_property
+    def has_project_section(self) -> bool:
+        """Check if [project] section exists in TOML."""
+
+    def can_be_created_from_requirements_txt(self) -> bool:
+        """Returns True if no [project] section and requirements.txt exists."""
+
+    @property
+    def exists(self) -> bool:
+        """Returns True if pyproject.toml file exists."""
+```
+
+**Purpose:** Encapsulates pyproject.toml operations, provides cached access to content.
+
+---
+
+### AppEnvSettings (dataclass)
+
+**Location:** lines 1004-1020
+
+```python
+@dataclass(frozen=True)
+class AppEnvSettings:
+    verbose: bool
+    extras: str | None
+    profile: bool
+    profile_output: str | None
+    basedir: Path | None
+
+    @staticmethod
+    def from_env() -> AppEnvSettings:
+        """Read settings from environment variables (APPENV_*)."""
+```
+
+**Purpose:** Type-safe settings container, replaces loose environment variable access.
+
+---
+
+### RequirementsTxtInfo (NamedTuple)
+
+**Location:** lines 661-666
+
+```python
+class RequirementsTxtInfo(NamedTuple):
+    dependencies: list[str]
+    editable_sources: EditableSourceConfig
+    editable_dep_strings: list[str]
+    editable_warnings: list[str]
+    python_versions: list[str]
+```
+
+**Type aliases (lines 656-658):**
+```python
+EditableSpec: TypeAlias = dict[str, str | list[str]]
+EditableSourceConfig: TypeAlias = dict[str, str | bool]
+EditableSources: TypeAlias = dict[str, EditableSourceConfig]
+```
+
+**Purpose:** Structured return type for requirements.txt parsing, replaces tuple unpacking.
+
+---
+
+### Helper Functions
+
+**ensure_pyproject(base: Path) -> Pyproject**
+- Location: line 832
+- Validates pyproject.toml exists with [project] section
+- Exits with EXIT_CODE_NOINPUT if missing or invalid
+
+**ensure_lock_file(base: Path) -> Path**
+- Location: line 855
+- Validates uv.lock exists
+- Exits with EXIT_CODE_NOINPUT if missing, returns lock file path otherwise
+
+**_read_lockfile_lines(lock_file: Path) -> set[str]**
+- Location: line 730
+- Reads lockfile, returns set of non-empty, non-comment lines
+
+**_run_uv_lock_diff(uv_bin: Path, base: Path, verbose: bool) -> str**
+- Location: line 738
+- Runs uv lock in temp directory, shows colored diff
+- Returns "No changes" or diff output
+
+**_create_lockfile_summary(old_lines: set[str], new_lines: set[str]) -> str**
+- Location: line 762
+- Compares old/new lockfile line sets
+- Returns summary string like "✓ Created (+42 lines)"
+
+**configure_logging(command_name: str, log_dir: Path, verbose: bool)**
+- Location: line 251
+- Sets up file logging (always) and console logging (if verbose)
+- Creates log file: `{log_dir}/{command_name}-{timestamp}.log`
+
+**find_project_base(base: Path) -> Path**
+- Location: line 141
+- Searches upward from base for pyproject.toml
+- Returns base if no pyproject.toml found
+
+## Signature Changes
+
+### Function Signature Updates
+
+| Function | Old Signature | New Signature |
+|----------|---------------|---------------|
+| `uv_cmd` | `(args, verbose=False, **kwargs)` | `(uv_bin: Path, args: list[str], verbose=False, **kwargs)` |
+| `get_uv_version` | `() -> str` | `(uv_bin: Path) -> UvVersion` |
+| `AppEnv.__init__` | `(base, original_cwd)` | `(base, original_cwd, settings: AppEnvSettings)` |
+| `_parse_requirements_file` | `(content: str) -> tuple[list[str], list[str]]` | `(requirements_path: Path) -> RequirementsTxtInfo` |
+| `_parse_python_preference` | `(content: str) -> str` | `(content: str) -> list[str]` |
+| `find_project_base` | `(base: Path, original_cwd: Path)` | `(base: Path)` |
+
+### Rationale
+
+- **uv_cmd**: Explicit `uv_bin` required to avoid implicit uv resolution on every call
+- **get_uv_version**: Returns `UvVersion` for type-safe comparison instead of string parsing
+- **AppEnv.__init__**: `AppEnvSettings` groups environment configuration in one place
+- **_parse_requirements_file**: Takes `Path` directly (no string conversion needed), returns `RequirementsTxtInfo` for named field access
+- **_parse_python_preference**: Returns `list[str]` (all versions) instead of just minimum, caller decides which to use
+- **find_project_base**: `original_cwd` was unused, removed for clarity
+
 ## Extraction Specifications
 
 ### 1. `_parse_requirements_file`
@@ -41,15 +214,20 @@ Cynefin domain: Complicated - well-established refactoring patterns apply.
 
 **Signature:**
 ```python
-def _parse_requirements_file(content: str) -> tuple[list[str], list[str]]:
-    """Parse requirements.txt content into dependencies and editable specs."""
+def _parse_requirements_file(requirements_path: Path) -> RequirementsTxtInfo:
+    """Parse requirements.txt content into structured data.
+
+    Returns RequirementsTxtInfo with dependencies, editable sources, warnings.
+    """
 ```
 
 **Logic:**
+- Read content from requirements_path
 - Split content by lines
 - Filter non-empty, non-comment lines
 - Separate editable (`-e `) from regular dependencies
-- Returns: `(dependencies, editable_specs)`
+- Parse python preference comments
+- Returns: `RequirementsTxtInfo` named tuple
 
 **Complexity reduction:** Removes list comprehension + filtering from `migrate`
 
@@ -92,19 +270,18 @@ def _process_editable_installs(
 
 **Signature:**
 ```python
-def _parse_python_preference(content: str) -> str:
+def _parse_python_preference(content: str) -> list[str]:
     """Parse python preference from requirements.txt content.
 
-    Returns minimum Python version from preference comment, or "3.10" default.
+    Returns list of Python versions from preference comment, or ["3.10"] default.
     """
 ```
 
 **Logic:**
 - Search for `# appenv-python-preference:` comment line
 - Parse comma-separated versions from the comment
-- Sort versions numerically (ascending)
-- Return minimum version
-- Return "3.10" if no preference found
+- Return list of versions (caller decides which to use)
+- Return `["3.10"]` if no preference found
 
 **Complexity reduction:** Pure function, easy to test
 
