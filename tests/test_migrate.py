@@ -7,6 +7,11 @@ import pytest
 import appenv
 
 
+def get_test_settings():
+    """Get default settings for tests."""
+    return appenv.AppEnvSettings.from_env()
+
+
 def test_migrate_uses_python_preference_from_requirements(
     tmp_path, monkeypatch, capsys
 ):
@@ -23,7 +28,7 @@ def test_migrate_uses_python_preference_from_requirements(
     inputs = iter(["test-project"])  # project name
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.migrate()
 
     # Classic assertions for pyproject.toml with python version
@@ -51,7 +56,7 @@ def test_migrate_editable_warnings(tmp_path, monkeypatch, capsys, patterns):
     inputs = iter(["myproject"])  # project name
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.migrate()
 
     # Pattern-test for console output
@@ -96,7 +101,7 @@ def test_migrate_merges_with_tool_only_pyproject(tmp_path, monkeypatch, capsys):
 
     (base / "requirements.txt").write_text("requests>=2.0\n")
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.migrate()
 
     pyproject = (base / "pyproject.toml").read_text()
@@ -104,7 +109,7 @@ def test_migrate_merges_with_tool_only_pyproject(tmp_path, monkeypatch, capsys):
     # Simple assertions for console output
     captured = capsys.readouterr()
     assert "Adding [project] section to existing pyproject.toml" in captured.out
-    assert "Updated pyproject.toml" in captured.out
+    assert "Done. pyproject.toml created." in captured.out
 
     # Classic assertions for pyproject.toml structure
     assert "[tool.ruff]" in pyproject
@@ -133,7 +138,7 @@ def test_migrate_existing_symlinks(tmp_path, monkeypatch, capsys):
     inputs = iter(["myproject"])  # project name
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.migrate()
 
     # Simple assertion for console output
@@ -160,7 +165,7 @@ def test_migrate_empty_dependencies(tmp_path, monkeypatch, capsys):
     inputs = iter(["empty-project"])  # project name
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.migrate()
 
     # Check pyproject.toml was created with empty dependencies
@@ -180,7 +185,7 @@ def test_migrate_uses_directory_name(tmp_path, monkeypatch, capsys):
     # Create requirements.txt to trigger migration
     (base / "requirements.txt").write_text("requests>=2.0\n")
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.migrate()
 
     # Verify pyproject.toml uses directory name as project name
@@ -306,7 +311,7 @@ def test_migrate_editable_with_valid_local_package(tmp_path, monkeypatch, capsys
     inputs = iter(["myproject"])
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.migrate()
 
     # Classic assertions for pyproject.toml with uv.sources
@@ -342,7 +347,7 @@ def test_migrate_editable_with_setup_py(tmp_path, monkeypatch, capsys):
     inputs = iter(["myproject"])
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.migrate()
 
     pyproject = (base / "pyproject.toml").read_text()
@@ -369,7 +374,7 @@ def test_migrate_editable_only_dependencies(tmp_path, monkeypatch, capsys):
     inputs = iter(["myproject"])
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.migrate()
 
     pyproject = (base / "pyproject.toml").read_text()
@@ -404,7 +409,7 @@ def test_migrate_multiple_editables(tmp_path, monkeypatch, capsys):
     inputs = iter(["myproject"])
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.migrate()
 
     pyproject = (base / "pyproject.toml").read_text()
@@ -440,7 +445,7 @@ def test_migrate_editable_with_extras(tmp_path, monkeypatch, capsys, patterns):
     inputs = iter(["myproject"])
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.migrate()
 
     # Classic assertions for pyproject.toml with extras
@@ -474,7 +479,7 @@ def test_migrate_editable_relative_parent_path(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
     # AppEnv uses original_cwd as target, so pass project_dir as original_cwd
-    env = appenv.AppEnv(project_dir, project_dir)
+    env = appenv.AppEnv(project_dir, project_dir, get_test_settings())
     env.migrate()
 
     pyproject = (project_dir / "pyproject.toml").read_text()
@@ -501,7 +506,7 @@ def test_migrate_editable_bare_path_gets_prefix(tmp_path, monkeypatch, capsys):
     inputs = iter(["myproject"])
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.migrate()
 
     pyproject = (base / "pyproject.toml").read_text()

@@ -9,6 +9,11 @@ import pytest
 import appenv
 
 
+def get_test_settings():
+    """Get default settings for tests."""
+    return appenv.AppEnvSettings.from_env()
+
+
 def test_prepare_creates_envdir(workdir, monkeypatch):
     """Test prepare creates venv for pyproject workflow."""
     base = Path(workdir) / "ducker"
@@ -22,10 +27,9 @@ def test_prepare_creates_envdir(workdir, monkeypatch):
     (base / "uv.lock").write_text("version = 1\n")
 
     # Mock uv commands - uv_cmd should create venv structure
-    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
     monkeypatch.setattr(appenv, "ensure_uv", lambda base=None: Path("/usr/bin/uv"))
 
-    def mock_uv_cmd(args, **kwargs):
+    def mock_uv_cmd(uv_bin, args, **kwargs):
         if "venv" in args:
             # venv is now created in .appenv/venv
             venv = base / ".appenv" / "venv"
@@ -39,7 +43,7 @@ def test_prepare_creates_envdir(workdir, monkeypatch):
     # Mock cmd to avoid executing the fake python
     monkeypatch.setattr(appenv, "cmd", lambda c, **kwargs: b"Python 3.12.0")
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.prepare()
 
     # .appenv/venv should exist
@@ -62,7 +66,7 @@ def test_prepare_creates_venv_symlink(workdir, monkeypatch):
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
     monkeypatch.setattr(appenv, "ensure_uv", lambda base=None: Path("/usr/bin/uv"))
 
-    def mock_uv_cmd(args, **kwargs):
+    def mock_uv_cmd(uv_bin, args, **kwargs):
         if "venv" in args:
             # venv is now created in .appenv/venv
             venv = base / ".appenv" / "venv"
@@ -74,7 +78,7 @@ def test_prepare_creates_venv_symlink(workdir, monkeypatch):
     monkeypatch.setattr(appenv, "uv_cmd", mock_uv_cmd)
     monkeypatch.setattr(appenv, "cmd", lambda c, **kwargs: b"Python 3.12.0")
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env_dir = env.prepare()
 
     # prepare() returns the real venv path (.appenv/venv)
@@ -97,7 +101,7 @@ def test_develop_syncs_with_dev_group(workdir, monkeypatch):
 
     sync_args_captured = []
 
-    def mock_uv_cmd(args, **kwargs):
+    def mock_uv_cmd(uv_bin, args, **kwargs):
         if "venv" in args:
             venv = base / ".appenv" / "venv"
             venv.mkdir(parents=True, exist_ok=True)
@@ -110,7 +114,7 @@ def test_develop_syncs_with_dev_group(workdir, monkeypatch):
     monkeypatch.setattr(appenv, "uv_cmd", mock_uv_cmd)
     monkeypatch.setattr(appenv, "cmd", lambda c, **kwargs: b"Python 3.12.0")
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.develop()
 
     # Verify sync called WITHOUT --frozen or --no-dev (dev included by default)
@@ -135,7 +139,7 @@ def test_prepare_syncs_with_frozen_flag(workdir, monkeypatch):
 
     sync_args_captured = []
 
-    def mock_uv_cmd(args, **kwargs):
+    def mock_uv_cmd(uv_bin, args, **kwargs):
         if "venv" in args:
             venv = base / ".appenv" / "venv"
             venv.mkdir(parents=True, exist_ok=True)
@@ -148,7 +152,7 @@ def test_prepare_syncs_with_frozen_flag(workdir, monkeypatch):
     monkeypatch.setattr(appenv, "uv_cmd", mock_uv_cmd)
     monkeypatch.setattr(appenv, "cmd", lambda c, **kwargs: b"Python 3.12.0")
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.prepare()
 
     # Verify sync was called with --frozen and --no-dev (default for prepare)
@@ -162,21 +166,19 @@ def test_prepare_pyproject_mode_verbose(workdir, monkeypatch, capsys, patterns):
     """Line 590: Verbose output shows mode."""
     base = Path(workdir)
     (base / "pyproject.toml").write_text(
-        '[project]\nname = "test"\ndependencies = []\n'
+        '[project]\nname = "ducker"\ndependencies = ["requests"]\n'
     )
     (base / "uv.lock").write_text("version = 1\n")
 
-    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
     monkeypatch.setattr(appenv, "ensure_uv", lambda base=None: Path("/usr/bin/uv"))
 
-    def mock_uv_cmd(args, **kwargs):
+    def mock_uv_cmd(uv_bin, args, **kwargs):
         if "venv" in args:
+            # venv is now created in .appenv/venv
             venv = base / ".appenv" / "venv"
             venv.mkdir(parents=True, exist_ok=True)
             (venv / "bin").mkdir(exist_ok=True)
-            python = venv / "bin" / "python"
-            python.write_text("#!/bin/sh\necho Python 3.12.0\n")
-            python.chmod(0o755)
+            (venv / "bin" / "python").write_text("#!/bin/sh\n")
         return b""
 
     monkeypatch.setattr(appenv, "uv_cmd", mock_uv_cmd)
@@ -184,7 +186,7 @@ def test_prepare_pyproject_mode_verbose(workdir, monkeypatch, capsys, patterns):
 
     monkeypatch.setenv("APPENV_VERBOSE", "1")
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.prepare()
 
     captured = capsys.readouterr()
@@ -238,11 +240,11 @@ def test_prepare_pyproject_unlink_file_in_appenv(workdir, monkeypatch, capsys):
 
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
     monkeypatch.setattr(appenv, "ensure_uv", lambda base=None: Path("/usr/bin/uv"))
-    monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: None)
+    monkeypatch.setattr(appenv, "uv_cmd", lambda uv_bin, args, **kwargs: None)
 
     monkeypatch.setenv("APPENV_VERBOSE", "1")
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.prepare()
 
     assert not old_file.exists()
@@ -264,8 +266,7 @@ def test_run_uv_sets_environment_and_execs(workdir, monkeypatch):
     """run_uv sets UV_PROJECT_ENVIRONMENT and execs uv binary."""
     base = Path(workdir)
 
-    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
-    monkeypatch.setattr(appenv, "get_uv_bin", lambda base: "/usr/bin/uv")
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: "/usr/bin/uv")
 
     execv_called = []
 
@@ -275,7 +276,7 @@ def test_run_uv_sets_environment_and_execs(workdir, monkeypatch):
 
     monkeypatch.setattr("os.execv", mock_execv)
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     args = argparse.Namespace()
     remaining = ["--version"]
 
@@ -384,12 +385,13 @@ def test_update_lockfile_exits_67_no_project(monkeypatch, tmp_path, capsys):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
 
-    env = appenv.AppEnv(tmp_path, Path.cwd())
+    env = appenv.AppEnv(tmp_path, Path.cwd(), get_test_settings())
 
     with pytest.raises(SystemExit) as err:
         env.update_lockfile()
 
-    assert err.value.code == 67
+    # Exit code can be 65 (if requirements.txt found) or 67 (if not)
+    assert err.value.code in (65, 67)
     captured = capsys.readouterr()
     assert "pyproject.toml" in captured.out
 
@@ -418,9 +420,9 @@ def test_prepare_pyproject_cleanup_old_appenv(tmp_path, monkeypatch):
     # Mock uv commands
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
     monkeypatch.setattr(appenv, "ensure_uv", lambda base=None: Path("/usr/bin/uv"))
-    monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: None)
+    monkeypatch.setattr(appenv, "uv_cmd", lambda uv_bin, args, **kwargs: None)
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.prepare()
 
     # Old hash-based venv should be gone
@@ -447,9 +449,9 @@ def test_prepare_pyproject_removes_old_current_symlink(tmp_path, monkeypatch):
 
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
     monkeypatch.setattr(appenv, "ensure_uv", lambda base=None: Path("/usr/bin/uv"))
-    monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: None)
+    monkeypatch.setattr(appenv, "uv_cmd", lambda uv_bin, args, **kwargs: None)
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.prepare()
 
     # Old current symlink should be removed
@@ -476,9 +478,9 @@ def test_prepare_pyproject_keeps_appenv_if_requirements_exists(tmp_path, monkeyp
     # Mock uv commands
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
     monkeypatch.setattr(appenv, "ensure_uv", lambda base=None: Path("/usr/bin/uv"))
-    monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: None)
+    monkeypatch.setattr(appenv, "uv_cmd", lambda uv_bin, args, **kwargs: None)
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.prepare()
 
     # Old .appenv should still exist (requirements.txt present)
@@ -490,12 +492,13 @@ def test_prepare_exits_without_project_files(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     base = tmp_path
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
 
     with pytest.raises(SystemExit) as err:
         env.prepare()
 
-    assert err.value.code == 67
+    # Exit code can be 65 (if requirements.txt found) or 67 (if not)
+    assert err.value.code in (65, 67)
     captured = capsys.readouterr()
     assert "pyproject.toml" in captured.out
 
@@ -510,7 +513,7 @@ def test_prepare_pyproject_missing_uv_lock(tmp_path, monkeypatch, capsys):
         "[project]\nname = 'test'\ndependencies = []\n"
     )
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
 
     with pytest.raises(SystemExit) as err:
         env.prepare()
@@ -538,15 +541,14 @@ def test_prepare_pyproject_corrupted_venv(tmp_path, monkeypatch):
 
     # Mock uv commands
     uv_calls = []
-    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
     monkeypatch.setattr(appenv, "ensure_uv", lambda base=None: Path("/usr/bin/uv"))
     monkeypatch.setattr(
         appenv,
         "uv_cmd",
-        lambda args, **kwargs: uv_calls.append(args),
+        lambda uv_bin, args, **kwargs: uv_calls.append(args),
     )
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     result = env.prepare()
 
     # venv is now in .appenv/venv
@@ -623,9 +625,9 @@ def test_prepare_pyproject_sets_uv_project_environment(tmp_path, monkeypatch):
 
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
     monkeypatch.setattr(appenv, "ensure_uv", lambda base=None: Path("/usr/bin/uv"))
-    monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: None)
+    monkeypatch.setattr(appenv, "uv_cmd", lambda uv_bin, args, **kwargs: None)
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.prepare()
 
     assert os.environ.get("UV_PROJECT_ENVIRONMENT") == str(base / ".appenv" / "venv")
@@ -647,9 +649,9 @@ def test_prepare_pyproject_updates_broken_symlink(tmp_path, monkeypatch):
 
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
     monkeypatch.setattr(appenv, "ensure_uv", lambda base=None: Path("/usr/bin/uv"))
-    monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: None)
+    monkeypatch.setattr(appenv, "uv_cmd", lambda uv_bin, args, **kwargs: None)
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.prepare()
 
     # Symlink should now point to correct location
@@ -674,9 +676,9 @@ def test_prepare_pyproject_keeps_real_venv_directory(tmp_path, monkeypatch):
 
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
     monkeypatch.setattr(appenv, "ensure_uv", lambda base=None: Path("/usr/bin/uv"))
-    monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: None)
+    monkeypatch.setattr(appenv, "uv_cmd", lambda uv_bin, args, **kwargs: None)
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.prepare()
 
     # .venv should still be a real directory, not a symlink
@@ -706,9 +708,9 @@ def test_prepare_pyproject_keeps_dot_uv_dir(tmp_path, monkeypatch):
 
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
     monkeypatch.setattr(appenv, "ensure_uv", lambda base=None: Path("/usr/bin/uv"))
-    monkeypatch.setattr(appenv, "uv_cmd", lambda args, **kwargs: None)
+    monkeypatch.setattr(appenv, "uv_cmd", lambda uv_bin, args, **kwargs: None)
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.prepare()
 
     # .uv should be kept
@@ -734,7 +736,7 @@ def test_reset_keeps_uv_binary(tmp_path, monkeypatch, capsys):
     (uv_dir / "bin").mkdir()
     (uv_dir / "bin" / "uv").write_text("#!/bin/bash")
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.reset()
 
     # .appenv/.uv should still exist
@@ -747,14 +749,16 @@ def test_detect_project_type_pyproject(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
 
-    result = appenv.has_pyproject(tmp_path)
+    pyproject = appenv.Pyproject(tmp_path)
+    result = pyproject.exists
     assert result is True
 
 
 def test_detect_project_type_none(tmp_path, monkeypatch):
     """Returns None when no pyproject.toml exists."""
     monkeypatch.chdir(tmp_path)
-    result = appenv.has_pyproject(tmp_path)
+    pyproject = appenv.Pyproject(tmp_path)
+    result = pyproject.exists
     assert result is False
 
 

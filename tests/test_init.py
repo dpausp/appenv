@@ -5,10 +5,23 @@ from pathlib import Path
 import appenv
 
 
+def get_test_settings():
+    """Get default settings for tests."""
+    return appenv.AppEnvSettings.from_env()
+
+
 def test_init_fresh_start_interactive(tmp_path, monkeypatch, capsys):
     """init fresh start flow with interactive inputs."""
     monkeypatch.chdir(tmp_path)
     base = tmp_path
+
+    # Mock ensure_uv to return a fake uv binary with valid version
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base=None: Path("/usr/bin/uv"))
+    monkeypatch.setattr(
+        appenv, "get_uv_version", lambda uv_bin: appenv.UvVersion(0, 5, 0)
+    )
+    # Mock uv_cmd to skip actual lockfile generation
+    monkeypatch.setattr(appenv, "uv_cmd", lambda uv_bin, args, **kwargs: "")
 
     # No requirements.txt - triggers fresh start flow
     # Inputs: command name, deps (2), empty, project name, desc, py version
@@ -25,7 +38,7 @@ def test_init_fresh_start_interactive(tmp_path, monkeypatch, capsys):
     )
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.init()
 
     # Verify pyproject.toml was created
@@ -47,6 +60,14 @@ def test_init_fresh_start_default_dependencies(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     base = tmp_path
 
+    # Mock ensure_uv to return a fake uv binary with valid version
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base=None: Path("/usr/bin/uv"))
+    monkeypatch.setattr(
+        appenv, "get_uv_version", lambda uv_bin: appenv.UvVersion(0, 5, 0)
+    )
+    # Mock uv_cmd to skip actual lockfile generation
+    monkeypatch.setattr(appenv, "uv_cmd", lambda uv_bin, args, **kwargs: "")
+
     # No requirements.txt - triggers fresh start flow
     # Use a real package name that exists on PyPI
     inputs = iter(
@@ -61,7 +82,7 @@ def test_init_fresh_start_default_dependencies(tmp_path, monkeypatch, capsys):
     )
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.init()
 
     # Verify pyproject.toml was created with command name as dependency
@@ -75,6 +96,14 @@ def test_init_empty_command_name_uses_app(workdir, monkeypatch, capsys):
     """Test fresh start with default command name and dependencies."""
     base = Path(workdir)
 
+    # Mock ensure_uv to return a fake uv binary with valid version
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base=None: Path("/usr/bin/uv"))
+    monkeypatch.setattr(
+        appenv, "get_uv_version", lambda uv_bin: appenv.UvVersion(0, 5, 0)
+    )
+    # Mock uv_cmd to skip actual lockfile generation
+    monkeypatch.setattr(appenv, "uv_cmd", lambda uv_bin, args, **kwargs: "")
+
     inputs = iter(
         [
             "app",  # command name (explicitly "app")
@@ -86,7 +115,7 @@ def test_init_empty_command_name_uses_app(workdir, monkeypatch, capsys):
     )
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.init()
 
     pyproject = (base / "pyproject.toml").read_text()
@@ -97,6 +126,14 @@ def test_init_empty_command_name_uses_app(workdir, monkeypatch, capsys):
 def test_init_unlink_broken_symlink(workdir, monkeypatch, capsys):
     """Unlinks broken symlink before creating new one."""
     base = Path(workdir)
+
+    # Mock ensure_uv to return a fake uv binary with valid version
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base=None: Path("/usr/bin/uv"))
+    monkeypatch.setattr(
+        appenv, "get_uv_version", lambda uv_bin: appenv.UvVersion(0, 5, 0)
+    )
+    # Mock uv_cmd to skip actual lockfile generation
+    monkeypatch.setattr(appenv, "uv_cmd", lambda uv_bin, args, **kwargs: "")
 
     broken_link = base / "myapp"
     broken_link.symlink_to("nonexistent_target")
@@ -114,7 +151,7 @@ def test_init_unlink_broken_symlink(workdir, monkeypatch, capsys):
     )
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.init()
 
     assert (base / "myapp").is_symlink()
@@ -130,7 +167,7 @@ def test_init_already_exists(workdir, monkeypatch, capsys):
         '[project]\nname = "existing"\ndependencies = []\n'
     )
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.init()
 
     captured = capsys.readouterr()
@@ -141,6 +178,14 @@ def test_init_already_exists(workdir, monkeypatch, capsys):
 def test_init_empty_command_name_defaults_to_app(workdir, monkeypatch, capsys):
     """Line 847: init() uses 'app' as default when command name is empty."""
     base = Path(workdir)
+
+    # Mock ensure_uv to return a fake uv binary with valid version
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base=None: Path("/usr/bin/uv"))
+    monkeypatch.setattr(
+        appenv, "get_uv_version", lambda uv_bin: appenv.UvVersion(0, 5, 0)
+    )
+    # Mock uv_cmd to skip actual lockfile generation
+    monkeypatch.setattr(appenv, "uv_cmd", lambda uv_bin, args, **kwargs: "")
 
     # Empty command name -> defaults to "app"
     inputs = iter(
@@ -154,7 +199,7 @@ def test_init_empty_command_name_defaults_to_app(workdir, monkeypatch, capsys):
     )
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.init()
 
     pyproject = (base / "pyproject.toml").read_text()

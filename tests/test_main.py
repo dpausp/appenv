@@ -14,6 +14,11 @@ import pytest
 import appenv
 
 
+def get_test_settings():
+    """Get default settings for tests."""
+    return appenv.AppEnvSettings.from_env()
+
+
 def mock_ensure_python(monkeypatch):
     """Mock ensure_best_python to prevent re-exec."""
     monkeypatch.setattr(appenv, "ensure_best_python", lambda base: None)
@@ -22,11 +27,16 @@ def mock_ensure_python(monkeypatch):
 # main() tests
 
 
-def test_main_shows_usage_without_subcommand(monkeypatch, capsys):
+def test_main_shows_usage_without_subcommand(monkeypatch, capsys, tmp_path):
     """Test that calling appenv without subcommand shows usage."""
     mock_ensure_python(monkeypatch)
     monkeypatch.setattr("sys.argv", ["appenv"])
     monkeypatch.setattr(appenv, "__file__", "/some/path/appenv")
+
+    # Mock setup_logdir to use tmp_path
+    mock_log_dir = tmp_path / "logs"
+    mock_log_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(appenv.AppEnv, "setup_logdir", lambda self: mock_log_dir)
 
     # Should exit with usage message
     with pytest.raises(SystemExit):
@@ -36,11 +46,16 @@ def test_main_shows_usage_without_subcommand(monkeypatch, capsys):
     assert "usage: appenv" in captured.out
 
 
-def test_main_shows_grouped_help(monkeypatch, capsys):
+def test_main_shows_grouped_help(monkeypatch, capsys, tmp_path):
     """Test that help output shows commands grouped by category."""
     mock_ensure_python(monkeypatch)
     monkeypatch.setattr("sys.argv", ["appenv"])
     monkeypatch.setattr(appenv, "__file__", "/some/path/appenv")
+
+    # Mock setup_logdir to use tmp_path
+    mock_log_dir = tmp_path / "logs"
+    mock_log_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(appenv.AppEnv, "setup_logdir", lambda self: mock_log_dir)
 
     with pytest.raises(SystemExit):
         appenv.main()
@@ -74,10 +89,15 @@ def test_main_shows_grouped_help(monkeypatch, capsys):
     assert "settings" in output
 
 
-def test_help_same_as_no_args(monkeypatch, capsys):
+def test_help_same_as_no_args(monkeypatch, capsys, tmp_path):
     """Test that --help shows same output as calling without arguments."""
     mock_ensure_python(monkeypatch)
     monkeypatch.setattr(appenv, "__file__", "/some/path/appenv")
+
+    # Mock setup_logdir to use tmp_path
+    mock_log_dir = tmp_path / "logs"
+    mock_log_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(appenv.AppEnv, "setup_logdir", lambda self: mock_log_dir)
 
     # Get output without args
     monkeypatch.setattr("sys.argv", ["appenv"])
@@ -172,15 +192,9 @@ def test_cmd_with_list_no_shell():
 
 
 def test_uv_cmd_raises_when_uv_not_found(monkeypatch):
-
-    # Mock ensure_uv to raise RuntimeError
-    def fake_ensure_uv(base=None):
-        raise RuntimeError("uv not found and could not be installed.")
-
-    monkeypatch.setattr(appenv, "ensure_uv", fake_ensure_uv)
-
-    with pytest.raises(RuntimeError, match="uv not found and could not be installed"):
-        appenv.uv_cmd([])
+    # uv_cmd raises FileNotFoundError when uv binary doesn't exist
+    with pytest.raises(FileNotFoundError):
+        appenv.uv_cmd(Path("/usr/bin/uv"), [])
 
 
 def test_get_uv_bin_uses_path(monkeypatch):
@@ -205,10 +219,24 @@ def test_get_uv_bin_uses_pip_fallback(monkeypatch, tmp_path):
     monkeypatch.setattr("shutil.which", lambda name: None)  # no uv, no nix
 
     pip_called = []
-    monkeypatch.setattr(
-        "subprocess.run",
-        lambda cmd, **kwargs: pip_called.append(cmd),
-    )
+
+    class FakeResult:
+        stdout = "uv 0.10.3 (abc123 2024-01-01)\n"
+        returncode = 0
+
+        def __init__(self, stdout="", returncode=0):
+            self.stdout = stdout
+            self.returncode = returncode
+
+    def mock_run(cmd, **kwargs):
+        pip_called.append(cmd)
+        # Return a fake result for uv --version calls
+        if "uv" in cmd and "--version" in cmd:
+            return FakeResult(stdout="uv 0.10.3 (abc123 2024-01-01)\n", returncode=0)
+        # Return success for other subprocess calls (like pip --version, pip install)
+        return FakeResult(stdout="", returncode=0)
+
+    monkeypatch.setattr("subprocess.run", mock_run)
 
     with pytest.raises(RuntimeError, match="uv not found"):
         appenv.get_uv_bin(tmp_path)
@@ -220,7 +248,7 @@ def test_get_uv_bin_uses_pip_fallback(monkeypatch, tmp_path):
 
 
 def test_meta_calls_reset(monkeypatch, tmp_path):
-    env = appenv.AppEnv(tmp_path, Path.cwd())
+    env = appenv.AppEnv(tmp_path, Path.cwd(), get_test_settings())
     monkeypatch.setattr("sys.argv", ["appenv", "reset"])
 
     reset_called = []
@@ -234,7 +262,7 @@ def test_meta_calls_reset(monkeypatch, tmp_path):
 
 
 def test_meta_calls_prepare(monkeypatch, tmp_path):
-    env = appenv.AppEnv(tmp_path, Path.cwd())
+    env = appenv.AppEnv(tmp_path, Path.cwd(), get_test_settings())
     monkeypatch.setattr("sys.argv", ["appenv", "prepare"])
 
     prepare_called = []
@@ -250,7 +278,7 @@ def test_meta_calls_prepare(monkeypatch, tmp_path):
 
 
 def test_meta_calls_python(monkeypatch, tmp_path):
-    env = appenv.AppEnv(tmp_path, Path.cwd())
+    env = appenv.AppEnv(tmp_path, Path.cwd(), get_test_settings())
     monkeypatch.setattr("sys.argv", ["appenv", "python"])
 
     python_called = []
@@ -266,7 +294,7 @@ def test_meta_calls_python(monkeypatch, tmp_path):
 
 
 def test_meta_calls_run_script(monkeypatch, tmp_path):
-    env = appenv.AppEnv(tmp_path, Path.cwd())
+    env = appenv.AppEnv(tmp_path, Path.cwd(), get_test_settings())
     monkeypatch.setattr("sys.argv", ["appenv", "run", "myscript"])
 
     run_called = []
@@ -285,10 +313,12 @@ def test_meta_calls_run_script(monkeypatch, tmp_path):
 
 
 def test_run_sets_env_and_execs(monkeypatch, tmp_path):
-    env = appenv.AppEnv(tmp_path, Path.cwd())
+    env = appenv.AppEnv(tmp_path, Path.cwd(), get_test_settings())
 
     # Add pyproject.toml and uv.lock so _prepare_venv doesn't exit
-    (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"\n')
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "test"\nversion = "0.1.0"\n'
+    )
     (tmp_path / "uv.lock").write_text("version = 1\n")
 
     env_dir = tmp_path / ".appenv" / "abc123"
@@ -297,7 +327,7 @@ def test_run_sets_env_and_execs(monkeypatch, tmp_path):
     bin_dir.mkdir()
     (bin_dir / "myapp").write_text("#!/bin/sh\necho hello\n")
 
-    monkeypatch.setattr(env, "prepare", lambda: str(env_dir))
+    monkeypatch.setattr(env, "_prepare_venv", lambda: str(env_dir))
 
     execv_called = []
     monkeypatch.setattr(
@@ -314,10 +344,12 @@ def test_run_sets_env_and_execs(monkeypatch, tmp_path):
 
 
 def test_run_with_profiling_enabled(monkeypatch, tmp_path, capsys, patterns):
-    env = appenv.AppEnv(tmp_path, Path.cwd())
+    env = appenv.AppEnv(tmp_path, Path.cwd(), get_test_settings())
 
     # Add pyproject.toml and uv.lock so _prepare_venv doesn't exit
-    (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"\n')
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "test"\nversion = "0.1.0"\n'
+    )
     (tmp_path / "uv.lock").write_text("version = 1\n")
 
     env_dir = tmp_path / ".appenv" / "abc123"
@@ -326,7 +358,7 @@ def test_run_with_profiling_enabled(monkeypatch, tmp_path, capsys, patterns):
     bin_dir.mkdir()
     (bin_dir / "myapp").write_text("#!/bin/sh\necho hello\n")
 
-    monkeypatch.setattr(env, "prepare", lambda: str(env_dir))
+    monkeypatch.setattr(env, "_prepare_venv", lambda: str(env_dir))
     monkeypatch.setattr("os.chdir", lambda p: None)
     monkeypatch.setenv("APPENV_PROFILE", "1")
 
@@ -359,10 +391,12 @@ def test_run_with_profiling_enabled(monkeypatch, tmp_path, capsys, patterns):
 
 
 def test_run_with_profiling_custom_output(monkeypatch, tmp_path, capsys, patterns):
-    env = appenv.AppEnv(tmp_path, Path.cwd())
+    env = appenv.AppEnv(tmp_path, Path.cwd(), get_test_settings())
 
     # Add pyproject.toml and uv.lock so _prepare_venv doesn't exit
-    (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"\n')
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "test"\nversion = "0.1.0"\n'
+    )
     (tmp_path / "uv.lock").write_text("version = 1\n")
 
     env_dir = tmp_path / ".appenv" / "abc123"
@@ -371,7 +405,7 @@ def test_run_with_profiling_custom_output(monkeypatch, tmp_path, capsys, pattern
     bin_dir.mkdir()
     (bin_dir / "myapp").write_text("#!/bin/sh\necho hello\n")
 
-    monkeypatch.setattr(env, "prepare", lambda: str(env_dir))
+    monkeypatch.setattr(env, "_prepare_venv", lambda: str(env_dir))
     monkeypatch.setattr("os.chdir", lambda p: None)
     monkeypatch.setenv("APPENV_PROFILE", "1")
     monkeypatch.setenv("APPENV_PROFILE_OUTPUT", "/tmp/custom.prof")
@@ -395,7 +429,7 @@ def test_run_with_profiling_custom_output(monkeypatch, tmp_path, capsys, pattern
 
 def test_profiling_list_no_data(tmp_path, capsys):
     """profiling_list shows message when no profiling data exists."""
-    env = appenv.AppEnv(tmp_path, Path.cwd())
+    env = appenv.AppEnv(tmp_path, Path.cwd(), get_test_settings())
     args = argparse.Namespace(count=10)
     env.profiling_list(args)
 
@@ -405,7 +439,7 @@ def test_profiling_list_no_data(tmp_path, capsys):
 
 def test_profiling_list_with_profiles(tmp_path, capsys):
     """profiling_list shows profiles sorted by mtime."""
-    env = appenv.AppEnv(tmp_path, Path.cwd())
+    env = appenv.AppEnv(tmp_path, Path.cwd(), get_test_settings())
     profiling_dir = tmp_path / ".appenv" / "profiling"
     profiling_dir.mkdir(parents=True)
 
@@ -437,7 +471,7 @@ def test_profiling_list_with_profiles(tmp_path, capsys):
 
 def test_profiling_list_with_count_limit(tmp_path, capsys):
     """profiling_list respects -n count limit."""
-    env = appenv.AppEnv(tmp_path, Path.cwd())
+    env = appenv.AppEnv(tmp_path, Path.cwd(), get_test_settings())
     profiling_dir = tmp_path / ".appenv" / "profiling"
     profiling_dir.mkdir(parents=True)
 
@@ -453,7 +487,7 @@ def test_profiling_list_with_count_limit(tmp_path, capsys):
 
 def test_profiling_show_no_data(tmp_path, capsys):
     """profiling_show exits when no profiling data exists."""
-    env = appenv.AppEnv(tmp_path, Path.cwd())
+    env = appenv.AppEnv(tmp_path, Path.cwd(), get_test_settings())
     args = argparse.Namespace(file=None)
 
     with pytest.raises(SystemExit) as exc_info:
@@ -466,7 +500,7 @@ def test_profiling_show_no_data(tmp_path, capsys):
 
 def test_profiling_show_file_not_found(tmp_path, capsys):
     """profiling_show exits when specified file not found."""
-    env = appenv.AppEnv(tmp_path, Path.cwd())
+    env = appenv.AppEnv(tmp_path, Path.cwd(), get_test_settings())
     args = argparse.Namespace(file="nonexistent.prof")
 
     with pytest.raises(SystemExit) as exc_info:
@@ -479,7 +513,7 @@ def test_profiling_show_file_not_found(tmp_path, capsys):
 
 def test_profiling_snakeviz_no_data(tmp_path, capsys):
     """profiling_snakeviz exits when no profiling data exists."""
-    env = appenv.AppEnv(tmp_path, Path.cwd())
+    env = appenv.AppEnv(tmp_path, Path.cwd(), get_test_settings())
     args = argparse.Namespace(file=None)
 
     with pytest.raises(SystemExit) as exc_info:
@@ -492,7 +526,7 @@ def test_profiling_snakeviz_no_data(tmp_path, capsys):
 
 def test_profiling_snakeviz_opens_latest(tmp_path, capsys, monkeypatch):
     """profiling_snakeviz opens latest profile with uv run snakeviz."""
-    env = appenv.AppEnv(tmp_path, Path.cwd())
+    env = appenv.AppEnv(tmp_path, Path.cwd(), get_test_settings())
     profiling_dir = tmp_path / ".appenv" / "profiling"
     profiling_dir.mkdir(parents=True)
 
@@ -524,7 +558,7 @@ def test_profiling_snakeviz_opens_latest(tmp_path, capsys, monkeypatch):
 
 def test_profiling_snakeviz_specific_file(tmp_path, monkeypatch):
     """profiling_snakeviz opens specific profile file."""
-    env = appenv.AppEnv(tmp_path, Path.cwd())
+    env = appenv.AppEnv(tmp_path, Path.cwd(), get_test_settings())
     profiling_dir = tmp_path / ".appenv" / "profiling"
     profiling_dir.mkdir(parents=True)
 
@@ -549,7 +583,7 @@ def test_profiling_snakeviz_specific_file(tmp_path, monkeypatch):
 
 def test_profiling_snakeviz_file_not_found(tmp_path, capsys):
     """profiling_snakeviz exits when specified file not found."""
-    env = appenv.AppEnv(tmp_path, Path.cwd())
+    env = appenv.AppEnv(tmp_path, Path.cwd(), get_test_settings())
     args = argparse.Namespace(file="nonexistent.prof")
 
     with pytest.raises(SystemExit) as exc_info:
@@ -561,7 +595,7 @@ def test_profiling_snakeviz_file_not_found(tmp_path, capsys):
 
 
 def test_python_method_calls_run(monkeypatch, tmp_path):
-    env = appenv.AppEnv(tmp_path, Path.cwd())
+    env = appenv.AppEnv(tmp_path, Path.cwd(), get_test_settings())
 
     run_called = []
     monkeypatch.setattr(env, "run", lambda cmd, argv: run_called.append((cmd, argv)))
@@ -609,7 +643,7 @@ def test_print_colored_diff_returns_false_when_no_changes(capsys):
 
 
 def test_get_uv_version_returns_version_on_success(tmp_path, monkeypatch):
-    """Returns version string on successful version check."""
+    """Returns UvVersion object on successful version check."""
     uv_bin = Path("/usr/bin/uv")
 
     class FakeResult:
@@ -620,7 +654,8 @@ def test_get_uv_version_returns_version_on_success(tmp_path, monkeypatch):
 
     result = appenv.get_uv_version(uv_bin)
 
-    assert result == "0.10.3"
+    assert isinstance(result, appenv.UvVersion)
+    assert result == appenv.UvVersion(0, 10, 3)
 
 
 def test_get_uv_version_returns_none_on_subprocess_error(monkeypatch, capsys):
@@ -640,7 +675,7 @@ def test_get_uv_version_returns_none_on_subprocess_error(monkeypatch, capsys):
 
 
 def test_get_uv_version_returns_none_when_too_old(monkeypatch, capsys):
-    """When version is too old, get_uv_version returns None."""
+    """When version is too old, get_uv_version returns UvVersion with valid=False."""
     uv_bin = Path("/usr/bin/uv")
 
     class FakeResult:
@@ -651,7 +686,9 @@ def test_get_uv_version_returns_none_when_too_old(monkeypatch, capsys):
 
     result = appenv.get_uv_version(uv_bin)
 
-    assert result is None
+    assert isinstance(result, appenv.UvVersion)
+    assert result == appenv.UvVersion(0, 4, 0)
+    assert not result.valid
 
 
 def test_get_uv_version_handles_parse_error(tmp_path, monkeypatch, capsys):
@@ -704,7 +741,10 @@ def test_ensure_uv_exits_on_too_old_version(monkeypatch, capsys):
 
     assert err.value.code == 68
     captured = capsys.readouterr()
-    assert "too old" in captured.out
+    # Check for error message components
+    assert "Error: cannot use uv binary:" in captured.out
+    assert "Version is: 0.4.0" in captured.out
+    assert "Minimum required version: 0.5.0" in captured.out
 
 
 def test_ensure_uv_returns_uv_bin_on_success(monkeypatch, capsys):
@@ -723,31 +763,40 @@ def test_ensure_uv_returns_uv_bin_on_success(monkeypatch, capsys):
     assert result == uv_bin
 
 
-# parse_uv_version() tests
+# UvVersion.from_string() tests
 
 
 def test_parse_uv_version_parses_correctly():
-    assert appenv.parse_uv_version("0.5.0") == (0, 5, 0)
-    assert appenv.parse_uv_version("0.10.3") == (0, 10, 3)
-    assert appenv.parse_uv_version("1.2.3") == (1, 2, 3)
+    assert appenv.UvVersion.from_string("0.5.0") == appenv.UvVersion(0, 5, 0)
+    assert appenv.UvVersion.from_string("0.10.3") == appenv.UvVersion(0, 10, 3)
+    assert appenv.UvVersion.from_string("1.2.3") == appenv.UvVersion(1, 2, 3)
 
 
 def test_parse_uv_version_handles_two_parts():
-    # Two parts is valid: X.Y -> (X, Y, 0)
-    assert appenv.parse_uv_version("0.5") == (0, 5, 0)
-    assert appenv.parse_uv_version("1.2") == (1, 2, 0)
+    # Two parts now raises InvalidVersionError (not auto-expanded to patch=0)
+    with pytest.raises(appenv.InvalidVersionError):
+        appenv.UvVersion.from_string("0.5")
+    with pytest.raises(appenv.InvalidVersionError):
+        appenv.UvVersion.from_string("1.2")
 
 
 def test_parse_uv_version_returns_zero_on_invalid():
-    # Single part or invalid format returns (0, 0, 0)
-    assert appenv.parse_uv_version("1") == (0, 0, 0)
-    assert appenv.parse_uv_version("invalid") == (0, 0, 0)
-    assert appenv.parse_uv_version("") == (0, 0, 0)
+    # Invalid format now raises InvalidVersionError (returns unknown instead)
+    with pytest.raises(appenv.InvalidVersionError):
+        appenv.UvVersion.from_string("1")
+    with pytest.raises(appenv.InvalidVersionError):
+        appenv.UvVersion.from_string("invalid")
+    with pytest.raises(appenv.InvalidVersionError):
+        appenv.UvVersion.from_string("")
 
 
 def test_parse_uv_version_strips_v_prefix():
-    assert appenv.parse_uv_version("v0.5.0") == (0, 5, 0)
-    assert appenv.parse_uv_version("v1.2.3") == (1, 2, 3)
+    # v prefix is NOT stripped - must use version number only
+    # With v prefix, it raises InvalidVersionError
+    with pytest.raises(appenv.InvalidVersionError):
+        appenv.UvVersion.from_string("v0.5.0")
+    with pytest.raises(appenv.InvalidVersionError):
+        appenv.UvVersion.from_string("v1.2.3")
 
 
 # Tier 1: Quick Wins
@@ -834,7 +883,7 @@ def test_version_satisfies_constraints_edge_cases():
 
 def test_run_script_delegates(monkeypatch, tmp_path):
     """run_script() delegates to AppEnv.run() with script name."""
-    env = appenv.AppEnv(tmp_path, Path.cwd())
+    env = appenv.AppEnv(tmp_path, Path.cwd(), get_test_settings())
 
     run_called = []
     monkeypatch.setattr(env, "run", lambda cmd, argv: run_called.append((cmd, argv)))
@@ -846,7 +895,7 @@ def test_run_script_delegates(monkeypatch, tmp_path):
 
 def test_settings_no_error_lines(monkeypatch):
     """settings() output contains no error or exception lines."""
-    env = appenv.AppEnv(Path("/project"), Path.cwd())
+    env = appenv.AppEnv(Path("/project"), Path.cwd(), get_test_settings())
 
     for var in ["APPENV_EXTRAS", "APPENV_VERBOSE", "APPENV_PROFILE"]:
         monkeypatch.delenv(var, raising=False)
@@ -854,7 +903,7 @@ def test_settings_no_error_lines(monkeypatch):
     output = io.StringIO()
     monkeypatch.setattr("sys.stdout", output)
 
-    env.settings()
+    env.show_settings()
 
     result = output.getvalue()
 
@@ -934,7 +983,7 @@ def test_parse_requires_python_with_upper_bound(tmp_path):
 def test_uv_cmd_verbose_flag_and_output(monkeypatch, capsys):
     """uv_cmd adds -v flag when verbose=True and prints output."""
     monkeypatch.setenv("APPENV_VERBOSE", "1")
-    monkeypatch.setattr(appenv, "ensure_uv", lambda base=None: Path("/usr/bin/uv"))
+    uv_bin = Path("/usr/bin/uv")
     monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/uv")
 
     cmd_calls = []
@@ -945,7 +994,7 @@ def test_uv_cmd_verbose_flag_and_output(monkeypatch, capsys):
 
     monkeypatch.setattr(appenv, "cmd", mock_cmd)
 
-    appenv.uv_cmd(["lock"], verbose=True)
+    appenv.uv_cmd(uv_bin, ["lock"], verbose=True)
 
     # Verify -v flag is added to command
     assert "-v" in cmd_calls[0]
@@ -954,25 +1003,6 @@ def test_uv_cmd_verbose_flag_and_output(monkeypatch, capsys):
     # Verify output is printed when APPENV_VERBOSE is set
     captured = capsys.readouterr()
     assert "verbose output from uv" in captured.out
-
-
-def test_uv_cmd_passes_base_to_ensure_uv(monkeypatch):
-    """uv_cmd should pass base parameter to ensure_uv."""
-    from unittest.mock import MagicMock
-
-    mock_ensure_uv = MagicMock(return_value=Path("/usr/bin/uv"))
-    monkeypatch.setattr(appenv, "ensure_uv", mock_ensure_uv)
-    monkeypatch.setattr(appenv, "cmd", lambda c, **kwargs: b"")
-
-    test_base = Path("/some/project")
-
-    # Without base
-    appenv.uv_cmd(["sync"])
-    mock_ensure_uv.assert_called_with(None)
-
-    # With base
-    appenv.uv_cmd(["sync"], base=test_base)
-    mock_ensure_uv.assert_called_with(test_base)
 
 
 # ==============================================================================
@@ -1107,8 +1137,21 @@ def test_get_uv_bin_pip_fallback_success(tmp_path, monkeypatch):
 
     pip_called = []
 
+    class FakeResult:
+        stdout = "uv 0.10.3 (abc123 2024-01-01)\n"
+        returncode = 0
+
+        def __init__(self, stdout="", returncode=0):
+            self.stdout = stdout
+            self.returncode = returncode
+
     def mock_run(cmd, **kwargs):
         pip_called.append(cmd)
+        # Return a fake result for uv --version calls
+        if "uv" in cmd and "--version" in cmd:
+            return FakeResult(stdout="uv 0.10.3 (abc123 2024-01-01)\n", returncode=0)
+        # Return success for other subprocess calls (like pip --version, pip install)
+        return FakeResult(stdout="", returncode=0)
 
     monkeypatch.setattr("subprocess.run", mock_run)
 
@@ -1242,7 +1285,7 @@ def test_version_consistency():
 
 
 def test_reset_nonexisting_envdir_silent(tmp_path):
-    env = appenv.AppEnv(tmp_path / "ducker", Path.cwd())
+    env = appenv.AppEnv(tmp_path / "ducker", Path.cwd(), get_test_settings())
     assert not os.path.exists(env.appenv_dir)
     env.reset()
     assert not os.path.exists(env.appenv_dir)
@@ -1251,7 +1294,7 @@ def test_reset_nonexisting_envdir_silent(tmp_path):
 
 def test_reset_removes_envdir_with_subdirs(tmp_path):
     """reset() cleans up contents in .appenv."""
-    env = appenv.AppEnv(tmp_path / "ducker", Path.cwd())
+    env = appenv.AppEnv(tmp_path / "ducker", Path.cwd(), get_test_settings())
     os.makedirs(env.appenv_dir)
     # Create some subdirectories
     (env.appenv_dir / "subdir1").mkdir()
@@ -1276,7 +1319,7 @@ def test_reset_removes_venv(tmp_path, capsys):
 
     assert venv.exists()
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.reset()
 
     assert not venv.exists()
@@ -1300,7 +1343,7 @@ def test_reset_removes_both_venv_and_appenv(tmp_path, capsys):
     assert venv_link.exists()
     assert appenv_dir.exists()
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.reset()
 
     # Symlink should be removed
@@ -1322,7 +1365,7 @@ def test_reset_unlinks_file_in_appenv(workdir, monkeypatch, capsys):
 
     monkeypatch.setenv("APPENV_VERBOSE", "1")
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.reset()
 
     assert not old_file.exists()
@@ -1342,7 +1385,7 @@ def test_reset_removes_venv_symlink(workdir, monkeypatch, capsys):
     venv_link = base / ".venv"
     venv_link.symlink_to(".appenv/venv")
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.reset()
 
     assert not venv_link.exists()
@@ -1361,7 +1404,7 @@ def test_reset_removes_real_venv(workdir, monkeypatch, capsys):
     venv_real.mkdir()
     (venv_real / "bin").mkdir()
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.reset()
 
     assert not venv_real.exists()
@@ -1378,7 +1421,7 @@ def test_reset_removes_old_venv_directory(workdir, monkeypatch, capsys):
     venv_dir.mkdir()
     (venv_dir / "bin").mkdir()
 
-    env = appenv.AppEnv(base, Path.cwd())
+    env = appenv.AppEnv(base, Path.cwd(), get_test_settings())
     env.reset()
 
     assert not venv_dir.exists()
