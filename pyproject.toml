@@ -78,7 +78,6 @@ mypy = [
 
 [tool.hatch.build]
 sources = [ "src" ]
-targets.wheel.packages = [ "src" ]
 [tool.hatch.version]
 path = "src/appenv.py"
 
