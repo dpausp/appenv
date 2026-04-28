@@ -1041,10 +1041,10 @@ class AppEnv:
                 f"Warning: {self.appenv_script} is version {local_label}, "
                 f"running appenv is {running_version}."
             )
-            print(f"Run './appenv migrate' to update the script.")
+            print("Run './appenv migrate' to update the script.")
 
     @staticmethod
-    def _extract_version(script: Path) -> str | None:
+    def _extract_version(script):
         """Extract __version__ from an appenv script file."""
         content = script.read_text(errors="replace")
         match = re.search(r'__version__ = "([^"]+)"', content)
@@ -1065,7 +1065,7 @@ class AppEnv:
 
         print(update_info)
 
-    def _uv_sync(self, *, dev_mode: bool, uv: UvBin):
+    def _uv_sync(self, *, dev_mode, uv):
         # Sync dependencies (idempotent)
         sync_args = ["sync"]
 
@@ -1333,7 +1333,7 @@ def appenv_settings_from_env():
     """Read settings from environment variables."""
     verbose = os.environ.get("APPENV_VERBOSE") is not None
     extras_raw = os.environ.get("APPENV_EXTRAS") or ""
-    extras: list[str] = [e.strip() for e in extras_raw.split(",") if e.strip()]
+    extras = cast(list[str], [e.strip() for e in extras_raw.split(",") if e.strip()])
     basedir_str = os.environ.get("APPENV_BASEDIR")
     basedir = Path(basedir_str) if basedir_str else Path(__file__).parent
 

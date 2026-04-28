@@ -457,7 +457,9 @@ def test_migrate_skips_appenv_script_on_same_version(
     # Create appenv script with the CURRENT version
     current_script = base / "appenv"
     current_script.write_text(
-        f'#!/usr/bin/env python3\n__version__ = "{appenv.__version__}"\nprint("current")\n'
+        f'#!/usr/bin/env python3\n'
+        f'__version__ = "{appenv.__version__}"\n'
+        f'print("current")\n'
     )
     current_script.chmod(0o755)
     original_mtime = current_script.stat().st_mtime

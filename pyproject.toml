@@ -76,8 +76,8 @@ mypy = [
     "types-pexpect>=4.9.0.20260127",
 ]
 
-[tool.hatch.build]
-sources = [ "src" ]
+[tool.hatch.build.targets.wheel]
+packages = [ "src/appenv.py" ]
 [tool.hatch.version]
 path = "src/appenv.py"
 
