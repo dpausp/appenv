@@ -480,3 +480,40 @@ def test_migrate_skips_appenv_script_on_same_version(
 
     # File should be untouched
     assert current_script.stat().st_mtime == original_mtime
+
+
+def test_migrate_updates_appenv_script_without_version(
+    tmp_path, monkeypatch, capsys, test_settings
+):
+    """migrate replaces ./appenv when it has no __version__ (unknown version)."""
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
+
+    # Create requirements.txt
+    (base / "requirements.txt").write_text("requests\n")
+
+    # Create appenv script WITHOUT __version__ (old version)
+    old_script = base / "appenv"
+    old_script.write_text("#!/usr/bin/env python3\nprint('old')\n")
+    old_script.chmod(0o755)
+
+    # Mock ensure_uv and _uv_lock
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
+    monkeypatch.setattr(
+        appenv.AppEnv, "_uv_lock", lambda self, uv, diff=False: None
+    )
+
+    inputs = iter(["myproject"])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env.migrate()
+
+    captured = capsys.readouterr()
+    assert "Updated" in captured.out
+    assert "unknown" in captured.out
+    assert appenv.__version__ in captured.out
+
+    # The script should now contain the current version
+    new_content = old_script.read_text()
+    assert appenv.__version__ in new_content

@@ -1010,14 +1010,15 @@ class AppEnv:
 
         local_version = self._extract_version(self.appenv_script)
         running_version = __version__
-        if not local_version or local_version == running_version:
+        if local_version == running_version:
             return
 
         if update:
+            local_label = local_version if local_version else "unknown"
             log.debug(
                 "Updating %s: %s -> %s",
                 self.appenv_script,
-                local_version,
+                local_label,
                 running_version,
             )
             bootstrap_data = Path(__file__).read_bytes()
@@ -1025,11 +1026,12 @@ class AppEnv:
             self.appenv_script.chmod(0o755)
             print(
                 f"Updated {self.appenv_script} "
-                f"({local_version} -> {running_version})"
+                f"({local_label} -> {running_version})"
             )
         else:
+            local_label = local_version if local_version else "unknown"
             print(
-                f"Warning: {self.appenv_script} is version {local_version}, "
+                f"Warning: {self.appenv_script} is version {local_label}, "
                 f"running appenv is {running_version}."
             )
             print(f"Run './appenv migrate' to update the script.")
