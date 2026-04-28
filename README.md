@@ -27,9 +27,9 @@ Enter dependencies (one per line, empty line to finish):
   Default: http
   Dependency: httpie
   Dependency:
-Project name [myproject]: 
-Description []: 
-Minimum Python version [3.13]: 
+Project name [myproject]:
+Description []:
+Minimum Python version [3.13]:
 Created pyproject.toml
 Generating new lock file ...
 ✓ Created (+42 lines)
