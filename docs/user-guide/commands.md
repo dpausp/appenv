@@ -53,6 +53,8 @@ Generating new lock file ...
 Use `./http` to run the http binary
 ```
 
+Creates `pyproject.toml`, `uv.lock`, and a `.gitignore` with entries for `.venv`, `.appenv`, and `.batou-lock`.
+
 ### Prompts
 
 1. Binary to expose — creates `./<name>` symlink that runs the installed `<name>` binary (default: `app`)
@@ -119,6 +121,7 @@ Convert an existing `requirements.txt` into `pyproject.toml`. For appenv project
 - Skips editable installs (`-e`) with a warning
 - Cleans up old `.appenv/` artifacts
 - Updates the local `./appenv` script if the running version differs from the one on disk
+- Creates or updates `.gitignore` with a `.venv` entry
 
 ### Running via uvx
 

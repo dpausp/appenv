@@ -422,9 +422,7 @@ def test_migrate_updates_appenv_script_on_version_mismatch(
 
     # Mock ensure_uv and _uv_lock to prevent actual uv execution
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
-    monkeypatch.setattr(
-        appenv.AppEnv, "_uv_lock", lambda self, uv, diff=False: None
-    )
+    monkeypatch.setattr(appenv.AppEnv, "_uv_lock", lambda self, uv, diff=False: None)
 
     inputs = iter(["myproject"])
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
@@ -457,7 +455,7 @@ def test_migrate_skips_appenv_script_on_same_version(
     # Create appenv script with the CURRENT version
     current_script = base / "appenv"
     current_script.write_text(
-        f'#!/usr/bin/env python3\n'
+        f"#!/usr/bin/env python3\n"
         f'__version__ = "{appenv.__version__}"\n'
         f'print("current")\n'
     )
@@ -466,9 +464,7 @@ def test_migrate_skips_appenv_script_on_same_version(
 
     # Mock ensure_uv and _uv_lock
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
-    monkeypatch.setattr(
-        appenv.AppEnv, "_uv_lock", lambda self, uv, diff=False: None
-    )
+    monkeypatch.setattr(appenv.AppEnv, "_uv_lock", lambda self, uv, diff=False: None)
 
     inputs = iter(["myproject"])
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
@@ -501,9 +497,7 @@ def test_migrate_updates_appenv_script_without_version(
 
     # Mock ensure_uv and _uv_lock
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
-    monkeypatch.setattr(
-        appenv.AppEnv, "_uv_lock", lambda self, uv, diff=False: None
-    )
+    monkeypatch.setattr(appenv.AppEnv, "_uv_lock", lambda self, uv, diff=False: None)
 
     inputs = iter(["myproject"])
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))

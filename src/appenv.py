@@ -680,9 +680,7 @@ class AppEnv:
             )
             print(f"Error: Binary '{command}' not found in {venv_path}/bin/")
             print()
-            print(
-                f"The symlink '{command}' determines which binary gets executed."
-            )
+            print(f"The symlink '{command}' determines which binary gets executed.")
             print()
             if available:
                 print("Available binaries:")
@@ -692,15 +690,9 @@ class AppEnv:
                 print("No binaries found in the virtual environment.")
             print()
             print("Either:")
-            print(
-                f"  - Install a package that provides the '{command}' binary"
-            )
-            print(
-                f"  - Add a [project.scripts] entry: {command} = \"pkg.module:main\""
-            )
-            print(
-                "  - Or create a symlink with the name of an installed binary"
-            )
+            print(f"  - Install a package that provides the '{command}' binary")
+            print(f'  - Add a [project.scripts] entry: {command} = "pkg.module:main"')
+            print("  - Or create a symlink with the name of an installed binary")
             sys.exit(EXIT_CODE_NOINPUT)
 
         argv = [str(cmd_path), *argv]
@@ -882,6 +874,7 @@ class AppEnv:
         uv = ensure_uv(self.appenv_dir)
         self._uv_lock(uv, diff=False)
 
+        ensure_gitignore(self.base, [".venv", ".appenv", ".batou-lock"])
         print("\n=== Appenv project initialized ===")
         print(f"\nUse `./{command_name}` to run the {command_name} binary")
 
@@ -926,6 +919,7 @@ class AppEnv:
         print("Preparing/cleaning .appenv directory ...")
         self._prepare_appenv_dir()
 
+        ensure_gitignore(self.base, [".venv"])
         print("\n=== Pyproject Migration completed ===")
         print("requirements.{txt,lock} kept as legacy. You can delete these files now.")
 
@@ -1030,10 +1024,7 @@ class AppEnv:
             bootstrap_data = Path(__file__).read_bytes()
             self.appenv_script.write_bytes(bootstrap_data)
             self.appenv_script.chmod(0o755)
-            print(
-                f"Updated {self.appenv_script} "
-                f"({local_label} -> {running_version})"
-            )
+            print(f"Updated {self.appenv_script} ({local_label} -> {running_version})")
         else:
             local_label = local_version if local_version else "unknown"
             log.debug("Version mismatch, warning user")
@@ -1102,6 +1093,32 @@ class AppEnv:
         if self.venv_real.exists() and not self.venv_python.exists():
             log.debug("corrupted venv with missing bin/python, removing ...")
             shutil.rmtree(self.venv_real)
+
+        # SPEC: stale-venv-recreate — check venv Python version against requires-python
+        if self.venv_real.exists() and self.venv_python.exists():
+            # SPEC: stale-venv-recreate — handle broken binary or malformed output
+            try:
+                result = cmd([str(self.venv_python), "--version"], quiet=True)
+                venv_version_str = result.decode().strip()
+                # Extract major.minor from e.g. "Python 3.10.0"
+                venv_version = ".".join(venv_version_str.split()[1].split(".")[:2])
+            except (ValueError, IndexError) as e:
+                log.debug("stale-venv check failed: %s", e)
+                print("Recreating venv: Python version could not be determined")
+                shutil.rmtree(self.venv_real)
+            else:
+                min_version, max_version = Pyproject(self.base).requires_python
+                if min_version and not version_satisfies_constraints(
+                    venv_version, min_version, max_version
+                ):
+                    constraint = ">=" + min_version
+                    if max_version:
+                        constraint += ",<" + max_version
+                    print(
+                        f"Recreating venv: Python {venv_version} does not satisfy"
+                        f" requires-python {constraint}"
+                    )
+                    shutil.rmtree(self.venv_real)
 
         if not self.venv_real.exists():
             print("Creating fresh venv with uv ...")
@@ -1218,6 +1235,46 @@ def ensure_lock_file(base):
     return lock
 
 
+def ensure_gitignore(base, entries):
+    """Ensure .gitignore contains the given entries.
+
+    Idempotent: reads existing entries, normalizes by stripping
+    leading/trailing '/', and appends only missing entries.
+    """
+    gitignore_path = base / ".gitignore"
+
+    if gitignore_path.exists():
+        existing_lines = gitignore_path.read_text().splitlines()
+    else:
+        existing_lines = []
+
+    def _normalize(entry):
+        return entry.strip("/")
+
+    normalized_set = {_normalize(line) for line in existing_lines if line.strip()}
+    missing = [e for e in entries if e not in normalized_set]
+
+    if not missing:
+        # Rewrite only if normalization would change existing lines
+        needs_rewrite = any(
+            _normalize(line) != line for line in existing_lines if line.strip()
+        )
+        if not needs_rewrite:
+            return
+        normalized_lines = [
+            _normalize(line) if line.strip() else line for line in existing_lines
+        ]
+        gitignore_path.write_text("\n".join(normalized_lines) + "\n")
+        return
+
+    # Append missing entries, preserving existing content as-is
+    new_content = "\n".join(existing_lines)
+    if new_content and not new_content.endswith("\n"):
+        new_content += "\n"
+    new_content += "\n".join(missing) + "\n"
+    gitignore_path.write_text(new_content)
+
+
 def cmd(c, *, merge_stderr=True, quiet=False, cwd=None):
     # SPEC: SRS-F001-cmd-wrapper - Enrich subprocess errors with command output context
     try:
@@ -1244,19 +1301,23 @@ def ensure_best_python(base):
     pyproject = Pyproject(base)
     min_version, max_version = pyproject.requires_python
 
+    log.debug("requires-python constraints: min=%s, max=%s", min_version, max_version)
     if min_version is None:
         min_version = "3.10"
 
     available = find_available_pythons()
+    log.debug("available Python candidates: %s", available)
     current_python = str(Path(sys.executable).resolve())
 
     for version, path in available:
         if not version_satisfies_constraints(version, min_version, max_version):
+            log.debug("skipping python%s: does not satisfy constraints", version)
             continue
 
         resolved_path = str(Path(path).resolve())
         if resolved_path == current_python:
             # Already running this version
+            log.debug("already running best Python: %s", resolved_path)
             return
 
         # Try whether this Python works
@@ -1267,18 +1328,20 @@ def ensure_best_python(base):
                 stderr=subprocess.DEVNULL,
             )
         except subprocess.CalledProcessError:
+            log.debug("skipping python%s: subprocess check failed", version)
             continue
 
         # Re-exec with this Python
         argv = [Path(path).name, *sys.argv]
         os.environ["APPENV_BEST_PYTHON"] = path
+        log.debug("re-executing with Python: %s", path)
         os.execv(path, argv)
 
     # No suitable Python found
     if max_version:
-        print(f"Could not find Python >={min_version}, <{max_version}")
+        print(f"requires-python: >={min_version},<{max_version}")
     else:
-        print(f"Could not find Python >= {min_version}")
+        print(f"requires-python: >={min_version}")
     print("Available versions:")
     for version, path in available:
         print(f"  python{version}: {path}")
@@ -1360,6 +1423,9 @@ def setup_logging(command_name, log_dir, verbose):
     """Setup command-specific logging with daily rotation."""
     log_file = log_dir / f"{command_name}.log"
 
+    for handler in log.handlers[:]:
+        handler.close()
+    log.handlers.clear()
     log.setLevel(logging.DEBUG)
 
     file_handler = TimedRotatingFileHandler(log_file, when="midnight", backupCount=7)

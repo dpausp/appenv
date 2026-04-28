@@ -71,9 +71,10 @@ The venv lives at `.appenv/venv` — a real virtual environment managed by uv. `
 1. Run guards: `ensure_pyproject()`, `ensure_lock_file()`, `ensure_uv()`
 2. Set `UV_PROJECT_ENVIRONMENT` to `.appenv/venv` so uv targets the right directory
 3. **Corruption recovery**: if `.appenv/venv` exists but `bin/python` is missing (NixOS garbage collection), the venv is removed and recreated
-4. Create venv with `uv venv --python <current_python>` — explicitly uses the current Python to prevent uv from downloading its own (which breaks on NixOS)
-5. Sync dependencies via `uv sync`
-6. Update `.venv` symlink (removed and recreated if stale)
+4. **Stale version recovery**: if the venv's Python version doesn't satisfy `requires-python` (e.g., after a constraint change), the venv is removed and recreated with a one-line message to stdout
+5. Create venv with `uv venv --python <current_python>` — explicitly uses the current Python to prevent uv from downloading its own (which breaks on NixOS)
+6. Sync dependencies via `uv sync`
+7. Update `.venv` symlink (removed and recreated if stale)
 
 ### Sync Modes
 

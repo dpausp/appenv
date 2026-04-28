@@ -6,6 +6,9 @@ lifecycle:
   design:
     completed_at: "2026-04-28T12:30:00Z"
     git_rev: "0327fbc"
+  implement:
+    completed_at: "2026-04-28T13:00:00Z"
+    git_rev: "41455bd"
 ---
 
 ## Context
@@ -149,3 +152,32 @@ Each fix is verified by a test that first demonstrates the bug. Higher confidenc
 - Verbose output: `ensure_best_python` version-selection trace
 - Error output: improved structure, no tips
 - `.gitignore`: created or appended during `init` and `migrate`
+
+```yaml
+implementation_plan:
+  id: venv-lifecycle-fixes
+  description: "Fix five related issues in appenv's venv lifecycle: duplicate logging handlers, stale venv recreation, missing version-selection logging, unclear error messages, and missing .gitignore setup"
+  created_at: "2026-04-28T13:00:00Z"
+  git_rev: "41455bd"
+  specs:
+    - ".agents/impl_specs/venv-lifecycle-fixes.md"
+  target_tests:
+    - file: "tests/impl_spec/test_venv_lifecycle_fixes.py"
+      tests:
+        - test_setup_logging_no_duplicate_handlers
+        - test_setup_logging_non_verbose_no_duplicate
+        - test_prepare_venv_recreates_on_version_mismatch
+        - test_prepare_venv_checks_version_compatibility
+        - test_ensure_best_python_logs_constraints
+        - test_ensure_best_python_logs_candidates
+        - test_ensure_best_python_logs_final_decision
+        - test_ensure_best_python_error_clear_constraint
+        - test_ensure_best_python_error_restructured_format
+        - test_init_creates_gitignore
+        - test_init_appends_missing_gitignore_entries
+        - test_init_gitignore_no_duplicates
+        - test_migrate_creates_gitignore
+        - test_migrate_appends_missing_gitignore_entries
+        - test_migrate_gitignore_normalizes_entries
+        - test_migrate_gitignore_normalizes_leading_slash
+```

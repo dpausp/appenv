@@ -399,7 +399,7 @@ def test_ensure_best_python_exits_65_no_python_found(monkeypatch, tmp_path, caps
 
     assert err.value.code == 65
     captured = capsys.readouterr()
-    assert "Could not find Python" in captured.out
+    assert "requires-python:" in captured.out
 
 
 def test_ensure_best_python_exits_65_with_upper_bound(monkeypatch, tmp_path, capsys):
