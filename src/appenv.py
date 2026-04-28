@@ -912,7 +912,7 @@ class AppEnv:
             print("Use 'init' to create a new project.")
             return
 
-        self._ensure_appenv_script()
+        self._ensure_appenv_script(update=True)
 
         uv = ensure_uv(self.appenv_dir)
 
@@ -991,9 +991,12 @@ class AppEnv:
         uv_lock_out = self._uv_lock(uv, diff=args.diff if args else False)
         print(uv_lock_out)
 
-    def _ensure_appenv_script(self):
+    def _ensure_appenv_script(self, *, update=False):
         """
         Creates local ./appenv script if needed.
+
+        When update=True and the script already exists, replaces it if
+        the running appenv version differs from the on-disk version.
         """
         log.debug("Looking for %s", self.appenv_script)
         if not self.appenv_script.exists():
@@ -1002,6 +1005,32 @@ class AppEnv:
             self.appenv_script.write_bytes(bootstrap_data)
             self.appenv_script.chmod(0o755)
             print(f"Created {self.appenv_script}")
+            return
+
+        if update:
+            local_version = self._extract_version(self.appenv_script)
+            running_version = __version__
+            if local_version and local_version != running_version:
+                log.debug(
+                    "Updating %s: %s -> %s",
+                    self.appenv_script,
+                    local_version,
+                    running_version,
+                )
+                bootstrap_data = Path(__file__).read_bytes()
+                self.appenv_script.write_bytes(bootstrap_data)
+                self.appenv_script.chmod(0o755)
+                print(
+                    f"Updated {self.appenv_script} "
+                    f"({local_version} -> {running_version})"
+                )
+
+    @staticmethod
+    def _extract_version(script: Path) -> str | None:
+        """Extract __version__ from an appenv script file."""
+        content = script.read_text(errors="replace")
+        match = re.search(r'__version__ = "([^"]+)"', content)
+        return match.group(1) if match else None
 
     def _uv_lock(self, uv, diff):
         lock = LockFile(self.base)

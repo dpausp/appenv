@@ -109,6 +109,7 @@ Convert an existing `requirements.txt` into `pyproject.toml`. For appenv project
 - Generates `uv.lock` automatically
 - Skips editable installs (`-e`) with a warning
 - Cleans up old `.appenv/` artifacts
+- Updates the local `./appenv` script if the running version differs from the one on disk
 
 ### Running via uvx
 

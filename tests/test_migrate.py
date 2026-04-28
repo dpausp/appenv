@@ -401,3 +401,82 @@ def test_migrate_existing_pyproject_no_project_section(
 
     captured = capsys.readouterr()
     assert "Adding [project] section to existing pyproject.toml" in captured.out
+
+
+def test_migrate_updates_appenv_script_on_version_mismatch(
+    tmp_path, monkeypatch, capsys, test_settings
+):
+    """migrate replaces ./appenv when its version differs from the running one."""
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
+
+    # Create requirements.txt
+    (base / "requirements.txt").write_text("requests\n")
+
+    # Create an "old" appenv script with a different version
+    old_script = base / "appenv"
+    old_script.write_text(
+        '#!/usr/bin/env python3\n__version__ = "0.0.1"\nprint("old")\n'
+    )
+    old_script.chmod(0o755)
+
+    # Mock ensure_uv and _uv_lock to prevent actual uv execution
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
+    monkeypatch.setattr(
+        appenv.AppEnv, "_uv_lock", lambda self, uv, diff=False: None
+    )
+
+    inputs = iter(["myproject"])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env.migrate()
+
+    captured = capsys.readouterr()
+    # Should report the update
+    assert "Updated" in captured.out
+    assert "0.0.1" in captured.out
+    assert appenv.__version__ in captured.out
+
+    # The script should now contain the current version
+    new_content = old_script.read_text()
+    assert appenv.__version__ in new_content
+    assert "0.0.1" not in new_content
+
+
+def test_migrate_skips_appenv_script_on_same_version(
+    tmp_path, monkeypatch, capsys, test_settings
+):
+    """migrate does NOT replace ./appenv when versions already match."""
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
+
+    # Create requirements.txt
+    (base / "requirements.txt").write_text("requests\n")
+
+    # Create appenv script with the CURRENT version
+    current_script = base / "appenv"
+    current_script.write_text(
+        f'#!/usr/bin/env python3\n__version__ = "{appenv.__version__}"\nprint("current")\n'
+    )
+    current_script.chmod(0o755)
+    original_mtime = current_script.stat().st_mtime
+
+    # Mock ensure_uv and _uv_lock
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
+    monkeypatch.setattr(
+        appenv.AppEnv, "_uv_lock", lambda self, uv, diff=False: None
+    )
+
+    inputs = iter(["myproject"])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env.migrate()
+
+    captured = capsys.readouterr()
+    # Should NOT report an update
+    assert "Updated" not in captured.out
+
+    # File should be untouched
+    assert current_script.stat().st_mtime == original_mtime
