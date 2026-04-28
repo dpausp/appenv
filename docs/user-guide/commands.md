@@ -90,6 +90,15 @@ pyproject.toml already exists
 Nothing to do - edit it manually to make changes
 ```
 
+### If appenv Script Is Outdated
+
+When the local `./appenv` script has a different version than the running appenv, `init` prints a warning:
+
+```text
+Warning: ./appenv is version 0.0.1, running appenv is 2026.3.19.
+Run './appenv migrate' to update the script.
+```
+
 ## migrate
 
 Convert an existing `requirements.txt` into `pyproject.toml`. For appenv projects that still use `requirements.txt` instead of `pyproject.toml`.

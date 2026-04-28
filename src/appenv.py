@@ -995,8 +995,9 @@ class AppEnv:
         """
         Creates local ./appenv script if needed.
 
-        When update=True and the script already exists, replaces it if
-        the running appenv version differs from the on-disk version.
+        When the script already exists and versions differ:
+        - update=True: replaces it (used by migrate)
+        - update=False: warns only (used by init)
         """
         log.debug("Looking for %s", self.appenv_script)
         if not self.appenv_script.exists():
@@ -1007,23 +1008,31 @@ class AppEnv:
             print(f"Created {self.appenv_script}")
             return
 
+        local_version = self._extract_version(self.appenv_script)
+        running_version = __version__
+        if not local_version or local_version == running_version:
+            return
+
         if update:
-            local_version = self._extract_version(self.appenv_script)
-            running_version = __version__
-            if local_version and local_version != running_version:
-                log.debug(
-                    "Updating %s: %s -> %s",
-                    self.appenv_script,
-                    local_version,
-                    running_version,
-                )
-                bootstrap_data = Path(__file__).read_bytes()
-                self.appenv_script.write_bytes(bootstrap_data)
-                self.appenv_script.chmod(0o755)
-                print(
-                    f"Updated {self.appenv_script} "
-                    f"({local_version} -> {running_version})"
-                )
+            log.debug(
+                "Updating %s: %s -> %s",
+                self.appenv_script,
+                local_version,
+                running_version,
+            )
+            bootstrap_data = Path(__file__).read_bytes()
+            self.appenv_script.write_bytes(bootstrap_data)
+            self.appenv_script.chmod(0o755)
+            print(
+                f"Updated {self.appenv_script} "
+                f"({local_version} -> {running_version})"
+            )
+        else:
+            print(
+                f"Warning: {self.appenv_script} is version {local_version}, "
+                f"running appenv is {running_version}."
+            )
+            print(f"Run './appenv migrate' to update the script.")
 
     @staticmethod
     def _extract_version(script: Path) -> str | None:

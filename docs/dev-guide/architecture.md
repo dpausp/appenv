@@ -90,7 +90,7 @@ appenv expects specific files relative to the project root. Paths are convention
 : Dependency lockfile created by `./appenv update-lockfile`. Required before `run` or `prepare`.
 
 `appenv`
-: The bootstrap script — a copy of `src/appenv.py`. `migrate` updates this file when the running appenv version differs from the one on disk, keeping projects in sync with the installed appenv.
+: The bootstrap script — a copy of `src/appenv.py`. `migrate` updates this file when the running appenv version differs from the one on disk. `init` warns when a version mismatch is detected.
 
 `<command>`
 : Symlink to `appenv`. Running `./<command>` executes the `<command>` binary from the installed dependencies. Multiple symlinks can expose different binaries from the same venv.

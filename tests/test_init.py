@@ -402,3 +402,49 @@ def test_init_appenv_script_already_exists(
     # Verify output does NOT say "Created appenv"
     captured = capsys.readouterr()
     assert "Created appenv" not in captured.out
+
+
+def test_init_warns_on_version_mismatch(
+    workdir, monkeypatch, capsys, test_settings, mock_uv
+):
+    """init warns when local ./appenv has a different version."""
+    base = Path(workdir) / "myproject_init_version"
+    base.mkdir()
+    os.chdir(base)
+
+    settings = test_settings(Path.cwd())
+    app = appenv.AppEnv(Path.cwd(), settings)
+
+    # Create appenv script with a different version
+    app.appenv_script.write_text(
+        '#!/usr/bin/env python3\n__version__ = "0.0.1"\nprint("old")\n'
+    )
+    app.appenv_script.chmod(0o755)
+
+    original_content = app.appenv_script.read_text()
+
+    # Mock ensure_uv
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: mock_uv)
+
+    # Inputs for init
+    inputs = iter(
+        [
+            "myapp",  # command name
+            "",  # no dependencies
+            "myapp-project",  # project name
+            "test",  # description
+            "3.13",  # python version
+        ]
+    )
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+    app.init()
+
+    # Verify appenv script was NOT overwritten (warn only, no update)
+    assert app.appenv_script.read_text() == original_content
+
+    captured = capsys.readouterr()
+    assert "Warning" in captured.out
+    assert "0.0.1" in captured.out
+    assert appenv.__version__ in captured.out
+    assert "migrate" in captured.out
