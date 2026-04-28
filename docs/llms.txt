@@ -1,0 +1,90 @@
+# appenv Documentation
+
+Self-contained bootstrapping and updating of Python CLI applications using pyproject.toml and uv.
+
+**Test Coverage: 91%** - Tier 1: Full Documentation Priority
+
+## Overview
+
+appenv is a single-file Python application bootstrapping mechanism for CLI applications. It manages virtual environments using uv and supports pyproject.toml-based workflows.
+
+Requirements:
+- Python 3.10 or later
+- uv 0.5.0 or later (auto-installed if not found)
+
+## User Guide
+
+### Installation
+- Bootstrap Script: `curl -sL https://github.com/flyingcircusio/appenv/raw/master/bootstrap | sh`
+- Clone Repository: `git clone https://github.com/flyingcircusio/appenv.git`
+- Copy appenv.py: `curl -sL https://github.com/flyingcircusio/appenv/raw/master/src/appenv.py -o appenv`
+
+### Quick Start
+- Interactive setup with `./appenv init`
+- First run automatically installs dependencies
+- Automatic Python version selection based on requires-python
+
+### Commands
+| Command | Description |
+|---------|-------------|
+| `./appenv prepare` | Create venv with production deps |
+| `./appenv update-lockfile` | Update uv.lock |
+| `./appenv reset` | Remove virtual environment |
+| `./appenv python` | Start Python REPL |
+| `./appenv run <script>` | Run script from venv/bin |
+| `./appenv uv` | Run uv with appenv environment |
+| `./appenv init` | Create new pyproject.toml project |
+| `./appenv migrate` | Migrate from requirements.txt |
+| `./appenv version` | Show version |
+
+### Workflows
+- New project from scratch
+- Migrate from requirements.txt
+- Development workflow with dev dependencies
+- CI/CD integration (GitHub Actions, tox)
+- Adding dependencies
+- Managing multiple Python versions
+- Debugging with verbose mode
+- Working with extras
+
+## API Reference
+
+appenv is a single-file module: `src/appenv.py`
+
+### Key Classes
+
+- **Pyproject**: Encapsulates pyproject.toml parsing, migration, and generation
+- **LockFile**: Encapsulates lockfile operations and diff logic
+- **UvBin**: Encapsulates UV binary discovery, version check, and command execution
+- **AppEnv**: Main application class with all commands
+- **AppEnvSettings**: Settings dataclass from environment variables
+
+### Key Functions
+
+- `ensure_uv(base)`: Ensure uv is available and meets minimum version
+- `ensure_pyproject(base)`: Ensure pyproject.toml exists with [project] section
+- `ensure_lock_file(base)`: Ensure lockfile exists
+- `ensure_best_python(base)`: Select best Python for pyproject.toml workflow
+- `find_available_pythons()`: Find all available Python versions in PATH
+
+### Exit Codes (BSD sysexits.h)
+- `EXIT_CODE_DATAERR = 65` - Input data issue
+- `EXIT_CODE_NOINPUT = 67` - Missing input file
+- `EXIT_CODE_UNAVAILABLE = 68` - Resource unavailable
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `APPENV_VERBOSE` | Show verbose output |
+| `APPENV_EXTRAS` | Extras to install (comma-separated) |
+| `APPENV_BASEDIR` | Base directory (set by appenv) |
+| `APPENV_BEST_PYTHON` | Selected Python interpreter |
+
+## Links
+
+- Homepage: https://github.com/flyingcircusio/appenv/
+- Issues: https://github.com/flyingcircusio/appenv/issues
+- Repository: https://github.com/flyingcircusio/appenv.git
+- uv Documentation: https://docs.astral.sh/uv/
+- pyproject.toml Spec: https://packaging.python.org/en/latest/specifications/pyproject-toml/
