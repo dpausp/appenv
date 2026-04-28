@@ -1,355 +1,764 @@
 #!/usr/bin/env python3
-# appenv - a single file 'application in venv bootstrapping and updating
-#          mechanism for python-based (CLI) applications
+"""
+appenv - a single-file tool that pins Python packages to exact versions and
+         exposes their binaries via symlinks. Drop into a repository, commit,
+         and every checkout gets the same tools at the same versions.
 
-# Assumptions:
-#
-#   - the appenv file is placed in a repo with the name of the application
-#   - the name of the application/file is an entrypoint XXX
-#   - python3.X+ with ensurepip
-#   - a requirements.txt file next to the appenv file
+Assumptions:
 
-# TODO
-#
-# - provide a `clone` meta command to create a new project based on this one
-#   maybe use an entry point to allow further initialisation of the clone.
+  - the appenv file is placed in a repo with the name of the application
+  - the name of the application/file becomes the CLI entrypoint via symlink
+  - Python 3.10+
+  - system has usable uv (see UV_MIN_VERSION) or has Nix to install uv on-demand
+  - pyproject.toml next to the appenv file
+"""
+
+__version__ = "2026.4.28"
 
 import argparse
-import glob
-import hashlib
-import http.client
+import difflib
+import logging
 import os
-import os.path
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
-import venv
-import re
+from dataclasses import dataclass
+from functools import cached_property
+from logging.handlers import TimedRotatingFileHandler
+from pathlib import Path
+from typing import NamedTuple, cast
+
+# Global logger instance
+log = logging.getLogger("appenv")
+
+# Exit codes (BSD sysexits.h conventions)
+EXIT_CODE_DATAERR = 65
+EXIT_CODE_NOINPUT = 67
+EXIT_CODE_UNAVAILABLE = 68
+EXIT_CODE_USAGE = 64
+
+# Format constants
+MAX_HELP_TEXT_LENGTH = 50
+VERSION_PARTS_COUNT = 3
 
 
-class TColors:
-    """Terminal colors for pretty output."""
+class GroupedHelpFormatter(argparse.HelpFormatter):
+    """Group subcommands by category in help output."""
 
-    RED = "\033[91m"
-    GREEN = "\033[92m"
-    YELLOW = "\033[93m"
-    RESET = "\033[0m"
+    def _format_action(self, action):
+        groups = (
+            ("Project", ["init", "migrate", "self-update", "update-lockfile"]),
+            ("Venv", ["prepare", "reset"]),
+            ("Tools", ["python", "uv"]),
+            ("Debug", ["version"]),
+        )
 
+        if isinstance(action, argparse._SubParsersAction):  # noqa: SLF001
+            # Build command -> help mapping from _choices_actions
+            cmd_help = {ca.metavar: ca.help or "" for ca in action._choices_actions}  # noqa: SLF001
 
-def cmd(c, merge_stderr=True, quiet=False):
-    # TODO revisit the cmd() architecture w/ python 3
-    # XXX better IO management for interactive output and seeing original
-    # errors and output at appropriate places ...
-    try:
-        kwargs = {}
-        if isinstance(c, str):
-            kwargs["shell"] = True
-            c = [c]
-        if merge_stderr:
-            kwargs["stderr"] = subprocess.STDOUT
-        return subprocess.check_output(c, **kwargs)
-    except subprocess.CalledProcessError as e:
-        print("{} returned with exit code {}".format(c, e.returncode))
-        print(e.output.decode("utf-8", "replace"))
-        raise ValueError(e.output.decode("utf-8", "replace"))
+            # Build grouped subcommand list
+            lines = []
+            for group_name, commands in groups:
+                lines.append(f"  {group_name}:")
+                for cmd in commands:
+                    if cmd in action.choices:
+                        help_text = cmd_help.get(cmd, "")
+                        # Truncate long help texts
+                        if len(help_text) > MAX_HELP_TEXT_LENGTH:
+                            help_text = help_text[:47] + "..."
+                        lines.append(f"    {cmd:<16}  {help_text}")
+                lines.append("")  # Empty line between groups
 
+            # Remove trailing empty line and return
+            return "\n".join(lines).rstrip() + "\n"
 
-def python(path, c, **kwargs):
-    return cmd([os.path.join(path, "bin/python")] + c, **kwargs)
-
-
-def pip(path, c, **kwargs):
-    return python(path, ["-m", "pip"] + c, **kwargs)
-
-
-def get(host, path, f):
-    conn = http.client.HTTPSConnection(host)
-    conn.request("GET", path)
-    r1 = conn.getresponse()
-    assert r1.status == 200, (r1.status, host, path, r1.read()[:100])
-    chunk = r1.read(16 * 1024)
-    while chunk:
-        f.write(chunk)
-        chunk = r1.read(16 * 1024)
-    conn.close()
+        return super()._format_action(action)
 
 
-def ensure_venv(target):
-    if os.path.exists(os.path.join(target, "bin", "pip3")):
-        # XXX Support probing the target whether it works properly and rebuild
-        # if necessary
-        return
-
-    if os.path.exists(target):
-        print("Deleting unclean target)")
-        cmd(["rm", "-rf", target])
-
-    version = sys.version.split()[0]
-    python_maj_min = ".".join(str(x) for x in sys.version_info[:2])
-    print("Creating venv ...")
-    venv.create(target, with_pip=False, symlinks=True)
-
-    try:
-        # This is trying to detect whether we're on a proper Python stdlib
-        # or on a broken Debian. See various StackOverflow questions about
-        # this.
-        import ensurepip  # noqa: F401 imported but unused
-    except ImportError:
-        # Okay, lets repair this, if we can. May need privilege escalation
-        # at some point.
-        # We could do: apt-get -y -q install python3-venv
-        # on some systems but it requires root and is specific to Debian.
-        # I decided to go a more sledge hammer route.
-
-        # XXX we can speed this up by storing this in ~/.appenv/overlay instead
-        # of doing the download for every venv we manage
-        print("Activating broken ensurepip stdlib workaround ...")
-
-        tmp_base = tempfile.mkdtemp()
-        try:
-            download = os.path.join(tmp_base, "download.tar.gz")
-            with open(download, mode="wb") as f:
-                get(
-                    "www.python.org",
-                    "/ftp/python/{v}/Python-{v}.tgz".format(v=version),
-                    f,
-                )
-
-            cmd(["tar", "xf", download, "-C", tmp_base])
-
-            assert os.path.exists(os.path.join(tmp_base, "Python-{}".format(version)))
-            for module in ["ensurepip"]:
-                print(module)
-                shutil.copytree(
-                    os.path.join(tmp_base, "Python-{}".format(version), "Lib", module),
-                    os.path.join(
-                        target,
-                        "lib",
-                        "python{}.{}".format(*sys.version_info[:2]),
-                        "site-packages",
-                        module,
-                    ),
-                )
-
-            # (always) prepend the site packages so we can actually have a
-            # fixed installation.
-            site_packages = os.path.abspath(
-                os.path.join(target, "lib", "python" + python_maj_min, "site-packages")
-            )
-            with open(os.path.join(site_packages, "batou.pth"), "w") as f:
-                f.write("import sys; sys.path.insert(0, '{}')\n".format(site_packages))
-
-        finally:
-            shutil.rmtree(tmp_base)
-
-    print("Ensuring pip ...")
-    python(target, ["-m", "ensurepip", "--default-pip"])
-    pip(target, ["install", "--upgrade", "pip"])
+class RequirementsTxtInfo(NamedTuple):
+    dependencies: list[str]
+    editable_dependencies: list[str]
+    python_versions: list[str]
 
 
-def parse_preferences():
-    preferences = None
-    if os.path.exists("requirements.txt"):
-        with open("requirements.txt") as f:
-            for line in f:
-                # Expected format:
-                # # appenv-python-preference: 3.1,3.9,3.4
-                if not line.startswith("# appenv-python-preference: "):
-                    continue
-                preferences = line.split(":")[1]
-                preferences = [x.strip() for x in preferences.split(",")]
-                preferences = list(filter(None, preferences))
-                break
-    return preferences
+def convert_version_preference(versions):
+    """Convert version list to requires-python specifier.
 
+    Returns (specifier, missing_versions) where missing_versions
+    are versions in the range that weren't explicitly listed.
 
-def ensure_minimal_python():
-    current_python = os.path.realpath(sys.executable)
-    preferences = parse_preferences()
-    if not preferences:
-        # We have no preferences defined, use the current python.
-        print("Updating lockfile with with {}.".format(current_python))
-        print("If you want to use a different version, set it via")
-        print(" `# appenv-python-preference:` in requirements.txt.")
-        return
-
-    preferences.sort(key=lambda s: [int(u) for u in s.split(".")])
-
-    for version in preferences[0:1]:
-        python = shutil.which("python{}".format(version))
-        if not python:
-            # not a usable python
-            continue
-        python = os.path.realpath(python)
-        if python == current_python:
-            # found a preferred python and we're already running as it
-            break
-        # Try whether this Python works
-        try:
-            subprocess.check_call(
-                [python, "-c", "print(1)"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-        except subprocess.CalledProcessError:
-            continue
-
-        argv = [os.path.basename(python)] + sys.argv
-        os.environ["APPENV_BEST_PYTHON"] = python
-        os.execv(python, argv)
-    else:
-        print("Could not find the minimal preferred Python version.")
-        print("To ensure a working requirements.lock on all Python versions")
-        print("make Python {} available on this system.".format(preferences[0]))
-        sys.exit(66)
-
-
-def ensure_best_python(base):
-    os.chdir(base)
-
-    if "APPENV_BEST_PYTHON" in os.environ:
-        # Don't do this twice to avoid being surprised with
-        # accidental infinite loops.
-        return
-    import shutil
-
-    preferences = parse_preferences()
-
-    if preferences is None:
-        if sys.version_info >= (3, 12):
-            print("You are using a Python version >= 3.12.")
-            print("Please specify a Python version in the requirements.txt file.")
-            print("Lockfiles created with a Python version lower than 3.12")
-            print("may create a broken venv with a Python version >= 3.12.")
-        # use newest Python available if nothing else is requested
-        preferences = ["3.{}".format(x) for x in reversed(range(4, 20))]
-
-    current_python = os.path.realpath(sys.executable)
-    for version in preferences:
-        python = shutil.which("python{}".format(version))
-        if not python:
-            # not a usable python
-            continue
-        python = os.path.realpath(python)
-        if python == current_python:
-            # found a preferred python and we're already running as it
-            break
-        # Try whether this Python works
-        try:
-            subprocess.check_call(
-                [python, "-c", "print(1)"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-        except subprocess.CalledProcessError:
-            continue
-        argv = [os.path.basename(python)] + sys.argv
-        os.environ["APPENV_BEST_PYTHON"] = python
-        os.execv(python, argv)
-    else:
-        print("Could not find a preferred Python version.")
-        print("Preferences: {}".format(", ".join(preferences)))
-        sys.exit(65)
-
-
-class ParsedRequirement:
-    """A parsed requirement from a requirement string.
-
-    Has a similiar interface to the real Requirement class from
-    packaging.requirements, but is reduced to the parts we need.
+    Example: ["3.11", "3.13", "3.10"] -> (">=3.10,<3.14", ["3.12"])
     """
+    if not versions:
+        return ">=3.10", []
 
-    def __init__(self, name, url, requirement_string):
-        self.name = name
-        self.url = url
-        self.requirement_string = requirement_string
+    sorted_v = sorted(versions, key=lambda v: tuple(map(int, v.split("."))))
+    min_v = sorted_v[0]
+    max_v = sorted_v[-1]
+
+    # Increment minor for exclusive upper bound
+    parts = max_v.split(".")
+    next_minor = f"{parts[0]}.{int(parts[1]) + 1}"
+
+    # Find gaps in range
+    min_parts = tuple(map(int, min_v.split(".")))
+    max_parts = tuple(map(int, max_v.split(".")))
+    all_in_range = [
+        f"{min_parts[0]}.{i}" for i in range(min_parts[1], max_parts[1] + 1)
+    ]
+    missing = [v for v in all_in_range if v not in versions]
+
+    return f">={min_v},<{next_minor}", missing
+
+
+def version_satisfies_constraints(version, min_version, max_version=None):
+    ver_parts = [int(p) for p in version.split(".")]
+    min_parts = [int(p) for p in min_version.split(".")]
+
+    if ver_parts < min_parts:
+        return False
+
+    if max_version is not None:
+        max_parts = [int(p) for p in max_version.split(".")]
+        if ver_parts >= max_parts:
+            return False
+
+    return True
+
+
+def remove_path(path):
+    """Remove a path regardless of type (symlink, file, or directory).
+
+    Logs the type before removal for debugging purposes.
+    """
+    if path.is_symlink():
+        log.debug("Removing symlink: %s", path)
+        path.unlink()
+    elif path.is_file():
+        log.debug("Removing file: %s", path)
+        path.unlink()
+    elif path.is_dir():
+        log.debug("Removing directory: %s", path)
+        shutil.rmtree(path)
+
+
+class Pyproject:
+    """Encapsulates pyproject.toml parsing, migration, and generation."""
+
+    def __init__(self, base):
+        self.path = base / "pyproject.toml"
+        self.requirements_path = base / "requirements.txt"
+
+    @cached_property
+    def content(self):
+        if not self.exists:
+            return ""
+        return self.path.read_text()
+
+    def migrate_from_requirements_txt(self):
+        req_info = self.requirements_txt_info
+
+        requires_python, missing = convert_version_preference(req_info.python_versions)
+        content = self._generate_content_with_project(
+            project_name=self.path.parent.name,
+            description="Migrated Appenv project",
+            dependencies=req_info.dependencies,
+            requires_python=requires_python,
+        )
+        self.path.write_text(content)
+
+        # Print info about missing versions
+        if missing:
+            print(f"Note: Versions {', '.join(missing)} were not in preference list")
+
+        return Pyproject(self.path.parent)
+
+    @property
+    def requires_python(self):
+        """Parse requires-python from pyproject.toml.
+
+        Returns tuple of (min_version, max_version) where max may be None.
+        """
+        if not self.exists:
+            return (None, None)
+
+        # Extract the requires-python value
+        value_match = re.search(
+            r'requires-python\s*=\s*["\']([^"\']+)["\']', self.content
+        )
+        if not value_match:
+            return (None, None)
+
+        spec = value_match.group(1)
+
+        # Parse minimum version (>=X.Y or >X.Y)
+        min_match = re.search(r">=?\s*(\d+\.\d+)", spec)
+        min_version = min_match.group(1) if min_match else None
+
+        # Parse maximum version (<X.Y or <=X.Y)
+        max_match = re.search(r"<=?\s*(\d+\.\d+)", spec)
+        max_version = max_match.group(1) if max_match else None
+
+        return (min_version, max_version)
+
+    @property
+    def exists(self):
+        return self.path.exists()
+
+    @cached_property
+    def has_project_section(self):
+        """Check if TOML content has a [project] section."""
+        for line in self.content.splitlines():
+            stripped = line.strip()
+            if stripped == "[project]" or stripped.startswith("[project."):
+                return True
+        return False
+
+    @property
+    def can_be_created_from_requirements_txt(self):
+        return not self.has_project_section and self.requirements_path.exists()
+
+    @cached_property
+    def requirements_txt_info(self):
+        return self._parse_requirements_file()
+
+    def print_migration_info(self):
+        req_info = self.requirements_txt_info
+
+        if req_info.editable_dependencies:
+            print(
+                f"Warning: {len(req_info.editable_dependencies)} "
+                f"editable install(s) skipped:"
+            )
+            for spec in req_info.editable_dependencies:
+                print(f"  - {spec}")
+            print("Add them manually to pyproject.toml if needed.\n")
+
+        if req_info.python_versions and len(req_info.python_versions) > 1:
+            print(f"Found python preference: {', '.join(req_info.python_versions)}")
+            print(f"Using minimum version: {req_info.python_versions[0]}\n")
+
+        print(
+            f"Found {len(req_info.dependencies)} dependency(ies): "
+            f"{', '.join(req_info.dependencies)}"
+        )
+
+    def _parse_requirements_file(self):
+        """Parse requirements.txt content into dependencies and info."""
+        content = self.requirements_path.read_text()
+        all_deps = [
+            line.strip()
+            for line in content.splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        ]
+
+        dependencies = [d for d in all_deps if not d.startswith("-e ")]
+        editable_specs = [d for d in all_deps if d.startswith("-e ")]
+
+        python_versions = self._parse_python_preference()
+        return RequirementsTxtInfo(dependencies, editable_specs, python_versions)
+
+    def _parse_python_preference(self):
+        """Parse python preference from requirements.txt content."""
+        content = self.requirements_path.read_text()
+        for line in content.splitlines():
+            if line.startswith("# appenv-python-preference: "):
+                raw = line.split(":")[1]
+                preferences = [x.strip() for x in raw.split(",") if x.strip()]
+                if preferences:
+                    return preferences
+        return ["3.10", "3.11", "3.12", "3.13", "3.14"]
+
+    def _generate_content_with_project(
+        self, project_name, description, dependencies, requires_python
+    ):
+        """Generate pyproject.toml content string with [project] section."""
+        # Generate [project] section
+        if dependencies:
+            deps_toml = ",\n    ".join(f'"{dep}"' for dep in dependencies)
+            deps_block = f"[\n    {deps_toml},\n]"
+        else:
+            deps_block = "[]"
+
+        project_section = f"""[project]
+name = "{project_name}"
+version = "0.1.0"
+description = "{description}"
+dependencies = {deps_block}
+requires-python = "{requires_python}"
+"""
+
+        # Merge with existing content or create new
+        if self.content:
+            pyproject_content = self.content.rstrip() + "\n\n" + project_section
+        else:
+            pyproject_content = project_section
+
+        return pyproject_content
+
+    def with_project_section(
+        self, project_name, description, dependencies, requires_python=">=3.10"
+    ):
+        """Add [project] section, write file, return fresh instance.
+
+        This method writes the updated content to disk and returns a new
+        Pyproject instance (immutable pattern - cached content stays valid).
+        """
+        content = self._generate_content_with_project(
+            project_name=project_name,
+            description=description,
+            dependencies=dependencies,
+            requires_python=requires_python,
+        )
+        self.path.write_text(content)
+        return Pyproject(self.path.parent)
+
+
+def create_pyproject(target, project_name, description, dependencies, python_version):
+    """Factory function to create a new pyproject.toml file."""
+    pyproject = Pyproject(target)
+    return pyproject.with_project_section(
+        project_name=project_name,
+        description=description,
+        dependencies=dependencies,
+        requires_python=f">={python_version}",
+    )
+
+
+class LockFile:
+    """Encapsulates lockfile operations and diff logic."""
+
+    def __init__(self, base):
+        self.path = base / "uv.lock"
+
+    @property
+    def exists(self):
+        return self.path.exists()
+
+    @cached_property
+    def content(self):
+        return self.path.read_text() if self.path.exists() else ""
+
+    def diff(self, uv_bin, base, verbose):
+        """Run uv lock in temp dir, return diff string."""
+        log.debug("starting")
+        old_content = self.content
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_pyproject = Path(tmpdir) / "pyproject.toml"
+            tmp_lock = Path(tmpdir) / "uv.lock"
+            shutil.copy(base / "pyproject.toml", tmp_pyproject)
+            uv_bin.cmd(["lock"], verbose=verbose, cwd=tmpdir)
+            new_content = tmp_lock.read_text() if tmp_lock.exists() else ""
+
+        has_changes = print_colored_diff(
+            old_content, new_content, "uv.lock", "uv.lock (new)"
+        )
+        if not has_changes:
+            return "No changes"
+        return has_changes
+
+    def diff_summary(self, old_lines):
+        """Create summary like '✓ Created (+42 lines)'."""
+        new_lines = self.read_lockfile_lines()
+        added = new_lines - old_lines
+        removed = old_lines - new_lines
+        n_added = len(added)
+        n_removed = len(removed)
+
+        green = "\033[32m"
+        red = "\033[31m"
+        reset = "\033[0m"
+        check = green + "✓" + reset
+
+        is_new = len(old_lines) == 0
+        if n_added == 0 and n_removed == 0 and not is_new:
+            return "No changes"
+        added_str = f"{green}+{n_added}{reset}"
+        removed_str = f"{red}-{n_removed}{reset}"
+        if is_new:
+            return f"{check} Created ({added_str} lines)"
+        return f"{check} Updated ({added_str} / {removed_str} lines)"
+
+    def read_lockfile_lines(self):
+        """Read lockfile lines as a set of non-comment lines."""
+        try:
+            return {
+                stripped
+                for line in self.path.read_text().splitlines()
+                if (stripped := line.strip()) and not stripped.startswith("#")
+            }
+        except FileNotFoundError:
+            return set()
+
+
+@dataclass(order=True, frozen=True)
+class UvVersion:
+    major: int
+    minor: int
+    patch: int
 
     def __str__(self):
-        return self.requirement_string
+        if self.major == 0 and self.minor == 0 and self.patch == 0:
+            return "unknown"
+        return f"{self.major}.{self.minor}.{self.patch}"
+
+    @property
+    def valid(self):
+        return self >= UvVersion.minimum()
+
+    @staticmethod
+    def unknown():
+        return UvVersion(0, 0, 0)
+
+    @staticmethod
+    def minimum():
+        return UvVersion(0, 5, 0)
+
+    @staticmethod
+    def from_string(version_str):
+        parts = version_str.split(".")
+        if len(parts) == VERSION_PARTS_COUNT:
+            try:
+                major, minor, patch = map(int, parts)
+                return UvVersion(major, minor, patch)
+            except ValueError:
+                pass
+
+        msg = f"Invalid version string: {version_str}"
+        raise NoValidUvError(msg)
 
 
-def parse_requirement_string(requirement_string):
-    """Parse a requirement from a requirement string.
+class UvBin:
+    """Encapsulates UV binary discovery, version check, and command execution."""
 
-    This function is a simplified version of the Requirement class from
-    packaging.requirements.
-    Previously, this was done using pkg_resources.parse_requirements,
-    but pkg_resources is deprecated and errors out on import.
-    And the replacement packaging is apparently not packaged in python
-    virtualenvs where we need it.
+    def __init__(self, appenv_dir):
+        self.appenv_dir = appenv_dir
+        self.uv_dir = appenv_dir / ".uv"
+        self.managed_uv = self.uv_dir / "bin/uv"
+        self.bin = self._get_uv_bin()
 
-    See packaging / _parser.py for the requirements grammar.
-    As well as packaging / _tokenizer.py for the tokenization rules/regexes.
-    """
-    # packaging / _tokenizer.py
-    identifier_regex = r"\b[a-zA-Z0-9][a-zA-Z0-9._-]*\b"
-    url_regex = r"[^ \t]+"
-    whitespace_regex = r"[ \t]+"
-    # comments copied from packaging / _parser.py
-    # requirement = WS? IDENTIFIER WS? extras WS? requirement_details
-    # extras = (LEFT_BRACKET wsp* extras_list? wsp* RIGHT_BRACKET)?
-    # requirement_details = AT URL (WS requirement_marker?)?
-    #                     | specifier WS? (requirement_marker)?
-    # requirement_marker = SEMICOLON marker WS?
-    # consider these comments for illustrative purporses only, since according
-    # to the source code, the actual grammar is subtly different from this :)
+    def cmd(self, args, *, verbose=False, **kwargs):
+        """Execute uv command and return stdout."""
+        cmd_args = [str(self.bin)]
+        if verbose:
+            cmd_args.append("-v")
+        cmd_args.extend(str(arg) for arg in args)
 
-    # We will make some simplifications here:
-    # - We only care about the name, and URL if present.
-    # - We assume that the requirement string is well-formed. If not,
-    #   pip operations will fail later on.
-    # - We will not parse extras, specifiers, or markers.
+        log.debug("running %s", " ".join(cmd_args))
+        uv_output = cmd(cmd_args, **kwargs).decode("utf-8", "replace")
+        log.debug("uv output: %s", uv_output)
 
-    # check for name
-    name_match = re.search(
-        f"^(?:{whitespace_regex})?{identifier_regex}", requirement_string
-    )
-    name = name_match.group() if name_match else None
-    # check for URL
-    url_match = re.search(
-        f"@(?:{whitespace_regex})?(?P<url>{url_regex})(?:{whitespace_regex})?;?",
-        requirement_string,
-    )
-    url = url_match.group("url") if url_match else None
+        return uv_output
 
-    return ParsedRequirement(name, url, requirement_string)
+    @cached_property
+    def version(self):
+        return UvBin.get_uv_version(self.bin)
+
+    @staticmethod
+    def get_uv_version(uv_path):
+        """Get uv version by calling uv --version."""
+        try:
+            result = subprocess.run(
+                [uv_path, "--version"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        except subprocess.CalledProcessError as e:
+            log.debug("uv --version failed with error: %s", e.stderr)
+            return UvVersion.unknown()
+
+        version_cmd_output = result.stdout.strip()
+        log.debug("uv --version: %s", version_cmd_output)
+
+        try:
+            uv_version_str = version_cmd_output.split()[1]
+        except IndexError:
+            log.exception("Cannot parse uv --version output, version unknown")
+            return UvVersion.unknown()
+
+        try:
+            return UvVersion.from_string(uv_version_str)
+        except NoValidUvError:
+            log.exception("Cannot parse version string, version unknown")
+            return UvVersion.unknown()
+
+    def _get_uv_bin(self):
+        """Get path to valid uv binary via discovery chain:
+        1. uv from PATH
+        2. Check .appenv/.uv from previous run
+        3. Build with nix-build from nixpkgs channel
+        4. Build with nix build from nixpkgs flake
+        5. pip install
+        """
+        log.debug("searching for uv, appenv_dir=%s", self.appenv_dir)
+
+        uv_bin = (
+            self._try_uv_from_path()
+            or self._try_uv_from_appenv_dir()
+            or self._try_uv_from_nix_channel()
+            or self._try_uv_from_nix_flake()
+            or self._try_uv_from_pip()
+        )
+        if not uv_bin:
+            msg = "uv not found and could not be installed"
+            raise NoValidUvError(msg)
+
+        return uv_bin
+
+    def _try_uv_from_path(self):
+        """Try to find uv in PATH."""
+        uv_in_path = shutil.which("uv")
+        log.debug("uv in PATH = %s", uv_in_path)
+        if uv_in_path:
+            uv_bin = Path(uv_in_path)
+            version = UvBin.get_uv_version(uv_bin)
+            log.debug("uv version is %s, valid: %s", version, version.valid)
+
+            if version.valid:
+                self._cleanup_appenv_uv()
+                return uv_bin
+
+        return None
+
+    def _try_uv_from_appenv_dir(self):
+        log.debug("Trying appenv-managed uv at %s", self.managed_uv)
+        if not self.managed_uv.exists():
+            log.debug("no appenv-managed uv found at %s", self.managed_uv)
+            return None
+
+        version = UvBin.get_uv_version(self.managed_uv)
+        log.debug("uv version is %s, valid: %s", version, version.valid)
+
+        return self.managed_uv if version.valid else None
+
+    def _try_uv_from_nix_channel(self):
+        """Try nix-build with nixpkgs channel"""
+        nix_bin = shutil.which("nix")
+        log.debug("appenv_dir=%s, nix_bin=%s", self.appenv_dir, nix_bin)
+
+        if nix_bin is None:
+            log.debug(
+                "skipping (appenv_dir=%s, nix in PATH=%s)",
+                self.appenv_dir,
+                nix_bin is not None,
+            )
+            return None
+
+        action = "Updating" if self.managed_uv.exists() else "Creating"
+        log.debug("%s .appenv/.uv with Nix at %s ...", action, nix_bin)
+
+        try:
+            result = subprocess.run(
+                ["nix-build", "<nixpkgs>", "-A", "uv", "-o", str(self.uv_dir)],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        except subprocess.CalledProcessError as e:
+            log.debug("nix-build failed: %s", e.stderr)
+            return None
+
+        log.debug("nix-build succeeded: %s", result.stdout)
+
+        version = UvBin.get_uv_version(self.managed_uv)
+        log.debug("uv version is %s, valid: %s", version, version.valid)
+
+        return self.managed_uv if version.valid else None
+
+    def _try_uv_from_nix_flake(self):
+        """Tries more expensive but fresh nix build from nixpkgs flake"""
+
+        try:
+            result = subprocess.run(
+                ["nix", "build", "nixpkgs#uv", "--out-link", str(self.uv_dir)],
+                capture_output=True,
+                check=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as e:
+            log.debug("nix-build failed: %s", e.stderr)
+            return None
+
+        log.debug("nix build nixpkgs#uv: %s", result.stdout)
+
+        version = UvBin.get_uv_version(self.managed_uv)
+        log.debug("uv version is %s, valid: %s", version, version.valid)
+
+        return self.managed_uv if version.valid else None
+
+    def _try_uv_from_pip(self):
+        """Try to install uv via pip."""
+        log.debug("attempting to install uv via pip ...")
+
+        try:
+            result = subprocess.run(
+                [sys.executable, "-m", "ensurepip"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as e:
+            log.debug("pip -mensurepip failed, skipping pip install: %s", e.stderr)
+            return None
+
+        log.debug("pip --version: %s", result.stdout)
+
+        try:
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "pip",
+                    "install",
+                    "uv",
+                    "--upgrade",
+                    "-t",
+                    self.uv_dir,
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        except subprocess.CalledProcessError as e:
+            log.debug("pip install failed, skipping pip install: %s", e.stderr)
+            return None
+
+        log.debug("pip install uv: %s", result.stdout)
+
+        version = UvBin.get_uv_version(self.managed_uv)
+        log.debug("uv version is %s, valid: %s", version, version.valid)
+
+        return self.managed_uv if version.valid else None
+
+    def _cleanup_appenv_uv(self):
+        """Remove leftover .appenv/.uv directory."""
+        if self.uv_dir.exists():
+            remove_path(self.uv_dir)
 
 
-class AppEnv(object):
-    base = None  # The directory where we add the environments. Co-located
-    # with the application script - not necessarily the appenv
-    # script so we can link to an appenv script from multiple
-    # locations.
+class NoValidUvError(RuntimeError):
+    """Raised when no valid uv binary can be found or installed."""
 
-    env_dir = None  # The current specific venv that we're working with.
-    appenv_dir = None  # The directory where to place specific venvs.
 
-    def __init__(self, base, original_cwd):
-        self.base = base
+@dataclass(frozen=True)
+class AppEnvSettings:
+    verbose: bool
+    extras: list[str]
+    basedir: Path
 
-        # This used to be computed based on the application name but
-        # as we can have multiple application names now, we always put the
-        # environments into '.appenv'. They're hashed anyway.
-        self.appenv_dir = os.path.join(self.base, ".appenv")
 
-        # Allow simplifying a lot of code by assuming that all the
-        # meta-operations happen in the base directory. Store the original
-        # working directory here so we switch back at the appropriate time.
+class AppEnv:
+    def __init__(self, original_cwd, settings):
+        self.base = settings.basedir.resolve()
         self.original_cwd = original_cwd
+        self.settings = settings
 
-    def meta(self):
+        self.appenv_dir = self.base / ".appenv"
+        self.appenv_script = self.base / "appenv"
+        self.log_dir = self.appenv_dir / "logs"
+        self.venv_real = self.appenv_dir / "venv"
+        self.venv_link = self.base / ".venv"
+        self.venv_python = self.venv_real / "bin" / "python"
+
+    def run(self, command, argv):
+        log_dir = self._set_up_logdir()
+        setup_logging(command, log_dir, self.settings.verbose)
+
+        venv_path = self._prepare_venv(dev_mode=False)
+        cmd_path = venv_path / "bin" / command
+
+        if not cmd_path.exists():
+            available = sorted(
+                p.name
+                for p in (venv_path / "bin").iterdir()
+                if p.is_file() and not p.name.startswith("_")
+            )
+            print(f"Error: Binary '{command}' not found in {venv_path}/bin/")
+            print()
+            print(f"The symlink '{command}' determines which binary gets executed.")
+            print()
+            if available:
+                print("Available binaries:")
+                for name in available:
+                    print(f"  {name}")
+            else:
+                print("No binaries found in the virtual environment.")
+            print()
+            print("Either:")
+            print(f"  - Install a package that provides the '{command}' binary")
+            print(f'  - Add a [project.scripts] entry: {command} = "pkg.module:main"')
+            print("  - Or create a symlink with the name of an installed binary")
+            sys.exit(EXIT_CODE_NOINPUT)
+
+        argv = [str(cmd_path), *argv]
+        os.environ["APPENV_BASEDIR"] = str(self.base)
+        os.chdir(self.original_cwd)
+
+        os.execv(str(cmd_path), argv)
+
+    def meta(self, remaining_args=None, prog="appenv"):
+        log_dir = self._set_up_logdir()
+        setup_logging(prog, log_dir, self.settings.verbose)
+
         # Parse the appenv arguments
-        parser = argparse.ArgumentParser()
-        subparsers = parser.add_subparsers()
+        parser = argparse.ArgumentParser(
+            prog=prog,
+            usage="%(prog)s <COMMAND>",
+            formatter_class=GroupedHelpFormatter,
+        )
+        subparsers = parser.add_subparsers(title="Commands")
         p = subparsers.add_parser("update-lockfile", help="Update the lock file.")
+        p.add_argument(
+            "--diff",
+            action="store_true",
+            help="Show full diff without writing lockfile.",
+        )
+        p.add_argument(
+            "-v",
+            "--verbose",
+            action="store_true",
+            help="Show detailed information about what is being done.",
+        )
         p.set_defaults(func=self.update_lockfile)
 
-        p = subparsers.add_parser("init", help="Create a new appenv project.")
+        p = subparsers.add_parser("init", help="Create a new pyproject.toml project.")
+        p.add_argument(
+            "path",
+            nargs="?",
+            default=None,
+            help="Target directory for the new project (default: current directory).",
+        )
         p.set_defaults(func=self.init)
+
+        p = subparsers.add_parser(
+            "migrate", help="Migrate from requirements.txt to pyproject.toml."
+        )
+        p.add_argument(
+            "path",
+            nargs="?",
+            default=None,
+            help="Target directory (default: current directory).",
+        )
+        p.set_defaults(func=self.migrate)
+
+        p = subparsers.add_parser("self-update", help="Update the local appenv script.")
+        p.add_argument(
+            "--check",
+            action="store_true",
+            help="Check for version drift without updating.",
+        )
+        p.set_defaults(func=self.self_update)
 
         p = subparsers.add_parser("reset", help="Reset the environment.")
         p.set_defaults(func=self.reset)
+
+        p = subparsers.add_parser("version", help="Show appenv version.")
+        p.set_defaults(func=self.show_version)
 
         p = subparsers.add_parser("prepare", help="Prepare the venv.")
         p.set_defaults(func=self.prepare)
@@ -360,263 +769,757 @@ class AppEnv(object):
         p.set_defaults(func=self.python)
 
         p = subparsers.add_parser(
-            "run", help="Run a script from the bin/ directory of the virtual env."
+            "run",
+            help="Run a script from the bin/ directory of the virtual env.",
         )
         p.add_argument("script", help="Name of the script to run.")
         p.set_defaults(func=self.run_script)
 
-        args, remaining = parser.parse_known_args()
+        p = subparsers.add_parser(
+            "uv",
+            help="Run uv with the appenv-configured uv binary.",
+        )
+        p.set_defaults(func=self.run_uv)
+
+        args, remaining = parser.parse_known_args(remaining_args)
+
+        log.debug("args: %s", args)
+        log.debug("remaining: %s", remaining)
 
         if not hasattr(args, "func"):
-            parser.print_usage()
+            if remaining:
+                print(f"Error: unrecognized arguments: {' '.join(remaining)}")
+                parser.print_help()
+                sys.exit(EXIT_CODE_USAGE)
+            parser.print_help()
+            sys.exit(0)
         else:
             args.func(args, remaining)
 
-    def run(self, command, argv):
-        self.prepare()
-        cmd = os.path.join(self.env_dir, "bin", command)
-        argv = [cmd] + argv
-        os.environ["APPENV_BASEDIR"] = self.base
-        os.chdir(self.original_cwd)
-        os.execv(cmd, argv)
-
-    def _assert_requirements_lock(self):
-        if not os.path.exists("requirements.lock"):
-            print(
-                "No requirements.lock found. Generate it using ./appenv update-lockfile"
-            )
-            sys.exit(67)
-
-        with open("requirements.lock") as f:
-            locked_hash = None
-            for line in f:
-                if line.startswith("# appenv-requirements-hash: "):
-                    locked_hash = line.split(":")[1].strip()
-                    break
-            if locked_hash != self._hash_requirements():
-                print(
-                    "requirements.txt seems out of date (hash mismatch). "
-                    "Regenerate using ./appenv update-lockfile"
-                )
-                sys.exit(67)
-
-    def _hash_requirements(self):
-        with open("requirements.txt", "rb") as f:
-            hash_content = f.read()
-        return hashlib.new("sha256", hash_content).hexdigest()
-
     def prepare(self, args=None, remaining=None):
-        # copy used requirements.txt into the target directory so we can use
-        # that to check later
-        # - when to clean up old versions? keep like one or two old revisions?
-        # - enumerate the revisions and just copy the requirements.txt, check
-        #   for ones that are clean or rebuild if necessary
-        os.chdir(self.base)
+        """Prepare venv with production dependencies only."""
+        return self._prepare_venv(dev_mode=False)
 
-        self._assert_requirements_lock()
-
-        hash_content = []
-        with open("requirements.lock", "rb") as f:
-            requirements = f.read()
-        hash_content.append(os.fsencode(os.path.realpath(sys.executable)))
-        hash_content.append(requirements)
-        with open(__file__, "rb") as f:
-            hash_content.append(f.read())
-        env_hash = hashlib.new("sha256", b"".join(hash_content)).hexdigest()[:8]
-        env_dir = os.path.join(self.appenv_dir, env_hash)
-
-        whitelist = set(
-            [
-                env_dir,
-                os.path.join(self.appenv_dir, "unclean"),
-                os.path.join(self.appenv_dir, "current"),
-            ]
-        )
-        for path in glob.glob("{appenv_dir}/*".format(appenv_dir=self.appenv_dir)):
-            if path not in whitelist:
-                print("Removing expired path: {path} ...".format(path=path))
-                if not os.path.isdir(path):
-                    os.unlink(path)
-                else:
-                    shutil.rmtree(path)
-        if os.path.exists(env_dir):
-            # check whether the existing environment is OK, it might be
-            # nice to rebuild in a separate place if necessary to avoid
-            # interruptions to running services, but that isn't what we're
-            # using it for at the  moment
-            try:
-                if not os.path.exists("{env_dir}/appenv.ready".format(env_dir=env_dir)):
-                    raise Exception()
-            except Exception:
-                print("Existing envdir not consistent, deleting")
-                cmd(["rm", "-rf", env_dir])
-
-        if not os.path.exists(env_dir):
-            ensure_venv(env_dir)
-
-            with open(os.path.join(env_dir, "requirements.lock"), "wb") as f:
-                f.write(requirements)
-
-            print("Installing ...")
-            pip(
-                env_dir,
-                [
-                    "install",
-                    "--no-deps",
-                    "-r",
-                    "{env_dir}/requirements.lock".format(env_dir=env_dir),
-                ],
-            )
-            pip(env_dir, ["check"])
-
-            with open(os.path.join(env_dir, "appenv.ready"), "w") as f:
-                f.write("Ready or not, here I come, you can't hide\n")
-            current_path = os.path.join(self.appenv_dir, "current")
-            try:
-                os.unlink(current_path)
-            except FileNotFoundError:
-                pass
-            os.symlink(env_hash, current_path)
-
-        self.env_dir = env_dir
+    def _chdir_to_project(self, target):
+        """Change to target directory and update all derived paths."""
+        log.debug("chdir to %s", target)
+        os.chdir(target)
+        self.base = target.resolve()
+        self.appenv_dir = self.base / ".appenv"
+        self.appenv_script = self.base / "appenv"
+        self.log_dir = self.appenv_dir / "logs"
+        self.venv_real = self.appenv_dir / "venv"
+        self.venv_link = self.base / ".venv"
+        self.venv_python = self.venv_real / "bin" / "python"
 
     def init(self, args=None, remaining=None):
-        print("Let's create a new appenv project.\n")
-        command = None
-        while not command:
-            command = input("What should the command be named? ").strip()
-        dependency = input(
-            "What is the main dependency as found on PyPI? [{}] ".format(command)
-        ).strip()
-        if not dependency:
-            dependency = command
-        default_target = os.path.abspath(os.path.join(self.original_cwd, command))
-        target = input(
-            "Where should we create this? [{}] ".format(default_target)
-        ).strip()
-        if target:
-            target = os.path.join(self.original_cwd, target)
+        """Create a new pyproject.toml project."""
+        if args and args.path:
+            target = (self.original_cwd / args.path).resolve()
+            target.mkdir(parents=True, exist_ok=True)
         else:
-            target = default_target
-        target = os.path.abspath(target)
-        if not os.path.exists(target):
-            os.makedirs(target)
-        print()
-        print("Creating appenv setup in {} ...".format(target))
-        with open(__file__, "rb") as bootstrap_file:
-            bootstrap_data = bootstrap_file.read()
-        os.chdir(target)
-        with open("appenv", "wb") as new_appenv:
-            new_appenv.write(bootstrap_data)
-        os.chmod("appenv", 0o755)
-        if os.path.exists(command):
-            os.unlink(command)
-        os.symlink("appenv", command)
-        with open("requirements.txt", "w") as requirements_txt:
-            requirements_txt.write(dependency + "\n")
-        print()
-        print(
-            "Done. You can now `cd {}` and call `./{}` to bootstrap and run it.".format(
-                os.path.relpath(target, self.original_cwd), command
-            )
+            target = self.original_cwd.resolve()
+
+        self._chdir_to_project(target)
+
+        # Check after chdir - now we check ./pyproject.toml
+        pyproject = Pyproject(self.base)
+        if pyproject.exists and pyproject.has_project_section:
+            print(f"{pyproject.path} already has a [project] section")
+            print("Nothing to do - edit it manually to make changes")
+            sys.exit(EXIT_CODE_DATAERR)
+
+        if pyproject.exists:
+            print(f"Adding [project] section to existing {pyproject.path}\n")
+        else:
+            print(f"Let's create a new appenv project in {self.base}")
+            print("I'll ask a few questions, then create pyproject.toml here\n")
+
+        command_name = input(
+            "Binary to expose (creates ./<name> symlink) [app] "
+        ).strip()
+        if not command_name:
+            command_name = "app"
+
+        print("\nEnter dependencies (one per line, empty line to finish):")
+        print(f"  Default: {command_name}")
+        dependencies = []
+        while True:
+            dep = input("  Dependency: ").strip()
+            if not dep:
+                break
+            dependencies.append(dep)
+        if not dependencies:
+            dependencies = [command_name]
+
+        project_name = input(f"\nProject name [{target.name}]: ").strip()
+        if not project_name:
+            project_name = target.name
+
+        description = input("Description []: ").strip()
+
+        python_version = input("Minimum Python version [3.13]: ").strip()
+        if not python_version:
+            python_version = "3.13"
+
+        self._ensure_appenv_script()
+
+        pyproject = create_pyproject(
+            target=target,
+            project_name=project_name,
+            description=description,
+            dependencies=dependencies,
+            python_version=python_version,
         )
+        print(f"Created {pyproject.path}")
+
+        self._set_up_command_symlink(
+            command_name=command_name,
+            project_name=project_name or target.name,
+        )
+
+        print("Generating new lock file ...")
+        uv = ensure_uv(self.appenv_dir)
+        self._uv_lock(uv, diff=False)
+
+        ensure_gitignore(self.base, [".venv", ".appenv", ".batou-lock"])
+        print("\n=== Appenv project initialized ===")
+        print(f"\nUse `./{command_name}` to run the {command_name} binary")
+
+    def migrate(self, args=None, remaining=None):
+        """Migrate from requirements.txt to pyproject.toml."""
+        if args and args.path:
+            target = (self.original_cwd / args.path).resolve()
+            target.mkdir(parents=True, exist_ok=True)
+        else:
+            target = self.original_cwd.resolve()
+
+        self._chdir_to_project(target)
+
+        pyproject = Pyproject(self.base)
+        if pyproject.has_project_section:
+            print(
+                "pyproject.toml already has [project] section in", str(self.base) + "."
+            )
+            print("Nothing to do.")
+            return
+
+        if pyproject.exists:
+            print("Adding [project] section to existing pyproject.toml.\n")
+        elif pyproject.can_be_created_from_requirements_txt:
+            print("Migrating from requirements.txt to pyproject.toml...\n")
+        else:
+            print(f"No requirements.txt found in {self.base}.")
+            print("Use 'init' to create a new project.")
+            return
+
+        self._ensure_appenv_script(update=True)
+
+        uv = ensure_uv(self.appenv_dir)
+
+        pyproject = pyproject.migrate_from_requirements_txt()
+        pyproject.print_migration_info()
+
+        uv_lock_out = self._uv_lock(uv, diff=False)
+        print(uv_lock_out)
+
+        # Also cleans up old .appenv hash-based venvs
+        print("Preparing/cleaning .appenv directory ...")
+        self._prepare_appenv_dir()
+
+        ensure_gitignore(self.base, [".venv"])
+        print("\n=== Pyproject Migration completed ===")
+        print("requirements.{txt,lock} kept as legacy. You can delete these files now.")
+
+    def self_update(self, args=None, remaining=None):
+        """Update the local ./appenv script to match the running version."""
+        if not self.appenv_script.exists():
+            print(f"Error: No appenv script found at {self.appenv_script}")
+            sys.exit(EXIT_CODE_NOINPUT)
+
+        local_version = self._extract_version(self.appenv_script)
+        running_version = __version__
+        local_label = local_version if local_version else "unknown"
+
+        if local_version == running_version:
+            print(
+                f"{self.appenv_script} is already up-to-date "
+                f"(version {running_version})."
+            )
+            if args and args.check:
+                sys.exit(0)
+            return
+
+        if args and args.check:
+            print(
+                f"Version drift detected: {self.appenv_script} is {local_label}, "
+                f"running appenv is {running_version}."
+            )
+            sys.exit(1)
+
+        # Perform the update
+        bootstrap_data = Path(__file__).read_bytes()
+        self.appenv_script.write_bytes(bootstrap_data)
+        self.appenv_script.chmod(0o755)
+        print(f"Updated {self.appenv_script} ({local_label} -> {running_version})")
 
     def python(self, args, remaining):
         self.run("python", remaining)
 
     def run_script(self, args, remaining):
-        self.run(args.script, remaining)
+        print("'run' has been removed. Use one of these instead:\n")
+        print("  uv run <command>        — run any binary (includes dev dependencies)")
+        print("  ./appenv python         — start Python REPL in the venv")
+        print(f"  ln -s appenv {args.script}    — create a symlink for regular use")
+        print(f"  ./{args.script}              — then run the {args.script} binary")
+        sys.exit(EXIT_CODE_USAGE)
+
+    def run_uv(self, args, remaining):
+        """Run uv with the appenv-configured uv binary."""
+        uv = ensure_uv(self.appenv_dir)
+
+        # Tell uv where the venv lives (in .appenv/venv, not .venv)
+        os.environ["UV_PROJECT_ENVIRONMENT"] = str(self.venv_real)
+
+        uv_argv = [str(uv.bin), *remaining]
+        os.chdir(self.base)
+        os.execv(str(uv.bin), uv_argv)
+
+    def show_version(self, args=None, remaining=None):
+        """Show appenv version."""
+        print(f"appenv {__version__}")
 
     def reset(self, args=None, remaining=None):
-        print(
-            "Resetting ALL application environments in {appenvdir} ...".format(
-                appenvdir=self.appenv_dir
+        """Remove appenv-managed files/directories"""
+        log.debug("Resetting %s", self.settings.basedir)
+        # Remove symlink if it exists
+        log.debug("venv link %s", self.venv_link)
+        if self.venv_link.is_symlink():
+            print(f"Removing {self.venv_link} symlink ...")
+            self.venv_link.unlink()
+
+        # Remove real venv in .appenv
+        log.debug("venv real %s", self.venv_real)
+        if self.venv_real.exists():
+            print(f"Removing {self.venv_real} ...")
+            shutil.rmtree(self.venv_real)
+
+        # Note: .venv may exist as a real directory (not managed by appenv)
+        if self.venv_link.exists() and not self.venv_link.is_symlink():
+            print(
+                f"Note: {self.venv_link} exists but is not a symlink. "
+                f"Not removing it automatically."
             )
-        )
-        cmd(["rm", "-rf", self.appenv_dir])
+
+        # Clean up old hash-based venvs in .appenv (keep logs, profiling)
+        if self.appenv_dir.exists():
+            for path in list(self.appenv_dir.iterdir()):
+                if path.name not in {"venv", ".uv", "logs", "profiling", "current"}:
+                    print(f"Removing {path} ...")
+                    remove_path(path)
 
     def update_lockfile(self, args=None, remaining=None):
-        ensure_minimal_python()
+        ensure_pyproject(self.base)
+        uv = ensure_uv(self.appenv_dir)
         os.chdir(self.base)
-        print("Updating lockfile")
-        tmpdir = os.path.join(self.appenv_dir, "updatelock")
-        if os.path.exists(tmpdir):
-            cmd(["rm", "-rf", tmpdir])
-        ensure_venv(tmpdir)
-        print("Installing packages ...")
-        pip(tmpdir, ["install", "-r", "requirements.txt"])
+        uv_lock_out = self._uv_lock(uv, diff=args.diff if args else False)
+        print(uv_lock_out)
 
-        extra_specs = []
-        result = pip(
-            tmpdir, ["freeze", "--all", "--exclude", "pip"], merge_stderr=False
-        ).decode("ascii")
-        # They changed this behaviour in https://github.com/pypa/pip/pull/12032
-        pinned_versions = {}
-        for line in result.splitlines():
-            if line.strip().startswith("-e "):
-                # We'd like to pick up the original -e statement here.
-                continue
-            parsed_requirement = parse_requirement_string(line)
-            pinned_versions[parsed_requirement.name] = parsed_requirement
-        requested_versions = {}
-        with open("requirements.txt") as f:
-            for line in f.readlines():
-                if line.strip().startswith("-e "):
-                    extra_specs.append(line.strip())
-                    continue
-                if line.strip().startswith("--"):
-                    extra_specs.append(line.strip())
-                    continue
+    def _ensure_appenv_script(self, *, update=False):
+        """
+        Creates local ./appenv script if needed.
 
-                # filter comments, in particular # appenv-python-preferences
-                if line.strip().startswith("#"):
-                    continue
-                parsed_requirement = parse_requirement_string(line)
-                requested_versions[parsed_requirement.name] = parsed_requirement
+        When the script already exists and versions differ:
+        - update=True: replaces it (used by migrate)
+        - update=False: warns only (used by init)
+        """
+        log.debug("Looking for %s", self.appenv_script)
+        if not self.appenv_script.exists():
+            log.debug("Creating %s", self.appenv_script)
+            bootstrap_data = Path(__file__).read_bytes()
+            self.appenv_script.write_bytes(bootstrap_data)
+            self.appenv_script.chmod(0o755)
+            print(f"Created {self.appenv_script}")
+            return
 
-        final_versions = {}
-        for spec in requested_versions.values():
-            # Pick versions with URLs to ensure we don't get the screwed up
-            # results from pip freeze.
-            if spec.url:
-                final_versions[spec.name] = spec
-        for spec in pinned_versions.values():
-            # Ignore versions we already picked
-            if spec.name in final_versions:
-                continue
-            final_versions[spec.name] = spec
-        lines = [str(spec) for spec in final_versions.values()]
-        lines.extend(extra_specs)
-        lines.sort()
-        with open(os.path.join(self.base, "requirements.lock"), "w") as f:
-            f.write(
-                "# appenv-requirements-hash: {}\n".format(self._hash_requirements())
+        local_version = self._extract_version(self.appenv_script)
+        running_version = __version__
+        log.debug(
+            "Version check: local=%s, running=%s",
+            local_version,
+            running_version,
+        )
+        if local_version == running_version:
+            log.debug("Versions match, skipping")
+            return
+
+        if update:
+            local_label = local_version if local_version else "unknown"
+            log.debug(
+                "Updating %s: %s -> %s",
+                self.appenv_script,
+                local_label,
+                running_version,
             )
-            f.write("\n".join(lines))
-            f.write("\n")
-        cmd(["rm", "-rf", tmpdir])
+            bootstrap_data = Path(__file__).read_bytes()
+            self.appenv_script.write_bytes(bootstrap_data)
+            self.appenv_script.chmod(0o755)
+            print(f"Updated {self.appenv_script} ({local_label} -> {running_version})")
+        else:
+            local_label = local_version if local_version else "unknown"
+            log.debug("Version mismatch, warning user")
+            print(
+                f"Warning: {self.appenv_script} is version {local_label}, "
+                f"running appenv is {running_version}."
+            )
+            print("Run './appenv self-update' to update the script.")
+
+    @staticmethod
+    def _extract_version(script):
+        """Extract __version__ from an appenv script file."""
+        content = script.read_text(errors="replace")
+        match = re.search(r'__version__ = "([^"]+)"', content)
+        return match.group(1) if match else None
+
+    def _uv_lock(self, uv, diff):
+        lock = LockFile(self.base)
+
+        if diff:
+            print("Diff mode: only check lockfile changes ...")
+            update_info = lock.diff(uv, self.base, self.settings.verbose)
+        else:
+            old_lines = lock.read_lockfile_lines()
+            print("Updating lock file ...")
+            uv.cmd(["lock"], verbose=self.settings.verbose, cwd=self.base)
+
+            update_info = lock.diff_summary(old_lines)
+
+        return update_info
+
+    def _uv_sync(self, *, dev_mode, uv):
+        # Sync dependencies (idempotent)
+        sync_args = ["sync"]
+
+        if not dev_mode:
+            sync_args.extend(["--no-dev", "--frozen"])
+
+        if self.settings.extras:
+            sync_args.extend(["--extra", ",".join(self.settings.extras)])
+
+        log.debug("activated extras/optional deps: %s", self.settings.extras)
+        uv.cmd(sync_args)
+
+    def _set_up_logdir(self):
+        self.log_dir.mkdir(parents=True, exist_ok=True)
+        return self.log_dir
+
+    def _prepare_venv(self, dev_mode):
+        ensure_pyproject(self.base)
+        ensure_lock_file(self.base)
+        uv = ensure_uv(self.appenv_dir)
+        os.chdir(self.base)
+
+        self._prepare_appenv_dir()
+        # Tell uv where to put/find venv
+        os.environ["UV_PROJECT_ENVIRONMENT"] = str(self.venv_real)
+
+        log.debug("project base: %s", self.base)
+        log.debug("venv: %s", self.venv_real)
+        log.debug("Python: %s", Path(sys.executable).resolve())
+        log.debug("dev mode: %s", dev_mode)
+
+        # Check for the typical case that a Nix Python was garbage-collected so
+        # the linked python won't be valid anymore.
+        if self.venv_real.exists() and not self.venv_python.exists():
+            log.debug("corrupted venv with missing bin/python, removing ...")
+            shutil.rmtree(self.venv_real)
+
+        # SPEC: stale-venv-recreate — check venv Python version against requires-python
+        if self.venv_real.exists() and self.venv_python.exists():
+            # SPEC: stale-venv-recreate — handle broken binary or malformed output
+            try:
+                result = cmd([str(self.venv_python), "--version"], quiet=True)
+                venv_version_str = result.decode().strip()
+                # Extract major.minor from e.g. "Python 3.10.0"
+                venv_version = ".".join(venv_version_str.split()[1].split(".")[:2])
+            except (ValueError, IndexError, OSError) as e:
+                log.debug("stale-venv check failed: %s", e)
+                print("Recreating venv: Python version could not be determined")
+                shutil.rmtree(self.venv_real)
+            else:
+                min_version, max_version = Pyproject(self.base).requires_python
+                if min_version and not version_satisfies_constraints(
+                    venv_version, min_version, max_version
+                ):
+                    constraint = ">=" + min_version
+                    if max_version:
+                        constraint += ",<" + max_version
+                    print(
+                        f"Recreating venv: Python {venv_version} does not satisfy"
+                        f" requires-python {constraint}"
+                    )
+                    shutil.rmtree(self.venv_real)
+
+        if not self.venv_real.exists():
+            print("Creating fresh venv with uv ...")
+            # Use current Python (already selected by ensure_best_python)
+            # Explicit path avoids uv downloading its own (breaks on NixOS, for example)
+            uv.cmd(["venv", "--python", sys.executable, str(self.venv_real)])
+
+        self._uv_sync(dev_mode=dev_mode, uv=uv)
+
+        # Show venv python info AFTER sync (version may have changed)
+        if self.venv_python.exists():
+            log.debug("venv Python: %s", self.venv_python)
+            log.debug("venv Python (realpath): %s", self.venv_python.resolve())
+            result = cmd([str(self.venv_python), "--version"], quiet=True)
+            log.debug("venv Python version: %s", result.decode().strip())
+
+        # Create symlink for tool compatibility
+        # (e.g., IDEs, formatters, linters that expect .venv)
+        if self.venv_link.is_symlink():
+            self.venv_link.unlink()
+        if not self.venv_link.exists():
+            self.venv_link.symlink_to(
+                os.path.relpath(self.venv_real, self.base), target_is_directory=True
+            )
+        elif not self.venv_link.is_symlink():
+            print(
+                f"Warning: {self.venv_link} exists but is not a symlink. "
+                f"Expected .venv -> {self.venv_real}. "
+                f"Remove {self.venv_link} manually if you want appenv to manage it."
+            )
+
+        # Legacy link to current venv, doesn't change anymore with this implementation.
+        current_link = self.appenv_dir / "current"
+        if current_link.is_symlink():
+            current_link.unlink()
+        if not current_link.exists():
+            current_link.symlink_to("venv", target_is_directory=True)
+
+        return self.venv_real
+
+    def _set_up_command_symlink(self, command_name, project_name):
+        command_link = self.base / command_name
+        if command_link.is_symlink() or command_link.exists():
+            command_link.unlink(missing_ok=True)
+        command_link.symlink_to("appenv")
+        print(f"Created ./{command_name} -> appenv (runs the {command_name} binary)")
+
+    def _prepare_appenv_dir(self):
+        """Remove old hash-based venvs and files from .appenv directory."""
+        self.appenv_dir.mkdir(exist_ok=True)
+        keep = {"venv", ".uv", "logs", "profiling", "current"}
+        for path in list(self.appenv_dir.iterdir()):
+            if path.name not in keep:
+                log.debug("removing old .appenv entry: %s ...", path.name)
+                remove_path(path)
+
+        # Remove dangling current symlink (left over from hash-based venvs)
+        current = self.appenv_dir / "current"
+        if current.is_symlink() and not current.exists():
+            log.debug("removing dangling current symlink ...")
+            current.unlink()
+
+
+def ensure_uv(appenv_dir):
+    """Ensure uv is available and meets minimum version.
+
+    Exits with error if uv is not available or too old.
+    Returns UvBin instance.
+    """
+    uv = UvBin(appenv_dir)
+    log.debug("uv binary: %s", uv.bin)
+
+    version = uv.version
+    log.debug("uv version: %s", version)
+
+    if version is None or not version.valid:
+        print(f"Error: cannot use uv binary: {uv.bin}. Version is: {version}")
+        print(f"Minimum required version: {UvVersion.minimum()}")
+        sys.exit(EXIT_CODE_UNAVAILABLE)
+
+    return uv
+
+
+def ensure_pyproject(base):
+    """Ensure pyproject.toml exists with [project] section, return Pyproject."""
+    pyproject = Pyproject(base)
+    if pyproject.has_project_section:
+        log.debug("pyproject %s has [project] section", pyproject.path)
+        return pyproject
+
+    if pyproject.exists:
+        print(f"Error: {pyproject.path} has no [project] section.")
+    else:
+        print(f"Error: No pyproject config file at {pyproject.path} found.")
+        print("appenv must be located next to pyproject.toml (not in a subdirectory)")
+
+    if pyproject.can_be_created_from_requirements_txt:
+        print("Legacy requirements.txt found.")
+        print("Run: ./appenv migrate")
+        sys.exit(EXIT_CODE_DATAERR)
+    else:
+        print("Run ./appenv init")
+        sys.exit(EXIT_CODE_NOINPUT)
+
+
+def ensure_lock_file(base):
+    """Ensure lockfile exists, return LockFile instance."""
+    lock = LockFile(base)
+    if not lock.exists:
+        print("No uv.lock found. Run: ./appenv update-lockfile")
+        sys.exit(EXIT_CODE_NOINPUT)
+
+    log.debug("uv.lock: %s", lock.path)
+    return lock
+
+
+def ensure_gitignore(base, entries):
+    """Ensure .gitignore contains the given entries.
+
+    Idempotent: appends only missing entries, never modifies existing content.
+    """
+    gitignore_path = base / ".gitignore"
+
+    if gitignore_path.exists():
+        existing_lines = gitignore_path.read_text().splitlines()
+    else:
+        existing_lines = []
+
+    existing_set = {line for line in existing_lines if line.strip()}
+    missing = [e for e in entries if e not in existing_set]
+
+    if not missing:
+        return
+
+    new_content = "\n".join(existing_lines)
+    if new_content and not new_content.endswith("\n"):
+        new_content += "\n"
+    new_content += "\n".join(missing) + "\n"
+    gitignore_path.write_text(new_content)
+    if existing_lines:
+        print(f"Updated {gitignore_path}")
+    else:
+        print(f"Created {gitignore_path}")
+
+
+def cmd(c, *, merge_stderr=True, quiet=False, cwd=None):
+    # SPEC: SRS-F001-cmd-wrapper - Enrich subprocess errors with command output context
+    try:
+        is_shell = isinstance(c, str)
+        cmd_list = cast("list[str]", [c] if is_shell else c)
+        stderr = subprocess.STDOUT if merge_stderr else None
+        return subprocess.check_output(cmd_list, shell=is_shell, stderr=stderr, cwd=cwd)
+    except subprocess.CalledProcessError as e:
+        if not quiet:
+            print(f"{c} returned with exit code {e.returncode}")
+            print(e.output.decode("utf-8", "replace"))
+        raise ValueError(e.output.decode("utf-8", "replace")) from e
+
+
+def ensure_best_python(base):
+    """Ensure best Python for pyproject.toml workflow.
+
+    Reads requires-python from pyproject.toml and selects the newest
+    available Python that satisfies the constraint.
+    """
+    if "APPENV_BEST_PYTHON" in os.environ:
+        return
+
+    pyproject = Pyproject(base)
+    min_version, max_version = pyproject.requires_python
+
+    log.debug("requires-python constraints: min=%s, max=%s", min_version, max_version)
+    if min_version is None:
+        min_version = "3.10"
+
+    available = find_available_pythons()
+    log.debug("available Python candidates: %s", available)
+    current_python = str(Path(sys.executable).resolve())
+
+    for version, path in available:
+        if not version_satisfies_constraints(version, min_version, max_version):
+            log.debug("skipping python%s: does not satisfy constraints", version)
+            continue
+
+        resolved_path = str(Path(path).resolve())
+        if resolved_path == current_python:
+            # Already running this version
+            log.debug("already running best Python: %s", resolved_path)
+            return
+
+        # Try whether this Python works
+        try:
+            subprocess.check_call(
+                [resolved_path, "-c", "print(1)"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except subprocess.CalledProcessError:
+            log.debug("skipping python%s: subprocess check failed", version)
+            continue
+
+        # Re-exec with this Python
+        argv = [Path(path).name, *sys.argv]
+        os.environ["APPENV_BEST_PYTHON"] = path
+        log.debug("re-executing with Python: %s", path)
+        os.execv(path, argv)
+
+    # No suitable Python found
+    if max_version:
+        print(f"requires-python: >={min_version},<{max_version}")
+    else:
+        print(f"requires-python: >={min_version}")
+    print("Available versions:")
+    for version, path in available:
+        print(f"  python{version}: {path}")
+    sys.exit(EXIT_CODE_DATAERR)
+
+
+def find_available_pythons():
+    """Find all available Python versions in PATH.
+
+    Returns list of (version_str, path) tuples, sorted by version (newest first).
+    """
+    pythons = [
+        (f"3.{i}", path)
+        for i in range(10, 25)
+        if (path := shutil.which(f"python3.{i}"))
+    ]
+
+    # SPEC: macos-python-fallback — check unversioned python3 (Xcode on macOS)
+    bare_python = shutil.which("python3")
+    if bare_python:
+        resolved_existing = {Path(p).resolve() for _, p in pythons}
+        if Path(bare_python).resolve() not in resolved_existing:
+            try:
+                raw = subprocess.check_output(
+                    [bare_python, "--version"], stderr=subprocess.STDOUT
+                )
+                parts = raw.decode().strip().split()
+                # "Python 3.12.0" -> "3.12"
+                version_str = ".".join(parts[1].split(".")[:2])
+                major, minor = (int(x) for x in version_str.split("."))
+                if major >= 3 and minor >= 10:
+                    pythons.append((version_str, bare_python))
+            except (OSError, subprocess.CalledProcessError):
+                pass
+
+    pythons.sort(key=lambda x: [int(p) for p in x[0].split(".")], reverse=True)
+    return pythons
+
+
+def print_colored_diff(old_content, new_content, fromfile, tofile):
+    """Print a unified diff with ANSI colors.
+
+    Returns True if there were changes, False otherwise.
+    """
+    red = "\033[31m"
+    green = "\033[32m"
+    cyan = "\033[36m"
+    reset = "\033[0m"
+
+    diff = difflib.unified_diff(
+        old_content.splitlines(keepends=True),
+        new_content.splitlines(keepends=True),
+        fromfile=fromfile,
+        tofile=tofile,
+    )
+    has_changes = False
+    for line in diff:
+        has_changes = True
+        if line.startswith(("---", "+++", "@@")):
+            print(cyan + line + reset, end="")
+        elif line.startswith("-"):
+            print(red + line + reset, end="")
+        elif line.startswith("+"):
+            print(green + line + reset, end="")
+        else:
+            print(line, end="")
+    return has_changes
+
+
+def appenv_settings_from_env():
+    """Read settings from environment variables."""
+    verbose = os.environ.get("APPENV_VERBOSE") is not None
+    extras_raw = os.environ.get("APPENV_EXTRAS") or ""
+    extras = cast(list[str], [e.strip() for e in extras_raw.split(",") if e.strip()])
+    basedir_str = os.environ.get("APPENV_BASEDIR")
+    basedir = Path(basedir_str) if basedir_str else Path(__file__).parent
+
+    return AppEnvSettings(
+        verbose=verbose,
+        extras=extras,
+        basedir=basedir,
+    )
+
+
+class ColoredCallerFormatter(logging.Formatter):
+    """Formatter with dimmed caller info (funcName:lineno) and message."""
+
+    dim = "\033[2m"
+    reset = "\033[0m"
+
+    def format(self, record):
+        caller = f"{record.funcName}:{record.lineno}"
+        message = super().format(record)
+        return f"{self.dim}{caller}{self.reset} {message}"
+
+
+def setup_logging(command_name, log_dir, verbose):
+    """Setup command-specific logging with daily rotation."""
+    log_file = log_dir / f"{command_name}.log"
+
+    for handler in log.handlers[:]:
+        handler.close()
+    log.handlers.clear()
+    log.setLevel(logging.DEBUG)
+
+    file_handler = TimedRotatingFileHandler(log_file, when="midnight", backupCount=7)
+    file_handler.setLevel(logging.DEBUG)
+    file_formatter = logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(funcName)s:%(lineno)d %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    file_handler.setFormatter(file_formatter)
+    log.addHandler(file_handler)
+
+    if verbose:
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setLevel(logging.DEBUG)
+        console_formatter = ColoredCallerFormatter("%(message)s")
+        console_handler.setFormatter(console_formatter)
+        log.addHandler(console_handler)
+
+    log.debug("Logging configured log_file=%s verbose=%s", log_file, verbose)
 
 
 def main():
-    base = os.path.dirname(__file__)
-    original_cwd = os.getcwd()
+    # Clear PYTHONPATH to ensure clean isolated environment.
+    # Historical note: Some systems set PYTHONPATH globally which can interfere
+    # with venv isolation. Clearing it ensures the venv's site-packages take precedence.
+    os.environ.pop("PYTHONPATH", None)
+    settings = appenv_settings_from_env()
 
-    ensure_best_python(base)
-    # clear PYTHONPATH variable to get a defined environment
-    # XXX this is a bit of history. not sure whether its still needed. keeping
-    # it for good measure
-    if "PYTHONPATH" in os.environ:
-        del os.environ["PYTHONPATH"]
+    ensure_best_python(settings.basedir)
+
+    original_cwd = Path.cwd()
+    appenv = AppEnv(original_cwd, settings)
 
     # Determine whether we're being called as appenv or as an application name
-    application_name = os.path.splitext(os.path.basename(__file__))[0]
-
-    appenv = AppEnv(base, original_cwd)
+    application_name = Path(__file__).stem
     if application_name == "appenv":
-        appenv.meta()
+        if len(sys.argv) > 1:
+            remaining = sys.argv[1:]
+            appenv.meta(remaining)
+        else:
+            # No arguments: show help directly instead of passing "help" as command
+            appenv.meta([])
     else:
-        appenv.run(application_name, sys.argv[1:])
+        remaining = sys.argv[1:]
+        appenv.run(application_name, remaining)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main()
