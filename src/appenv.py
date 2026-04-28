@@ -13,7 +13,7 @@ Assumptions:
   - pyproject.toml next to the appenv file
 """
 
-__version__ = "2026.3.19"
+__version__ = "2026.4.28"
 
 import argparse
 import difflib
