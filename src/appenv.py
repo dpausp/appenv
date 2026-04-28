@@ -1010,7 +1010,13 @@ class AppEnv:
 
         local_version = self._extract_version(self.appenv_script)
         running_version = __version__
+        log.debug(
+            "Version check: local=%s, running=%s",
+            local_version,
+            running_version,
+        )
         if local_version == running_version:
+            log.debug("Versions match, skipping")
             return
 
         if update:
@@ -1030,6 +1036,7 @@ class AppEnv:
             )
         else:
             local_label = local_version if local_version else "unknown"
+            log.debug("Version mismatch, warning user")
             print(
                 f"Warning: {self.appenv_script} is version {local_label}, "
                 f"running appenv is {running_version}."
