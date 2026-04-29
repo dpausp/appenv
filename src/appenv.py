@@ -1238,8 +1238,7 @@ def ensure_lock_file(base):
 def ensure_gitignore(base, entries):
     """Ensure .gitignore contains the given entries.
 
-    Idempotent: reads existing entries, normalizes by stripping
-    leading/trailing '/', and appends only missing entries.
+    Idempotent: appends only missing entries, never modifies existing content.
     """
     gitignore_path = base / ".gitignore"
 
@@ -1248,27 +1247,12 @@ def ensure_gitignore(base, entries):
     else:
         existing_lines = []
 
-    def _normalize(entry):
-        return entry.strip("/")
-
-    normalized_set = {_normalize(line) for line in existing_lines if line.strip()}
-    missing = [e for e in entries if e not in normalized_set]
+    existing_set = {line for line in existing_lines if line.strip()}
+    missing = [e for e in entries if e not in existing_set]
 
     if not missing:
-        # Rewrite only if normalization would change existing lines
-        needs_rewrite = any(
-            _normalize(line) != line for line in existing_lines if line.strip()
-        )
-        if not needs_rewrite:
-            return
-        normalized_lines = [
-            _normalize(line) if line.strip() else line for line in existing_lines
-        ]
-        gitignore_path.write_text("\n".join(normalized_lines) + "\n")
-        print(f"Updated {gitignore_path}")
         return
 
-    # Append missing entries, preserving existing content as-is
     new_content = "\n".join(existing_lines)
     if new_content and not new_content.endswith("\n"):
         new_content += "\n"
