@@ -1265,7 +1265,7 @@ def ensure_gitignore(base, entries):
             _normalize(line) if line.strip() else line for line in existing_lines
         ]
         gitignore_path.write_text("\n".join(normalized_lines) + "\n")
-        print("Updated .gitignore")
+        print(f"Updated {gitignore_path}")
         return
 
     # Append missing entries, preserving existing content as-is
@@ -1275,9 +1275,9 @@ def ensure_gitignore(base, entries):
     new_content += "\n".join(missing) + "\n"
     gitignore_path.write_text(new_content)
     if existing_lines:
-        print("Updated .gitignore")
+        print(f"Updated {gitignore_path}")
     else:
-        print("Created .gitignore")
+        print(f"Created {gitignore_path}")
 
 
 def cmd(c, *, merge_stderr=True, quiet=False, cwd=None):
