@@ -1054,7 +1054,7 @@ class AppEnv:
 
             update_info = lock.diff_summary(old_lines)
 
-        print(update_info)
+        return update_info
 
     def _uv_sync(self, *, dev_mode, uv):
         # Sync dependencies (idempotent)
@@ -1265,6 +1265,7 @@ def ensure_gitignore(base, entries):
             _normalize(line) if line.strip() else line for line in existing_lines
         ]
         gitignore_path.write_text("\n".join(normalized_lines) + "\n")
+        print("Updated .gitignore")
         return
 
     # Append missing entries, preserving existing content as-is
@@ -1273,6 +1274,10 @@ def ensure_gitignore(base, entries):
         new_content += "\n"
     new_content += "\n".join(missing) + "\n"
     gitignore_path.write_text(new_content)
+    if existing_lines:
+        print("Updated .gitignore")
+    else:
+        print("Created .gitignore")
 
 
 def cmd(c, *, merge_stderr=True, quiet=False, cwd=None):
