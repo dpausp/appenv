@@ -79,7 +79,7 @@ def test_grouped_help_formatter_skips_command_not_in_choices():
     assert "Project:" in result
 
 
-def test_main_shows_grouped_help(monkeypatch, capsys, tmp_path):
+def test_main_shows_grouped_help(monkeypatch, capsys, tmp_path, patterns):
     """Test that help output shows commands grouped by category."""
     mock_ensure_python(monkeypatch)
     monkeypatch.setattr("sys.argv", ["appenv", "--help"])
@@ -94,29 +94,33 @@ def test_main_shows_grouped_help(monkeypatch, capsys, tmp_path):
         appenv.main()
 
     captured = capsys.readouterr()
-    output = captured.out
 
-    # Check for group headers
-    assert "Project:" in output
-    assert "Venv:" in output
-    assert "Tools:" in output
-    assert "Debug:" in output
+    patterns.main.in_order(
+        """\
+...Project:...
+...init...
+...migrate...
+...update-lockfile...
+...Venv:...
+...prepare...
+...reset...
+...Tools:...
+...python...
+...uv...
+...Debug:...
+...version...
+"""
+    )
 
-    # Check that commands are in correct groups
-    # Project group
-    assert "init" in output
-    assert "migrate" in output
-    assert "update-lockfile" in output
+    patterns.no_errors.optional("...")
 
-    # Venv group
-    assert "prepare" in output
-    assert "reset" in output
+    full_pattern = patterns.full
+    full_pattern.merge("main")
+    full_pattern.merge("no_errors")
 
-    # Tools group
-    assert "python" in output
+    full_pattern.generate_example()
 
-    # Debug group
-    assert "version" in output
+    assert full_pattern == captured.out
 
 
 def test_help_same_as_no_args(monkeypatch, capsys, tmp_path):
@@ -333,7 +337,7 @@ def test_run_sets_env_and_execs(monkeypatch, tmp_path, test_settings):
 
 
 def test_run_missing_binary_shows_helpful_error(
-    monkeypatch, tmp_path, capsys, test_settings
+    monkeypatch, tmp_path, capsys, test_settings, patterns
 ):
     env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
 
@@ -350,11 +354,29 @@ def test_run_missing_binary_shows_helpful_error(
 
     assert exc_info.value.code == appenv.EXIT_CODE_NOINPUT
 
-    output = capsys.readouterr().out
-    assert "Binary 'myapp' not found" in output
-    assert "python" in output
-    assert "ruff" in output
-    assert "[project.scripts]" in output
+    captured = capsys.readouterr()
+
+    patterns.main.in_order(
+        """\
+...Error: Binary '...' not found in .../bin/
+...The symlink '...' determines which binary gets executed.
+...Available binaries:
+...python...
+...ruff...
+...Either:
+...Install a package that provides the '...' binary
+...[project.scripts]...
+...Or create a symlink with the name of an installed binary"""
+    )
+    patterns.no_errors.optional("...")
+
+    full_pattern = patterns.full
+    full_pattern.merge("main")
+    full_pattern.merge("no_errors")
+
+    full_pattern.generate_example()
+
+    assert full_pattern == captured.out
 
 
 def test_python_method_calls_run(monkeypatch, tmp_path, test_settings):

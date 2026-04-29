@@ -6,6 +6,9 @@ lifecycle:
   design:
     completed_at: "2026-04-29T14:00:00Z"
     git_rev: "cd905c9"
+  implement:
+    completed_at: "2026-04-29T16:30:00Z"
+    git_rev: "866f3e8"
 ---
 
 # output-patterns
@@ -214,3 +217,31 @@ These strings appear in `src/appenv.py` at the listed lines. Pattern tests MUST 
 ### Test Strategy
 
 The pattern tests ARE the deliverable. TDD approach: define pattern strings from source first, write tests, run against real output. No separate test infrastructure needed — pytest-patterns is already installed and configured.
+
+## Appendix
+
+```yaml
+description: "Upgrade CLI output tests from loose keyword assertions to concrete pytest-patterns coverage for 6 multi-line output scenarios across 4 test files"
+id: output-patterns
+created_at: "2026-04-29T16:30:00Z"
+git_rev: "866f3e8"
+specs:
+  - ".agents/impl_specs/output-patterns.md"
+target_tests:
+  - file: "tests/impl_spec/test_output_patterns.py"
+    tests:
+      - test_help_pattern_uses_patterns_fixture
+      - test_help_pattern_has_group_headers_in_order
+      - test_help_pattern_has_full_assertion
+      - test_init_fresh_start_has_full_pattern_assertion
+      - test_init_fresh_start_uses_wildcard_dots
+      - test_migrate_full_flow_pattern_test_exists
+      - test_migrate_full_flow_uses_concrete_patterns
+      - test_editable_tests_use_concrete_warning_text
+      - test_editable_tests_no_loose_keyword_patterns
+      - test_binary_not_found_uses_patterns
+      - test_binary_not_found_has_full_pattern
+      - test_prepare_verbose_uses_main_in_order
+      - test_prepare_verbose_has_concrete_source_strings
+      - test_prepare_verbose_not_only_no_errors
+```

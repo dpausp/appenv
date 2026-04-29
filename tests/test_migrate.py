@@ -170,6 +170,45 @@ Use 'init' to create a new project."""
     assert full_pattern == captured.out
 
 
+def test_migrate_full_flow_pattern(
+    tmp_path, monkeypatch, capsys, patterns, test_settings
+):
+    """Pattern-test for the full migration flow from requirements.txt."""
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
+
+    (base / "requirements.txt").write_text("requests\n")
+
+    # Mock _uv_lock per spec::mocking-strategy (ensure_uv already mocked by conftest)
+    monkeypatch.setattr(appenv.AppEnv, "_uv_lock", lambda self, uv, diff=False: "")
+
+    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env.migrate()
+
+    captured = capsys.readouterr()
+
+    patterns.main.in_order(
+        """\
+Migrating from requirements.txt to pyproject.toml...
+...
+Preparing/cleaning .appenv directory ...
+...
+
+=== Pyproject Migration completed ===
+...requirements.{txt,lock} kept as legacy..."""
+    )
+
+    patterns.any.optional("...")
+    patterns.main.merge("any")
+
+    full_pattern = patterns.full
+    full_pattern.merge("main")
+
+    full_pattern.generate_example()
+
+    assert full_pattern == captured.out
+
+
 def test_migrate_editable_missing_package_warns(
     tmp_path, monkeypatch, capsys, patterns, test_settings
 ):
@@ -194,8 +233,9 @@ def test_migrate_editable_missing_package_warns(
     patterns.main.merge("any")
     patterns.main.in_order(
         """\
-...warning...skipped...
-...-e ./empty-dir..."""
+...warning: 1 editable install(s) skipped:
+...- -e ./empty-dir
+...add them manually to pyproject.toml if needed."""
     )
 
     patterns.no_errors.optional("...")
@@ -239,8 +279,9 @@ def test_migrate_editable_git_url_warns(
     patterns.main.merge("any")
     patterns.main.in_order(
         """\
-...warning...skipped...
-...git+https://github.com/user/repo.git..."""
+...warning: 1 editable install(s) skipped:
+...- -e git+https://github.com/user/repo.git
+...add them manually to pyproject.toml if needed."""
     )
 
     patterns.no_errors.optional("...")
@@ -291,7 +332,13 @@ def test_migrate_editable_mixed_valid_and_invalid(
 
     patterns.any.optional("...")
     patterns.main.merge("any")
-    patterns.main.in_order("...warning...skipped...")
+    patterns.main.in_order(
+        """\
+...warning: 2 editable install(s) skipped:
+...- -e ./valid-pkg
+...- -e ./empty-dir
+...add them manually to pyproject.toml if needed."""
+    )
 
     patterns.no_errors.optional("...")
     patterns.no_errors.refused("...error...")
@@ -338,9 +385,10 @@ def test_migrate_editable_warnings_updated(
     patterns.main.merge("any")
     patterns.main.in_order(
         """\
-...warning...skipped...
-...-e git+https://github.com/user/pkg.git...
-...add them manually..."""
+...warning: 2 editable install(s) skipped:
+...- -e git+https://github.com/user/pkg.git
+...- -e package @ ./path
+...add them manually to pyproject.toml if needed."""
     )
 
     patterns.no_errors.optional("...")

@@ -168,10 +168,13 @@ def test_prepare_verbose_output(
     # Clean up logging handler
     log.removeHandler(console_handler)
 
-    # Just verify verbose output contains key messages (any order, with extra logs OK)
-    assert "project base:" in out
-    assert "Creating fresh venv with uv ..." in out
-    assert "activated extras/optional deps:" in out
+    # Concrete debug labels from source in expected order
+    patterns.main.in_order(
+        """\
+...project base:...
+...Creating fresh venv with uv ...
+...activated extras/optional deps:..."""
+    )
 
     patterns.no_errors.optional("...")
     patterns.no_errors.refused("...error...")
@@ -180,6 +183,7 @@ def test_prepare_verbose_output(
     patterns.no_errors.refused("...failed...")
 
     full_pattern = patterns.full
+    full_pattern.merge("main")
     full_pattern.merge("no_errors")
 
     full_pattern.generate_example()

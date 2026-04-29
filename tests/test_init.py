@@ -51,28 +51,29 @@ def test_init_fresh_start_interactive(
     assert (base / "myapp").is_symlink()
 
     # Check the output with patterns
-    capsys.readouterr()
+    captured = capsys.readouterr()
+    patterns.any.optional("...")
     patterns.main.in_order(
-        r"""\
+        """\
 Let's create a new appenv project in ...
 I'll ask a few questions, then create pyproject.toml here
-
-Binary to expose \(creates \./<name> symlink\) \[app\]
-Enter dependencies \(one per line, empty line to finish\):
+Enter dependencies (one per line, empty line to finish):
   Default: myapp
-  Dependency: requests
-  Dependency: click
-  Dependency:
-Project name \[myapp-project\]: Description \[\]: My test app
-Minimum Python version \[3.13\]:
-Generating new lock file \.\.\.
-Updating lock file \.\.\.
-\\[\\+\\d+ lines\\]
+Created .../appenv
+Created .../pyproject.toml
+Created ./myapp -> appenv (runs the myapp binary)
+Generating new lock file ...
+Updating lock file ...
+Created .../.gitignore
 === Appenv project initialized ===
-
-Use `\\./myapp` to run the myapp binary
-        """
+Use `./myapp` to run the myapp binary"""
     )
+    patterns.main.merge("any")
+
+    full_pattern = patterns.full
+    full_pattern.merge("main")
+    full_pattern.generate_example()
+    assert full_pattern == captured.out
 
 
 def test_init_fresh_start_default_dependencies(
