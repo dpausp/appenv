@@ -60,8 +60,8 @@ Run the exposed binary:
 ├── pyproject.toml      # Project configuration and dependencies
 ├── docs/               # Documentation
 │   ├── index.md
-│   ├── user-guide/
-│   └── dev-guide/
+│   ├── user/
+│   └── dev/
 ├── src/                # Source code
 │   └── appenv.py
 └── tests/              # Test suite
@@ -70,17 +70,13 @@ Run the exposed binary:
 ## Conventions
 
 - appenv runs on Python 3.9+. Managed environments require Python 3.10+.
-- [uv](https://docs.astral.sh/uv/) must be available on the system (see {doc}`user-guide/installation`)
+- [uv](https://docs.astral.sh/uv/) must be available on the system (see {doc}`user/installation`)
 - The appenv filename becomes the CLI command via symlink dispatch — `./http` where `http → appenv`
 - `pyproject.toml` must be present next to the appenv file
 - Dependencies are resolved and locked by uv into `uv.lock`
 
 ```{toctree}
 :hidden:
-user-guide/installation
-user-guide/commands
-user-guide/workflows
-user-guide/locking-behavior
-dev-guide/architecture
-dev-guide/contributing
+user/index
+dev/index
 ```

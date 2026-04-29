@@ -116,12 +116,12 @@ uvx appenv migrate
 
 Full documentation at [flyingcircusio.github.io/appenv](https://flyingcircusio.github.io/appenv/):
 
-- [Installation](docs/user-guide/installation.md) -- how to get appenv
-- [Commands Reference](docs/user-guide/commands.md) -- all commands with options
-- [Workflows](docs/user-guide/workflows.md) -- common usage patterns
-- [Locking Behavior](docs/user-guide/locking-behavior.md) -- how uv.lock works
-- [Architecture](docs/dev-guide/architecture.md) -- internals and design
-- [Contributing](docs/dev-guide/contributing.md) -- development setup
+- [Installation](docs/user/installation.md) -- how to get appenv
+- [Commands Reference](docs/user/commands.md) -- all commands with options
+- [Workflows](docs/user/workflows.md) -- common usage patterns
+- [Locking Behavior](docs/user/locking-behavior.md) -- how uv.lock works
+- [Architecture](docs/dev/architecture.md) -- internals and design
+- [Contributing](docs/dev/contributing.md) -- development setup
 
 ## Environment Variables
 

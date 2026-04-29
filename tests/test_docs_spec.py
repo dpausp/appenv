@@ -37,15 +37,11 @@ class TestFlatToctree:
         assert "{toctree}" in content
 
     def test_toctree_lists_all_content_files(self):
-        """flat-toctree: toctree must reference all 6 content files."""
+        """flat-toctree: toctree must reference section indexes."""
         content = (ROOT / "docs" / "index.md").read_text()
         expected_refs = [
-            "user-guide/installation",
-            "user-guide/commands",
-            "user-guide/workflows",
-            "user-guide/locking-behavior",
-            "dev-guide/architecture",
-            "dev-guide/contributing",
+            "user/index",
+            "dev/index",
         ]
         for ref in expected_refs:
             assert ref in content, f"toctree must reference {ref}"
@@ -109,21 +105,21 @@ class TestFactualCorrections:
     def test_exit_code_usage_in_commands(self):
         """factual-corrections: commands.md exit codes table
         must include code 64 (USAGE)."""
-        content = (ROOT / "docs" / "user-guide" / "commands.md").read_text()
+        content = (ROOT / "docs" / "user" / "commands.md").read_text()
         # Find exit codes section and verify 64/USAGE
         assert "64" in content, "Exit code 64 must appear in commands.md"
         assert "USAGE" in content, "Exit code name USAGE must appear in commands.md"
 
     def test_exit_code_usage_in_architecture(self):
         """factual-corrections: architecture.md must mention exit code 64 (USAGE)."""
-        content = (ROOT / "docs" / "dev-guide" / "architecture.md").read_text()
+        content = (ROOT / "docs" / "dev" / "architecture.md").read_text()
         assert "64" in content, "Exit code 64 must appear in architecture.md"
         assert "USAGE" in content, "Exit code name USAGE must appear in architecture.md"
 
     def test_pyi_stub_claim_corrected(self):
         """factual-corrections: architecture.md must not claim
         .pyi files are 'not currently used'."""
-        content = (ROOT / "docs" / "dev-guide" / "architecture.md").read_text()
+        content = (ROOT / "docs" / "dev" / "architecture.md").read_text()
         assert "not currently used" not in content
 
 
@@ -132,7 +128,7 @@ class TestRunCommandRemoval:
 
     def test_no_run_command_in_commands_doc(self):
         """run-command-removal: commands.md must not have a ## run section heading."""
-        content = (ROOT / "docs" / "user-guide" / "commands.md").read_text()
+        content = (ROOT / "docs" / "user" / "commands.md").read_text()
         # Check for run as a command section header (## run or ## run (deprecated))
         lines = content.splitlines()
         for line in lines:
@@ -161,7 +157,7 @@ class TestQuickStartRewrite:
     def test_prompt_text_matches_source(self):
         """quick-start-rewrite / factual-corrections:
         init prompt must match source at appenv.py:834."""
-        content = (ROOT / "docs" / "user-guide" / "commands.md").read_text()
+        content = (ROOT / "docs" / "user" / "commands.md").read_text()
         assert "Binary to expose" in content, (
             "commands.md must contain correct prompt text 'Binary to expose'"
         )

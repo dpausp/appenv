@@ -52,7 +52,7 @@ except subprocess.CalledProcessError as e:
 uv run pytest
 
 # Specific file
-uv run pytest tests/test_pyproject.py
+uv run pytest tests/test_init.py
 
 # With coverage report
 uv run pytest --cov=appenv --cov-report=term-missing
@@ -83,8 +83,8 @@ Docs are built with Sphinx using MyST markdown and autoapi:
 tox -e docs
 ```
 
-- **User docs**: `docs/user-guide/` — usage and workflows
-- **Dev docs**: `docs/dev-guide/` — architecture and this guide
+- **User docs**: `docs/user/` — usage and workflows
+- **Dev docs**: `docs/dev/` — architecture and this guide
 - **API reference**: auto-generated from source by autoapi — do not write API docs by hand
 
 See {doc}`architecture` for how components interact.

@@ -76,7 +76,7 @@ ln -s appenv pytest
 
 ### Options
 
-- `--path <directory>` — Create project in specified directory (default: current directory)
+- `path` — Create project in specified directory (default: current directory)
 
 ### Non-Interactive Usage
 
