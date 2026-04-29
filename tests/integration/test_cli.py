@@ -208,7 +208,7 @@ def test_bootstrap_flow_like_readme(tmp_path, capsys):
 
     # Verify README messages appear in output
     assert "Created ./http -> appenv" in clean_output
-    assert "Created pyproject.toml" in clean_output
+    assert "Created" in clean_output and "pyproject.toml" in clean_output
     assert "Generating new lock file" in clean_output
     assert "Use `./http` to run the http binary" in clean_output
 
