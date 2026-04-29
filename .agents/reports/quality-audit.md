@@ -146,3 +146,32 @@ Full CLI test not triggered — existing E2E evidence sufficient. All 9 subcomma
 ## Raw Data Location
 
 `.agents/tmp/quality/` — inventory/, baseline/, extreme/, analysis/, e2e/
+
+## Tidy Session — 2026-04-29
+
+### Mock Hardening
+- Bare mocks before: 0 → after: 0
+- Migrated to typed: 0
+- Untouchable: 0
+
+### Suppression Cleanup
+- Linter suppressions removed: 0 (all 2 noqa still needed)
+- Type-check suppressions removed: 0 (0 present)
+- Test skips removed: 0 (all 2 skipif still needed)
+- Restored (still needed): 0
+
+### Stub Completion
+- Functions missing from .pyi before: 1 (ensure_gitignore)
+- Functions missing from .pyi after: 0
+- Added: `def ensure_gitignore(base: Path, entries: list[str]) -> None: ...`
+
+### Post-Tidy Gates
+| Tool | Before | After |
+|------|--------|-------|
+| ruff check src/ | 0 issues | 0 issues |
+| ty check src/ | 0 errors | 0 errors |
+| pytest (default) | 193 passed | 193 passed |
+
+### Skipped (Not Mechanical)
+- test_architecture.py — requires design decision about enforcement rules
+- Symlink-based binary execution E2E test — requires design decision about test scope
