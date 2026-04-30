@@ -3,7 +3,7 @@
 ```{toctree}
 :titlesonly:
 installation
-commands
 workflows
+commands
 locking-behavior
 ```

@@ -31,29 +31,6 @@ See {doc}`workflows` for detailed examples.
 
 Create a new `pyproject.toml` project interactively.
 
-```text
-$ ./appenv init
-Let's create a new appenv project in /home/user/myproject
-I'll ask a few questions, then create pyproject.toml here
-
-Binary to expose (creates ./<name> symlink) [app] http
-Enter dependencies (one per line, empty line to finish):
-  Default: http
-  Dependency: httpie
-  Dependency:
-Project name [myproject]: http
-Description []: HTTP CLI
-Minimum Python version [3.13]: 3.14
-Created pyproject.toml
-Generating new lock file ...
-✓ Created (+273 lines)
-
-=== Appenv project initialized ===
-
-Use `./http` to run the http binary
-```
-
-
 ### Prompts
 
 1. Binary to expose — creates `./<name>` symlink that runs the installed `<name>` binary (default: `app`)

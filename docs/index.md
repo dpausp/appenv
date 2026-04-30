@@ -35,6 +35,13 @@ checkout gets the same tools at the same versions — locally and on remote mach
 - `pyproject.toml` must be present next to the appenv file
 - Dependencies are resolved and locked by uv into `uv.lock`
 
+## Getting Started
+
+New to appenv? Start with the {doc}`user/workflows` — practical examples for setting up
+a project, adding dependencies, and integrating with CI/CD.
+
+For reference material, see {doc}`user/commands` and {doc}`user/locking-behavior`.
+
 ```{toctree}
 :hidden:
 user/index

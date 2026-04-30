@@ -11,7 +11,7 @@ Someone gave you a project that already uses appenv? Just run the command:
 
 ```bash
 git clone <project> && cd <project>
-./packaged_app    # First run sets up everything automatically
+./http    # First run sets up everything automatically
 ```
 
 No `uv.lock` yet? Generate it:
@@ -34,9 +34,8 @@ uvx appenv migrate
 ## New Project
 
 appenv is distributed as a standalone script. Just use uvx or download it yourself.
-`appenv init` will as you some questions and set up the project. The example
-assumes that you want to run a binary called `packaged_app` from a published Python package
-with the same name.
+`appenv init` will ask you some questions and set up the project. The example
+assumes that you want to run a binary called `http` from the `httpie` package.
 
 ### uv
 
@@ -59,8 +58,8 @@ chmod +x appenv
 **What just happened?**
 
 - appenv installed itself inplace by adding the `./appenv` script.
-- `init` created `pyproject.toml` and a symlink `packaged_app → appenv`.
-- `./packaged_app` set up the venv with pinned versions from `uv.lock`, then ran the `packaged_app` binary (from the `packaged_app` package)
+- `init` created `pyproject.toml` and a symlink `http → appenv`.
+- `./http` set up the venv with pinned versions from `uv.lock`, then ran the `http` binary (from the httpie package)
 
 
 The repository now contains:
@@ -68,7 +67,7 @@ The repository now contains:
 ```
 myproject/
 ├── appenv          # The appenv script (single file, committed to git)
-├── packaged_app -> appenv  # Runs the `packaged_app` binary from installed deps
+├── http -> appenv  # Runs the `http` binary from installed deps
 ├── pyproject.toml  # Project config and dependency list
 └── uv.lock         # Exact versions of all dependencies (committed to git)
 ```
