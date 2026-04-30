@@ -37,9 +37,9 @@ appenv is distributed as a standalone script. Just use uvx or download it yourse
 `appenv init` will ask you some questions and set up the project. The example
 assumes that you want to run a binary called `http` from the `httpie` package.
 
-### uv
+### uvx (uv)
 
-Use this when you have `uv` installed to set up everything in one line:
+`uvx` is part of [uv](https://docs.astral.sh/uv/) — the easiest way to start:
 
 ```bash
 uvx appenv init
@@ -47,7 +47,7 @@ uvx appenv init
 
 ### Manual Download
 
-Or download appenv to your current directory and run it:
+No uv installed? Download appenv directly:
 
 ```bash
 curl -sL https://raw.githubusercontent.com/flyingcircusio/appenv/master/src/appenv.py -o appenv
