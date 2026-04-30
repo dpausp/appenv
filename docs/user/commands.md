@@ -53,7 +53,6 @@ Generating new lock file ...
 Use `./http` to run the http binary
 ```
 
-Creates `pyproject.toml`, `uv.lock`, and a `.gitignore` with entries for `.venv`, `.appenv`, and `.batou-lock`.
 
 ### Prompts
 

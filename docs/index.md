@@ -4,46 +4,6 @@ appenv is a single Python file that pins packages to exact versions and exposes
 their binaries via symlinks. Drop it into a repository, commit it, and every
 checkout gets the same tools at the same versions — locally and on remote machines.
 
-No venv activation, no pip, no Python packaging knowledge required.
-
-## Quick Start
-
-```bash
-mkdir myproject && cd myproject
-curl -sL https://raw.githubusercontent.com/flyingcircusio/appenv/master/src/appenv.py -o appenv
-chmod +x appenv
-./appenv init
-```
-
-The init command walks you through project setup:
-
-```
-Let's create a new appenv project in /home/user/myproject
-I'll ask a few questions, then create pyproject.toml here
-
-Binary to expose (creates ./<name> symlink) [app] http
-
-Enter dependencies (one per line, empty line to finish):
-  Default: http
-  Dependency: httpie
-  Dependency:
-
-Project name [myproject]:
-Description []: My HTTP client
-Minimum Python version [3.13]:
-Created pyproject.toml
-Generating new lock file ...
-
-=== Appenv project initialized ===
-
-Use `./http` to run the http binary
-```
-
-Run the exposed binary:
-
-```bash
-./http GET https://httpbin.org/get
-```
 
 ## Core Concepts
 
