@@ -14,8 +14,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import pytest
-
 TESTS_DIR = Path(__file__).parent.parent
 TEST_MAIN = TESTS_DIR / "test_main.py"
 TEST_INIT = TESTS_DIR / "test_init.py"
@@ -32,12 +30,6 @@ def _read(path: Path) -> str:
 # ============================================================================
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Phase 2 contract: test_main_shows_grouped_help must use "
-        "patterns.main.in_order with group headers"
-    )
-)
 def test_help_pattern_uses_patterns_fixture():
     """test_main_shows_grouped_help must accept and use the patterns fixture.
 
@@ -51,12 +43,6 @@ def test_help_pattern_uses_patterns_fixture():
     assert "patterns" in func_body
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Phase 2 contract: test_main_shows_grouped_help must use "
-        "in_order with group headers"
-    )
-)
 def test_help_pattern_has_group_headers_in_order():
     """The help pattern test must use in_order with the 4 group headers."""
     source = _read(TEST_MAIN)
@@ -78,12 +64,6 @@ def test_help_pattern_has_group_headers_in_order():
     assert "version" in func_body
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Phase 2 contract: test_main_shows_grouped_help must assert "
-        "full_pattern == captured.out"
-    )
-)
 def test_help_pattern_has_full_assertion():
     """The help pattern test must have the standard full_pattern assertion."""
     source = _read(TEST_MAIN)
@@ -102,12 +82,6 @@ def test_help_pattern_has_full_assertion():
 # ============================================================================
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Phase 2 contract: test_init_fresh_start_interactive must "
-        "assert full_pattern == captured.out"
-    )
-)
 def test_init_fresh_start_has_full_pattern_assertion():
     """test_init_fresh_start_interactive must assert full_pattern == captured.out.
 
@@ -124,12 +98,6 @@ def test_init_fresh_start_has_full_pattern_assertion():
     assert "assert full_pattern == captured.out" in func_body
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Phase 2 contract: test_init_fresh_start_interactive must "
-        "use ... not escaped dots"
-    )
-)
 def test_init_fresh_start_uses_wildcard_dots():
     """test_init_fresh_start_interactive must use ... (wildcard) not
     escaped dots.
@@ -153,12 +121,6 @@ def test_init_fresh_start_uses_wildcard_dots():
 # ============================================================================
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Phase 2 contract: test_migrate.py must have a new "
-        "migrate full flow pattern test"
-    )
-)
 def test_migrate_full_flow_pattern_test_exists():
     """A new test must exist in test_migrate.py that patterns the full
     migrate flow.
@@ -185,12 +147,6 @@ def test_migrate_full_flow_pattern_test_exists():
     )
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Phase 2 contract: migrate full flow test must use in_order "
-        "with concrete strings"
-    )
-)
 def test_migrate_full_flow_uses_concrete_patterns():
     """The migrate full flow test must use in_order with source-verified
     strings."""
@@ -212,12 +168,6 @@ def test_migrate_full_flow_uses_concrete_patterns():
 # ============================================================================
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Phase 2 contract: editable tests must use concrete warning "
-        "text, not loose keywords"
-    )
-)
 def test_editable_tests_use_concrete_warning_text():
     """Editable tests must use concrete warning text from source.
 
@@ -242,12 +192,6 @@ def test_editable_tests_use_concrete_warning_text():
         )
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Phase 2 contract: editable tests must not use loose "
-        "...warning...skipped... patterns"
-    )
-)
 def test_editable_tests_no_loose_keyword_patterns():
     """Editable tests must not use ultra-loose keyword patterns.
 
@@ -268,9 +212,6 @@ def test_editable_tests_no_loose_keyword_patterns():
 # ============================================================================
 
 
-@pytest.mark.xfail(
-    reason=("Phase 2 contract: binary-not-found test must use patterns fixture")
-)
 def test_binary_not_found_uses_patterns():
     """test_run_missing_binary_shows_helpful_error must use patterns fixture.
 
@@ -293,11 +234,6 @@ def test_binary_not_found_uses_patterns():
     )
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Phase 2 contract: binary-not-found test must use in_order with full output"
-    )
-)
 def test_binary_not_found_has_full_pattern():
     """Binary-not-found test must use patterns.main.in_order with all
     source strings."""
@@ -317,12 +253,6 @@ def test_binary_not_found_has_full_pattern():
 # ============================================================================
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Phase 2 contract: test_prepare_verbose_output must use "
-        "in_order with concrete strings"
-    )
-)
 def test_prepare_verbose_uses_main_in_order():
     """test_prepare_verbose_output must use patterns.main.in_order with
     concrete debug labels.
@@ -344,12 +274,6 @@ def test_prepare_verbose_uses_main_in_order():
     )
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Phase 2 contract: test_prepare_verbose_output pattern must "
-        "include concrete source strings in in_order"
-    )
-)
 def test_prepare_verbose_has_concrete_source_strings():
     """Verbose prepare pattern must include actual debug labels in
     in_order call.
@@ -373,12 +297,6 @@ def test_prepare_verbose_has_concrete_source_strings():
     assert "activated extras/optional deps:" in in_order_block
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Phase 2 contract: test_prepare_verbose_output must not "
-        "rely on only no_errors pattern"
-    )
-)
 def test_prepare_verbose_not_only_no_errors():
     """test_prepare_verbose_output must have more than just no_errors.
 
