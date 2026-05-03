@@ -1142,7 +1142,7 @@ class AppEnv:
                 venv_version_str = result.decode().strip()
                 # Extract major.minor from e.g. "Python 3.10.0"
                 venv_version = ".".join(venv_version_str.split()[1].split(".")[:2])
-            except (ValueError, IndexError) as e:
+            except (ValueError, IndexError, OSError) as e:
                 log.debug("stale-venv check failed: %s", e)
                 print("Recreating venv: Python version could not be determined")
                 shutil.rmtree(self.venv_real)
@@ -1387,6 +1387,25 @@ def find_available_pythons():
         for i in range(10, 25)
         if (path := shutil.which(f"python3.{i}"))
     ]
+
+    # SPEC: macos-python-fallback — check unversioned python3 (Xcode on macOS)
+    bare_python = shutil.which("python3")
+    if bare_python:
+        resolved_existing = {Path(p).resolve() for _, p in pythons}
+        if Path(bare_python).resolve() not in resolved_existing:
+            try:
+                raw = subprocess.check_output(
+                    [bare_python, "--version"], stderr=subprocess.STDOUT
+                )
+                parts = raw.decode().strip().split()
+                # "Python 3.12.0" -> "3.12"
+                version_str = ".".join(parts[1].split(".")[:2])
+                major, minor = (int(x) for x in version_str.split("."))
+                if major >= 3 and minor >= 10:
+                    pythons.append((version_str, bare_python))
+            except (OSError, subprocess.CalledProcessError):
+                pass
+
     pythons.sort(key=lambda x: [int(p) for p in x[0].split(".")], reverse=True)
     return pythons
 

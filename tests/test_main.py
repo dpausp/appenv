@@ -514,6 +514,96 @@ def test_find_available_pythons_sorting(monkeypatch):
     versions = [v for v, _ in result]
     assert versions == ["3.14", "3.13", "3.12", "3.11", "3.10"]
 
+def test_find_available_pythons_bare_python3_fallback(monkeypatch):
+    """find_available_pythons discovers unversioned python3 (macOS Xcode).
+
+    When python3 exists but no python3.X symlinks point to it, the function
+    should still discover it via subprocess version detection.
+    """
+
+    def mock_which(name):
+        if name == "python3":
+            return "/usr/bin/python3"
+        return None
+
+    monkeypatch.setattr(shutil, "which", mock_which)
+    monkeypatch.setattr(
+        subprocess,
+        "check_output",
+        lambda cmd, **kwargs: b"Python 3.12.0",
+    )
+
+    result = appenv.find_available_pythons()
+
+    assert len(result) == 1
+    assert result[0] == ("3.12", "/usr/bin/python3")
+
+
+def test_find_available_pythons_bare_python3_deduplication(monkeypatch):
+    """find_available_pythons skips python3 if its path already in the list.
+
+    On systems where python3 -> python3.12, the resolved path should be
+    deduplicated so we don't list the same binary twice.
+    """
+
+    def mock_which(name):
+        if name == "python3.12":
+            return "/usr/bin/python3.12"
+        if name == "python3":
+            return "/usr/bin/python3.12"
+        return None
+
+    monkeypatch.setattr(shutil, "which", mock_which)
+    monkeypatch.setattr(
+        subprocess,
+        "check_output",
+        lambda cmd, **kwargs: b"Python 3.12.0",
+    )
+
+    result = appenv.find_available_pythons()
+
+    # Should only appear once (deduplicated by resolved path)
+    assert len(result) == 1
+    assert result[0][0] == "3.12"
+
+
+def test_find_available_pythons_bare_python3_too_old(monkeypatch):
+    """find_available_pythons skips python3 if version < 3.10."""
+
+    def mock_which(name):
+        if name == "python3":
+            return "/usr/bin/python3"
+        return None
+
+    monkeypatch.setattr(shutil, "which", mock_which)
+    monkeypatch.setattr(
+        subprocess,
+        "check_output",
+        lambda cmd, **kwargs: b"Python 2.7.18",
+    )
+
+    result = appenv.find_available_pythons()
+
+    assert len(result) == 0
+
+
+def test_find_available_pythons_bare_python3_subprocess_fails(monkeypatch):
+    """find_available_pythons handles subprocess failure for python3."""
+
+    def mock_which(name):
+        if name == "python3":
+            return "/usr/bin/python3"
+        return None
+
+    monkeypatch.setattr(shutil, "which", mock_which)
+    monkeypatch.setattr(
+        subprocess,
+        "check_output",
+        lambda cmd, **kwargs: (_ for _ in ()).throw(OSError("broken")),
+    )
+
+    result = appenv.find_available_pythons()
+    assert len(result) == 0
 
 def test_version_satisfies_constraints_min_only():
     """version_satisfies_constraints with only minimum version."""

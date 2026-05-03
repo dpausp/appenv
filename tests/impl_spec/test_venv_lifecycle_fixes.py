@@ -159,6 +159,82 @@ def test_prepare_venv_recreates_on_version_mismatch(
     # Cleanup
     os.environ.pop("UV_PROJECT_ENVIRONMENT", None)
 
+def test_prepare_venv_recreates_on_oserror(
+    tmp_path, monkeypatch, test_settings
+):
+    """_prepare_venv recreates venv when Python binary raises OSError.
+
+    On NixOS, a garbage-collected Python can leave behind a binary that
+    exists on disk but raises OSError when executed (missing loader).
+    The fix broadens the except clause to catch OSError alongside
+    ValueError and IndexError.
+    """
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
+
+    (base / "pyproject.toml").write_text(
+        '[project]\nname = "test"\nrequires-python = ">=3.12"\n'
+    )
+    (base / "uv.lock").write_text("version = 1\n")
+
+    settings = test_settings(Path.cwd())
+    env = appenv.AppEnv(Path.cwd(), settings)
+
+    # Create venv with a binary that exists but raises OSError
+    venv = env.appenv_dir / "venv"
+    venv.mkdir(parents=True)
+    (venv / "bin").mkdir()
+    python_bin = venv / "bin" / "python"
+    python_bin.write_text("#!/bin/sh\nexit 1\n")
+    python_bin.chmod(0o755)
+
+    venv_create_calls = []
+
+    class MockUvBin:
+        def __init__(self):
+            self.bin = Path("/usr/bin/uv")
+            self._version = UvVersion(0, 5, 0)
+
+        @property
+        def version(self):
+            return self._version
+
+        def cmd(self, args, verbose=False, **kwargs):
+            if "venv" in args:
+                venv_create_calls.append(list(args))
+                if not venv.exists():
+                    venv.mkdir(parents=True, exist_ok=True)
+                    (venv / "bin").mkdir(exist_ok=True)
+                    py = venv / "bin" / "python"
+                    py.write_text("#!/bin/sh\necho Python 3.12.0\n")
+                    py.chmod(0o755)
+            return ""
+
+    mock_uv = MockUvBin()
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: mock_uv)
+
+    # cmd() raises OSError only on first call (broken binary before rebuild)
+    broken_python_str = str(python_bin)
+    cmd_calls = [0]
+
+    def mock_cmd(c, **kwargs):
+        if broken_python_str in str(c):
+            cmd_calls[0] += 1
+            if cmd_calls[0] == 1:
+                msg = "cannot execute Python: missing loader"
+                raise OSError(msg)
+        return b"Python 3.12.0"
+    monkeypatch.setattr(appenv, "cmd", mock_cmd)
+
+    env._prepare_venv(dev_mode=False)
+
+    # The OSError should trigger venv rebuild
+    assert len(venv_create_calls) >= 1, (
+        "venv should be recreated when Python binary raises OSError"
+    )
+
+    os.environ.pop("UV_PROJECT_ENVIRONMENT", None)
+
 
 def test_prepare_venv_checks_version_compatibility(
     tmp_path, monkeypatch, test_settings
