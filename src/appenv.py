@@ -49,7 +49,7 @@ class GroupedHelpFormatter(argparse.HelpFormatter):
 
     def _format_action(self, action):
         groups = (
-            ("Project", ["init", "migrate", "update-lockfile"]),
+            ("Project", ["init", "migrate", "self-update", "update-lockfile"]),
             ("Venv", ["prepare", "reset"]),
             ("Tools", ["python", "uv"]),
             ("Debug", ["version"]),
@@ -746,6 +746,14 @@ class AppEnv:
         )
         p.set_defaults(func=self.migrate)
 
+        p = subparsers.add_parser("self-update", help="Update the local appenv script.")
+        p.add_argument(
+            "--check",
+            action="store_true",
+            help="Check for version drift without updating.",
+        )
+        p.set_defaults(func=self.self_update)
+
         p = subparsers.add_parser("reset", help="Reset the environment.")
         p.set_defaults(func=self.reset)
 
@@ -923,6 +931,38 @@ class AppEnv:
         print("\n=== Pyproject Migration completed ===")
         print("requirements.{txt,lock} kept as legacy. You can delete these files now.")
 
+    def self_update(self, args=None, remaining=None):
+        """Update the local ./appenv script to match the running version."""
+        if not self.appenv_script.exists():
+            print(f"Error: No appenv script found at {self.appenv_script}")
+            sys.exit(EXIT_CODE_NOINPUT)
+
+        local_version = self._extract_version(self.appenv_script)
+        running_version = __version__
+        local_label = local_version if local_version else "unknown"
+
+        if local_version == running_version:
+            print(
+                f"{self.appenv_script} is already up-to-date "
+                f"(version {running_version})."
+            )
+            if args and args.check:
+                sys.exit(0)
+            return
+
+        if args and args.check:
+            print(
+                f"Version drift detected: {self.appenv_script} is {local_label}, "
+                f"running appenv is {running_version}."
+            )
+            sys.exit(1)
+
+        # Perform the update
+        bootstrap_data = Path(__file__).read_bytes()
+        self.appenv_script.write_bytes(bootstrap_data)
+        self.appenv_script.chmod(0o755)
+        print(f"Updated {self.appenv_script} ({local_label} -> {running_version})")
+
     def python(self, args, remaining):
         self.run("python", remaining)
 
@@ -1032,7 +1072,7 @@ class AppEnv:
                 f"Warning: {self.appenv_script} is version {local_label}, "
                 f"running appenv is {running_version}."
             )
-            print("Run './appenv migrate' to update the script.")
+            print("Run './appenv self-update' to update the script.")
 
     @staticmethod
     def _extract_version(script):

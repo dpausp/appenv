@@ -120,6 +120,51 @@ See {doc}`workflows` for a full migration walkthrough.
 - No `requirements.txt` found — exits normally with a suggestion to use `init`
 - `pyproject.toml` already has `[project]` section — exits normally without changes
 
+## self-update
+
+Update the local `./appenv` script to match the currently running version.
+
+```text
+./appenv self-update
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--check` | Check for version drift without updating (exit 0 if up-to-date, exit 1 if drift detected) |
+
+### What It Does
+
+- Compares the `__version__` in the local `./appenv` script with the currently running version
+- If versions differ: replaces the script with the running version
+- If versions match: reports that the script is already up-to-date
+- With `--check`: only reports drift status, does not modify any files
+
+### Running via uvx
+
+```text
+uvx appenv self-update
+```
+
+This downloads the latest appenv and updates the local script.
+
+### --check Mode
+
+Use `--check` in CI or scripts to detect version drift:
+
+```text
+./appenv self-update --check
+```
+
+Exit codes:
+- 0 — script is up-to-date
+- 1 — version drift detected
+
+### Failure Cases
+
+- No `./appenv` script found — prints error, exits with code 67 (NOINPUT)
+
 ## reset
 
 Remove the virtual environment and clean up legacy artifacts.

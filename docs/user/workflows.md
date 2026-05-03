@@ -261,7 +261,18 @@ APPENV_EXTRAS=dev ./appenv prepare
 ## Updating appenv Itself
 
 ```text
-# Download latest version
+# Update the local ./appenv script
+uvx appenv self-update
+
+# Or check if update is needed (useful in CI)
+./appenv self-update --check
+```
+
+`self-update` compares the local script version with the running version and replaces it if they differ. Run via `uvx` to get the latest published version.
+
+Alternatively, download manually:
+
+```text
 curl -sL https://raw.githubusercontent.com/flyingcircusio/appenv/master/src/appenv.py -o appenv
 chmod +x appenv
 ```

@@ -448,4 +448,4 @@ def test_init_warns_on_version_mismatch(
     assert "Warning" in captured.out
     assert "0.0.1" in captured.out
     assert appenv.__version__ in captured.out
-    assert "migrate" in captured.out
+    assert "self-update" in captured.out
