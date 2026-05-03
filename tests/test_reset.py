@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 import appenv
@@ -6,23 +5,23 @@ import appenv
 
 def test_reset_nonexisting_envdir_silent(tmp_path, test_settings):
     env = appenv.AppEnv(Path.cwd(), test_settings(tmp_path))
-    assert not os.path.exists(env.appenv_dir)
+    assert not env.appenv_dir.exists()
     env.reset()
-    assert not os.path.exists(env.appenv_dir)
-    assert os.path.exists(str(tmp_path))
+    assert not env.appenv_dir.exists()
+    assert tmp_path.exists()
 
 
 def test_reset_removes_envdir_with_subdirs(tmp_path, test_settings):
     """reset() cleans up contents in .appenv."""
     env = appenv.AppEnv(Path.cwd(), test_settings(tmp_path))
-    os.makedirs(env.appenv_dir)
+    env.appenv_dir.mkdir(parents=True)
     # Create some subdirectories
     (env.appenv_dir / "subdir1").mkdir()
     (env.appenv_dir / "subdir2").mkdir()
-    assert os.path.exists(env.appenv_dir)
+    assert env.appenv_dir.exists()
     env.reset()
     # .appenv should still exist but be empty (or only contain .uv)
-    assert os.path.exists(env.appenv_dir)
+    assert env.appenv_dir.exists()
     # No subdirectories left (except possibly .uv)
     remaining = list(env.appenv_dir.iterdir())
     assert all(p.name == ".uv" for p in remaining)

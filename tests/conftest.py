@@ -35,7 +35,7 @@ def workdir(tmp_path):
     """Change to tmp_path for test duration, restore afterwards."""
     # Handle case where previous test removed current directory
     try:
-        old = os.getcwd()
+        old = Path.cwd()
     except OSError:
         old = str(tmp_path)
     os.chdir(tmp_path)

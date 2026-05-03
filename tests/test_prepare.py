@@ -733,7 +733,7 @@ def test_prepare_pyproject_updates_broken_symlink(
 
     # Symlink should now point to correct location
     assert venv_link.is_symlink()
-    assert os.readlink(venv_link) == ".appenv/venv"
+    assert venv_link.readlink() == Path(".appenv/venv")
 
 
 def test_prepare_pyproject_keeps_real_venv_directory(

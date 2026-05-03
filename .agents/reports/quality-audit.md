@@ -273,3 +273,39 @@ Full CLI test not triggered — existing E2E evidence sufficient.
 
 ## Raw Data Location
 `.agents/tmp/quality/` — inventory/, baseline/, extreme/, analysis/, e2e/
+
+## Tidy Session — 2026-05-03
+
+### Mock Hardening
+- Bare mocks before: 0 → after: 0
+- Migrated to typed: 0
+- Untouchable: 0
+
+### Suppression Cleanup
+- Linter suppressions removed: 0 (both noqa still needed)
+- Type-check suppressions removed: 0
+- Test skips removed: 0
+- PTH pathlib conversions: 8 → 0 violations
+  - tests/conftest.py: os.getcwd() → Path.cwd() (1 fix)
+  - tests/test_prepare.py: os.readlink() → venv_link.readlink() (1 fix)
+  - tests/test_reset.py: os.path.exists → .exists() (4 fixes), os.makedirs → .mkdir(parents=True) (1 fix), import os removed (1 fix)
+
+### Post-Tidy Gates
+| Tool | Before | After |
+|------|--------|-------|
+| ruff (all) | 0 issues | 0 issues |
+| ruff (PTH) | 8 violations | **0 violations** |
+| ty | 0 errors | 0 errors |
+| pytest | 214 passed | **219 passed** |
+
+### Skipped (Not Mechanical)
+- ANN (1724) — missing annotations, design decision
+- S101 (517) — assert in tests, standard pytest
+- ARG (294) — unused args, argparse handler pattern
+- T201 (88) — print in CLI tool, by design
+- D (66+) — missing docstrings, design decision
+- ERA (1) — false positive (test documentation comment)
+- argparse/logging — justified deviation, zero runtime deps
+- NAV-005 slow tests — acceptable exclusion, runs in CI
+- NAV-006 architecture enforcement — N/A for single-file project
+- NAV-008 property-based testing — needs design decision
