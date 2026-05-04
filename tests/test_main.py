@@ -514,6 +514,7 @@ def test_find_available_pythons_sorting(monkeypatch):
     versions = [v for v, _ in result]
     assert versions == ["3.14", "3.13", "3.12", "3.11", "3.10"]
 
+
 def test_find_available_pythons_bare_python3_fallback(monkeypatch):
     """find_available_pythons discovers unversioned python3 (macOS Xcode).
 
@@ -604,6 +605,7 @@ def test_find_available_pythons_bare_python3_subprocess_fails(monkeypatch):
 
     result = appenv.find_available_pythons()
     assert len(result) == 0
+
 
 def test_version_satisfies_constraints_min_only():
     """version_satisfies_constraints with only minimum version."""
@@ -1261,3 +1263,83 @@ def test_remove_path_nonexistent(tmp_path):
     """remove_path() is a no-op for nonexistent paths."""
     missing = tmp_path / "does_not_exist"
     appenv.remove_path(missing)  # should not raise
+
+
+# ==============================================================================
+# Quality elevation coverage tests
+# ==============================================================================
+
+
+def test_grouped_help_formatter_truncates_long_help():
+    """Line 71: GroupedHelpFormatter truncates long help text."""
+    formatter = appenv.GroupedHelpFormatter(prog="appenv")
+
+    parser = argparse.ArgumentParser(prog="appenv")
+    subparsers = parser.add_subparsers(dest="command")
+
+    # 'init' is in the Project group - give it help text > 50 chars
+    long_help = "A" * 60
+    subparsers.add_parser("init", help=long_help)
+
+    subparsers_action = None
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            subparsers_action = action
+            break
+
+    assert subparsers_action is not None
+    result = formatter._format_action(subparsers_action)
+
+    # Help should be truncated to first 47 chars + "..."
+    assert "A" * 60 not in result
+    assert "A" * 47 + "..." in result
+
+
+def test_run_missing_binary_empty_venv(monkeypatch, tmp_path, capsys, test_settings):
+    """Line 690: run() shows 'No binaries found' when venv/bin/ is empty."""
+    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+
+    # Create empty venv/bin/ directory (no binaries)
+    env_dir = tmp_path / ".appenv" / "venv"
+    bin_dir = env_dir / "bin"
+    bin_dir.mkdir(parents=True)
+    # bin_dir is intentionally empty
+
+    monkeypatch.setattr(env, "_prepare_venv", lambda dev_mode=False: env_dir)
+
+    with pytest.raises(SystemExit) as exc_info:
+        env.run("myapp", ["--help"])
+
+    assert exc_info.value.code == appenv.EXIT_CODE_NOINPUT
+    captured = capsys.readouterr()
+    assert "No binaries found in the virtual environment" in captured.out
+
+
+def test_meta_unrecognized_arguments(tmp_path, test_settings, capsys):
+    """Lines 791-793: meta() exits with USAGE on unrecognized arguments."""
+    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+
+    with pytest.raises(SystemExit) as exc_info:
+        env.meta(remaining_args=["--totally-bogus-flag"])
+
+    assert exc_info.value.code == appenv.EXIT_CODE_USAGE
+    captured = capsys.readouterr()
+    assert "Error: unrecognized arguments: --totally-bogus-flag" in captured.out
+
+
+def test_ensure_gitignore_returns_early_when_all_entries_exist(tmp_path, capsys):
+    """Line 1294: ensure_gitignore returns early when all entries already exist."""
+    base = tmp_path
+
+    # Create .gitignore with all the entries we'll pass
+    (base / ".gitignore").write_text(".venv\n.appenv\n.batou-lock\n")
+
+    appenv.ensure_gitignore(base, [".venv", ".appenv", ".batou-lock"])
+
+    # Should return early — no "Updated" or "Created" print
+    captured = capsys.readouterr()
+    assert "Updated" not in captured.out
+    assert "Created" not in captured.out
+
+    # File content unchanged
+    assert (base / ".gitignore").read_text() == ".venv\n.appenv\n.batou-lock\n"

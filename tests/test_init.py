@@ -449,3 +449,25 @@ def test_init_warns_on_version_mismatch(
     assert "0.0.1" in captured.out
     assert appenv.__version__ in captured.out
     assert "self-update" in captured.out
+
+
+def test_init_existing_pyproject_no_project_section(
+    tmp_path, monkeypatch, capsys, test_settings, mock_uv
+):
+    """Line 833: init() with existing pyproject.toml without [project] section."""
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
+
+    # Create pyproject.toml WITHOUT [project] section (e.g., only tool config)
+    (base / "pyproject.toml").write_text("[tool.ruff]\nline-length = 100\n")
+
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: mock_uv)
+
+    inputs = iter(["myapp", "", "myproject", "Test", "3.13"])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env.init()
+
+    captured = capsys.readouterr()
+    assert "Adding [project] section to existing" in captured.out

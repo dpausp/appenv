@@ -1172,3 +1172,109 @@ def test_extras_sync_args(tmp_path, monkeypatch, test_settings, mock_uv):
     assert len(sync_args_captured) == 1
     assert "--extra" in sync_args_captured[0]
     assert "dev-tools" in sync_args_captured[0]
+
+
+def test_prepare_venv_link_is_symlink_survives_unlink(
+    tmp_path, monkeypatch, capsys, test_settings, mock_uv
+):
+    """Branch 1186->1194: .venv symlink survives unlink (race / mock).
+
+    Covers the False branch of 'elif not self.venv_link.is_symlink()'.
+    When .venv is a symlink that survives the unlink call, we reach line 1194
+    without entering the warning block.
+    """
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
+
+    (base / "pyproject.toml").write_text(
+        "[project]\nname = 'test'\ndependencies = []\n"
+    )
+    (base / "uv.lock").write_text("version = 1\n")
+
+    # Create .appenv/venv so _prepare_venv has something to link to
+    venv_real = base / ".appenv" / "venv"
+    venv_real.mkdir(parents=True)
+    (venv_real / "bin").mkdir()
+    python = venv_real / "bin" / "python"
+    python.write_text("#!/bin/sh\necho Python 3.12.0\n")
+    python.chmod(0o755)
+
+    # Create a real directory for the symlink target
+    other_dir = base / "other_venv"
+    other_dir.mkdir()
+
+    # Create .venv as a symlink to other_dir
+    venv_link = base / ".venv"
+    venv_link.symlink_to(other_dir)
+    assert venv_link.is_symlink()
+
+    uv = mock_uv
+
+    # Track unlink calls — make the first one for .venv a no-op
+    original_unlink = Path.unlink
+    unlink_calls = []
+
+    def mock_unlink(self, missing_ok=False):
+        if str(self).endswith("/.venv"):
+            unlink_calls.append(str(self))
+            return None  # No-op: simulate race where unlink fails silently
+        return original_unlink(self, missing_ok=missing_ok)
+
+    monkeypatch.setattr(Path, "unlink", mock_unlink)
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: uv)
+    monkeypatch.setattr(appenv, "cmd", lambda c, **kwargs: b"Python 3.12.0")
+
+    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env._prepare_venv(dev_mode=False)
+
+    # The unlink was attempted but was a no-op, so .venv is still a symlink
+    assert len(unlink_calls) > 0, "unlink should have been called for .venv"
+
+    # Cleanup
+    os.environ.pop("UV_PROJECT_ENVIRONMENT", None)
+
+
+def test_prepare_removes_legacy_current_symlink(
+    tmp_path, monkeypatch, test_settings, mock_uv
+):
+    """Line 1196: _prepare_venv removes existing .appenv/current symlink."""
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
+
+    (base / "pyproject.toml").write_text(
+        "[project]\nname = 'test'\ndependencies = []\n"
+    )
+    (base / "uv.lock").write_text("version = 1\n")
+
+    # Create .appenv with a 'current' symlink pointing to old location
+    appenv_dir = base / ".appenv"
+    appenv_dir.mkdir()
+    old_target = base / "old_venv"
+    old_target.mkdir()
+    current_link = appenv_dir / "current"
+    current_link.symlink_to(old_target, target_is_directory=True)
+    assert current_link.is_symlink()
+
+    uv = mock_uv
+
+    def mock_cmd(args, verbose=False, **kwargs):
+        if "venv" in args:
+            venv = base / ".appenv" / "venv"
+            venv.mkdir(parents=True, exist_ok=True)
+            (venv / "bin").mkdir(exist_ok=True)
+            (venv / "bin" / "python").write_text("#!/bin/sh\n")
+        return ""
+
+    uv.cmd = mock_cmd
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: uv)
+    monkeypatch.setattr(appenv, "cmd", lambda c, **kwargs: b"Python 3.12.0")
+
+    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env._prepare_venv(dev_mode=False)
+
+    # The old symlink should have been removed and recreated pointing to venv
+    assert current_link.is_symlink()
+    assert current_link.readlink() == Path("venv")
+
+    # Cleanup
+    os.environ.pop("UV_PROJECT_ENVIRONMENT", None)

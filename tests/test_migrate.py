@@ -1,5 +1,6 @@
 """Tests for migrate command."""
 
+import argparse
 from pathlib import Path
 
 import appenv
@@ -561,3 +562,28 @@ def test_migrate_updates_appenv_script_without_version(
     # The script should now contain the current version
     new_content = old_script.read_text()
     assert appenv.__version__ in new_content
+
+
+def test_migrate_with_path_argument(
+    tmp_path, monkeypatch, capsys, test_settings
+):
+    """Lines 892-893: migrate() with --path creates target directory."""
+    base = tmp_path
+
+    # Create requirements.txt in a subdirectory that will be the path target
+    subdir = base / "subdir"
+    subdir.mkdir()
+    (subdir / "requirements.txt").write_text("requests\n")
+
+    env = appenv.AppEnv(base, test_settings(base))
+
+    # Mock _uv_lock to prevent actual uv execution
+    monkeypatch.setattr(appenv.AppEnv, "_uv_lock", lambda self, uv, diff=False: None)
+
+    args = argparse.Namespace(path="subdir")
+    env.migrate(args)
+
+    # Verify migration happened in target dir
+    assert (subdir / "pyproject.toml").exists()
+    pyproject = (subdir / "pyproject.toml").read_text()
+    assert "requests" in pyproject
