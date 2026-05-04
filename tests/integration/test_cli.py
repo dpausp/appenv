@@ -239,3 +239,88 @@ def test_bootstrap_flow_like_readme(tmp_path, capsys):
         or "HTTPie" in output2
         or any(c.isdigit() for c in output2)
     )
+
+
+def test_prepare_cli(tmp_path):
+    """E2E: appenv prepare creates venv and .venv symlink for valid project."""
+    base = tmp_path
+    appenv_script = setup_isolated_appenv(tmp_path)
+
+    # Create minimal pyproject.toml with one dependency
+    (base / "pyproject.toml").write_text(
+        '[project]\nname = "testprep"\nversion = "0.1.0"\n'
+        "dependencies = []\n"
+        'requires-python = ">=3.10"\n'
+    )
+
+    # Generate uv.lock using uv lock
+    subprocess.run(
+        ["uv", "lock"], cwd=str(base), capture_output=True, timeout=30, check=True
+    )
+
+    child = pexpect.spawn(
+        sys.executable,
+        [str(appenv_script), "prepare"],
+        cwd=str(base),
+        timeout=30,
+        encoding="utf-8",
+        codec_errors="replace",
+    )
+
+    child.expect(pexpect.EOF, timeout=30)
+    child.close()
+
+    assert child.exitstatus == 0
+    # venv python exists
+    assert (base / ".appenv" / "venv" / "bin" / "python").exists()
+    # .venv is symlink to .appenv/venv
+    assert (base / ".venv").is_symlink()
+
+
+def test_prepare_cli_no_pyproject(tmp_path):
+    """E2E: appenv prepare exits 67 when no pyproject.toml exists."""
+    base = tmp_path
+    appenv_script = setup_isolated_appenv(tmp_path)
+
+    child = pexpect.spawn(
+        sys.executable,
+        [str(appenv_script), "prepare"],
+        cwd=str(base),
+        timeout=10,
+        encoding="utf-8",
+        codec_errors="replace",
+    )
+
+    child.expect(pexpect.EOF, timeout=10)
+    child.close()
+
+    assert child.exitstatus == 67
+    assert child.before is not None and "No pyproject config file" in child.before
+
+
+def test_prepare_cli_no_lockfile(tmp_path):
+    """E2E: appenv prepare exits 67 when no uv.lock exists."""
+    base = tmp_path
+    appenv_script = setup_isolated_appenv(tmp_path)
+
+    # Create pyproject.toml but no uv.lock
+    (base / "pyproject.toml").write_text(
+        '[project]\nname = "testprep"\nversion = "0.1.0"\n'
+        'dependencies = ["click"]\n'
+        'requires-python = ">=3.10"\n'
+    )
+
+    child = pexpect.spawn(
+        sys.executable,
+        [str(appenv_script), "prepare"],
+        cwd=str(base),
+        timeout=10,
+        encoding="utf-8",
+        codec_errors="replace",
+    )
+
+    child.expect(pexpect.EOF, timeout=10)
+    child.close()
+
+    assert child.exitstatus == 67
+    assert child.before is not None and "No uv.lock" in child.before

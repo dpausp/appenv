@@ -27,7 +27,11 @@ appenv follows the style defined in `pyproject.toml` under `[tool.ruff]`. Run `u
 
 ### Type Annotations
 
-Type annotations go in `.pyi` stub files, not in `.py` source files. This is the PEP 561 pattern: `src/appenv.py` has the implementation with minimal typing, `src/appenv.pyi` has full type annotations. The `src/py.typed` marker file signals PEP 561 compliance to type checkers.
+Type annotations live in `.pyi` stub files, not in `.py` source files. The `src/appenv.pyi` stub is the complete type surface — it must include all public *and* private methods. Ruff's `ANN` rules are dropped because they ignore `.pyi` files entirely.
+
+Any method signature change requires updating both `src/appenv.py` and `src/appenv.pyi`. Validate with `uv run ruff check --select PYI src/appenv.pyi`.
+
+The `src/py.typed` marker file signals PEP 561 compliance to type checkers.
 
 ### Exit Codes
 
@@ -48,17 +52,44 @@ except subprocess.CalledProcessError as e:
 ## Running Tests
 
 ```bash
-# All tests
+# All tests (excludes slow by default)
 uv run pytest
 
 # Specific file
-uv run pytest tests/test_init.py
+uv run pytest tests/test_prepare.py
 
 # With coverage report
 uv run pytest --cov=appenv --cov-report=term-missing
+
+# Include slow tests
+uv run pytest -m ''
 ```
 
-Integration tests in `tests/integration/` exercise the full bootstrap workflow end-to-end.
+### Two-Tier Model
+
+appenv has no natural seam for an integration tier — `uv` is either mocked (unit) or real (E2E). Tests fall into exactly two tiers:
+
+**Unit tests** (`tests/test_*.py`)
+: Mock `uv` via `MockUvBin`. Fast, no external dependencies. Covers logic branches, error handling, and argument construction.
+
+**E2E tests** (`tests/integration/`)
+: Real `uv`, real subprocess via `pexpect`. Exercises the full bootstrap workflow end-to-end. Requires `uv` installed on the system.
+
+The standard 70/20/10 pyramid model does not apply — test expansion beyond unit coverage is E2E-only.
+
+### Slow Marker
+
+Any test consistently exceeding 2 seconds gets `@pytest.mark.slow`. The threshold is objective: measure new tests and apply the marker if they cross it.
+
+- Default `pytest` configuration excludes slow tests (`-m "not slow"`)
+- `tox` cov environment runs all tests including slow
+- E2E tests should target under 2s to avoid needing the marker
+
+### Test Strategy
+
+- **Existing code with gaps**: write tests first (tests-after) to cover uncovered paths
+- **New features with code changes**: write tests alongside or before implementation
+- **Existing features with no code changes** (e.g., untested subcommands): write E2E tests first (E2E-first) since the feature already works
 
 ## Quality Gates
 

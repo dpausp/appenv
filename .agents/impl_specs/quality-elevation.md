@@ -6,6 +6,9 @@ lifecycle:
   design:
     completed_at: "2026-05-04T12:00:00Z"
     git_rev: "8358798"
+  implement:
+    completed_at: "2026-05-04T12:30:00Z"
+    git_rev: "6ee0089"
 ---
 
 # quality-elevation
@@ -154,3 +157,27 @@ Implementation order: .pyi fixes first (trivial), then coverage gap tests, then 
 - .pyi passes `ruff check --select PYI` with no new violations
 - New E2E tests follow existing pexpect patterns
 - Tests measured against 2s slow threshold
+
+## Appendix
+
+```yaml
+implementation_plan:
+  id: quality-elevation
+  description: "Fix .pyi stub completeness, add coverage gap tests for stale-venv block and extras sync, add 3 E2E tests for prepare subcommand"
+  specs:
+    - .agents/impl_specs/quality-elevation.md
+  target_tests:
+    - file: tests/test_prepare.py
+      tests:
+        - test_stale_venv_broken_python
+        - test_stale_venv_version_mismatch
+        - test_stale_venv_max_version_constraint
+        - test_extras_sync_args
+    - file: tests/integration/test_cli.py
+      tests:
+        - test_prepare_cli
+        - test_prepare_cli_no_pyproject
+        - test_prepare_cli_no_lockfile
+  git_rev: "6ee0089"
+  created_at: "2026-05-04T12:30:00Z"
+```

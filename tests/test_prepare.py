@@ -988,3 +988,187 @@ def test_prepare_venv_current_is_directory(workdir, monkeypatch, test_settings):
     os.environ.pop("UV_PROJECT_ENVIRONMENT", None)
     if venv.exists():
         shutil.rmtree(venv)
+
+
+# ==============================================================================
+# Stale-venv coverage gap tests (from quality-elevation spec)
+# ==============================================================================
+
+
+def test_stale_venv_broken_python(tmp_path, monkeypatch, test_settings, mock_uv):
+    """Stale-venv broken python: cmd() raises ValueError, venv removed and recreated."""
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
+
+    (base / "pyproject.toml").write_text(
+        "[project]\nname = 'test'\ndependencies = []\n"
+    )
+    (base / "uv.lock").write_text("version = 1\n")
+
+    # Create existing venv with working python
+    venv_real = base / ".appenv" / "venv"
+    venv_real.mkdir(parents=True)
+    (venv_real / "bin").mkdir()
+    python = venv_real / "bin" / "python"
+    python.write_text("#!/bin/sh\necho Python 3.12.0\n")
+    python.chmod(0o755)
+
+    uv = mock_uv
+    venv_python = venv_real / "bin" / "python"
+    first_call = [True]
+
+    def uv_mock_cmd(args, verbose=False, **kwargs):
+        if "venv" in args:
+            venv_real.mkdir(parents=True, exist_ok=True)
+            (venv_real / "bin").mkdir(exist_ok=True)
+            (venv_real / "bin" / "python").write_text("#!/bin/sh\n")
+        return ""
+
+    uv.cmd = uv_mock_cmd
+
+    def mock_cmd(c, **kwargs):
+        # Only raise on first call (stale-venv check), not post-sync check
+        if str(venv_python) in str(c) and first_call[0]:
+            first_call[0] = False
+            raise ValueError("malformed output")  # noqa: EM101, TRY003
+        return b"Python 3.12.0"
+
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: uv)
+    monkeypatch.setattr(appenv, "cmd", mock_cmd)
+
+    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env.prepare()
+
+    # Old venv was removed (broken python) and recreated by mock uv
+    assert venv_real.exists()
+
+
+def test_stale_venv_version_mismatch(tmp_path, monkeypatch, test_settings, mock_uv):
+    """Stale-venv version mismatch: venv Python too old for requires-python."""
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
+
+    (base / "pyproject.toml").write_text(
+        '[project]\nname = "test"\ndependencies = []\nrequires-python = ">=3.12"\n'
+    )
+    (base / "uv.lock").write_text("version = 1\n")
+
+    # Create existing venv with old python
+    venv_real = base / ".appenv" / "venv"
+    venv_real.mkdir(parents=True)
+    (venv_real / "bin").mkdir()
+    python = venv_real / "bin" / "python"
+    python.write_text("#!/bin/sh\necho Python 3.12.0\n")
+    python.chmod(0o755)
+
+    uv = mock_uv
+
+    def uv_mock_cmd(args, verbose=False, **kwargs):
+        if "venv" in args:
+            venv_real.mkdir(parents=True, exist_ok=True)
+            (venv_real / "bin").mkdir(exist_ok=True)
+            (venv_real / "bin" / "python").write_text("#!/bin/sh\n")
+        return ""
+
+    uv.cmd = uv_mock_cmd
+
+    def mock_cmd(c, **kwargs):
+        # Return old Python version to trigger version mismatch
+        if str(venv_real / "bin" / "python") in str(c):
+            return b"Python 3.8.0"
+        return b"Python 3.12.0"
+
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: uv)
+    monkeypatch.setattr(appenv, "cmd", mock_cmd)
+
+    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env.prepare()
+
+    # Venv was removed (Python 3.8 doesn't satisfy >=3.12) and recreated
+    assert venv_real.exists()
+
+
+def test_stale_venv_max_version_constraint(
+    tmp_path, monkeypatch, capsys, test_settings, mock_uv
+):
+    """Stale-venv max version: Python exceeds upper bound in requires-python."""
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
+
+    (base / "pyproject.toml").write_text(
+        '[project]\nname = "test"\n'
+        'dependencies = []\nrequires-python = ">=3.12,<3.14"\n'
+    )
+    (base / "uv.lock").write_text("version = 1\n")
+
+    # Create existing venv with Python exceeding upper bound
+    venv_real = base / ".appenv" / "venv"
+    venv_real.mkdir(parents=True)
+    (venv_real / "bin").mkdir()
+    python = venv_real / "bin" / "python"
+    python.write_text("#!/bin/sh\necho Python 3.15.0\n")
+    python.chmod(0o755)
+
+    uv = mock_uv
+
+    def uv_mock_cmd(args, verbose=False, **kwargs):
+        if "venv" in args:
+            venv_real.mkdir(parents=True, exist_ok=True)
+            (venv_real / "bin").mkdir(exist_ok=True)
+            (venv_real / "bin" / "python").write_text("#!/bin/sh\n")
+        return ""
+
+    uv.cmd = uv_mock_cmd
+
+    def mock_cmd(c, **kwargs):
+        if str(venv_real / "bin" / "python") in str(c):
+            return b"Python 3.15.0"
+        return b"Python 3.12.0"
+
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: uv)
+    monkeypatch.setattr(appenv, "cmd", mock_cmd)
+
+    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env.prepare()
+
+    captured = capsys.readouterr()
+    # Should show constraint message including upper bound
+    assert "Recreating venv" in captured.out
+    assert "<3.14" in captured.out
+    assert venv_real.exists()
+
+
+def test_extras_sync_args(tmp_path, monkeypatch, test_settings, mock_uv):
+    """Extras in AppEnvSettings produce --extra flag in uv sync args."""
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
+
+    (base / "pyproject.toml").write_text(
+        '[project]\nname = "test"\ndependencies = []\n'
+    )
+    (base / "uv.lock").write_text("version = 1\n")
+
+    uv = mock_uv
+    sync_args_captured = []
+
+    def mock_cmd(args, verbose=False, **kwargs):
+        if "sync" in args:
+            sync_args_captured.append(args)
+        if "venv" in args:
+            venv = base / ".appenv" / "venv"
+            venv.mkdir(parents=True, exist_ok=True)
+            (venv / "bin").mkdir(exist_ok=True)
+            (venv / "bin" / "python").write_text("#!/bin/sh\n")
+        return ""
+
+    uv.cmd = mock_cmd
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: uv)
+    monkeypatch.setattr(appenv, "cmd", lambda c, **kwargs: b"Python 3.12.0")
+
+    settings = appenv.AppEnvSettings(verbose=False, extras=["dev-tools"], basedir=base)
+    env = appenv.AppEnv(Path.cwd(), settings)
+    env.prepare()
+
+    assert len(sync_args_captured) == 1
+    assert "--extra" in sync_args_captured[0]
+    assert "dev-tools" in sync_args_captured[0]
