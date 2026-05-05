@@ -1,4 +1,5 @@
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -6,6 +7,11 @@ import pytest
 
 import appenv
 from appenv import UvVersion
+
+
+def strip_ansi_codes(text: str) -> str:
+    """Remove ANSI escape sequences from text."""
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
 
 
 class MockUvBin:
@@ -179,3 +185,27 @@ def clean_uv_project_env():
     """Ensure UV_PROJECT_ENVIRONMENT is cleaned up after test."""
     yield
     os.environ.pop("UV_PROJECT_ENVIRONMENT", None)
+
+
+@pytest.fixture
+def make_pyproject():
+    """Factory to create pyproject.toml + uv.lock in a base directory."""
+    def _make(base, pyproject_content, lock_content="version = 1\n"):
+        (base / "pyproject.toml").write_text(pyproject_content)
+        (base / "uv.lock").write_text(lock_content)
+    return _make
+
+
+@pytest.fixture
+def capture_appenv_logs():
+    """Capture appenv debug logs to stdout for pattern assertions."""
+    import logging
+    import sys
+    log = logging.getLogger("appenv")
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(logging.DEBUG)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    log.addHandler(handler)
+    log.setLevel(logging.DEBUG)
+    yield log
+    log.removeHandler(handler)

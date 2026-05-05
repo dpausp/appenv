@@ -8,6 +8,14 @@ import appenv
 from appenv import EXIT_CODE_UNAVAILABLE, NoValidUvError, UvBin, UvVersion, ensure_uv
 
 
+class FakeResult:
+    def __init__(self, returncode=0, stdout="", stderr=""):
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+
 def test_uv_bin_cmd_raises_when_uv_not_found(monkeypatch):
     # UvBin.cmd raises FileNotFoundError when uv binary doesn't exist
     # Create a UvBin with a non-existent binary
@@ -109,11 +117,10 @@ def test_uv_binget_uv_version_returns_version_on_success(tmp_path, monkeypatch):
     uv.appenv_dir = tmp_path / ".appenv"
     uv.uv_dir = uv.appenv_dir / ".uv"
 
-    class FakeResult:
-        stdout = "uv 0.10.3 (abc123 2024-01-01)\n"
-        returncode = 0
-
-    monkeypatch.setattr("subprocess.run", lambda *args, **kwargs: FakeResult())
+    monkeypatch.setattr(
+        "subprocess.run",
+        lambda *args, **kwargs: FakeResult(stdout="uv 0.10.3 (abc123 2024-01-01)\n"),
+    )
 
     result = UvBin.get_uv_version(uv.bin)
 
@@ -148,11 +155,10 @@ def test_uv_binget_uv_version_returns_none_when_too_old(monkeypatch, capsys):
     uv.appenv_dir = Path("/tmp/.appenv")
     uv.uv_dir = uv.appenv_dir / ".uv"
 
-    class FakeResult:
-        stdout = "uv 0.4.0 (abc123 2024-01-01)\n"
-        returncode = 0
-
-    monkeypatch.setattr("subprocess.run", lambda *args, **kwargs: FakeResult())
+    monkeypatch.setattr(
+        "subprocess.run",
+        lambda *args, **kwargs: FakeResult(stdout="uv 0.4.0 (abc123 2024-01-01)\n"),
+    )
 
     result = UvBin.get_uv_version(uv.bin)
 
@@ -169,11 +175,10 @@ def test_uv_binget_uv_version_handles_parse_error(tmp_path, monkeypatch, capsys)
     uv.appenv_dir = tmp_path / ".appenv"
     uv.uv_dir = uv.appenv_dir / ".uv"
 
-    class FakeResult:
-        stdout = "uv invalid-version\n"
-        returncode = 0
-
-    monkeypatch.setattr("subprocess.run", lambda *args, **kwargs: FakeResult())
+    monkeypatch.setattr(
+        "subprocess.run",
+        lambda *args, **kwargs: FakeResult(stdout="uv invalid-version\n"),
+    )
 
     result = UvBin.get_uv_version(uv.bin)
 
@@ -188,12 +193,10 @@ def test_uv_binget_uv_version_index_error_on_split(monkeypatch, capsys):
     uv.appenv_dir = Path("/tmp/.appenv")
     uv.uv_dir = uv.appenv_dir / ".uv"
 
-    class FakeResult:
-        # Single word output - split()[1] will raise IndexError
-        stdout = "uv\n"
-        returncode = 0
-
-    monkeypatch.setattr("subprocess.run", lambda *args, **kwargs: FakeResult())
+    monkeypatch.setattr(
+        "subprocess.run",
+        lambda *args, **kwargs: FakeResult(stdout="uv\n"),
+    )
 
     result = UvBin.get_uv_version(uv.bin)
 
@@ -282,11 +285,6 @@ def test_try_uv_from_nix_channel_returns_path_when_valid(monkeypatch, tmp_path, 
     uv_local.write_text("#!/bin/sh\n")
 
     # Mock subprocess.run to return success
-    class FakeResult:
-        returncode = 0
-        stderr = ""
-        stdout = ""
-
     monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: FakeResult())
 
     # Mock UvBin.get_uv_version to return a valid version
@@ -325,12 +323,10 @@ def test_try_uv_from_nix_channel_returns_path_when_created(
     uv_local = tmp_path / ".appenv/.uv/bin/uv"
 
     # Mock subprocess.run to return success
-    class FakeResult:
-        returncode = 0
-        stdout = ""
-        stderr = b""
-
-    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: FakeResult())
+    monkeypatch.setattr(
+        subprocess, "run",
+        lambda *args, **kwargs: FakeResult(stderr=b""),
+    )
 
     # Mock UvBin.get_uv_version to return a valid version
     mock_version = UvVersion(0, 10, 3)
@@ -400,12 +396,10 @@ def test_try_uv_from_nix_channel_returns_none_when_invalid_version(
     )
 
     # Mock subprocess.run to return success
-    class FakeResult:
-        returncode = 0
-        stdout = ""
-        stderr = b""
-
-    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: FakeResult())
+    monkeypatch.setattr(
+        subprocess, "run",
+        lambda *args, **kwargs: FakeResult(stderr=b""),
+    )
 
     # Mock UvBin.get_uv_version to return unknown version (invalid)
     monkeypatch.setattr(UvBin, "get_uv_version", lambda path: UvVersion.unknown())
@@ -492,11 +486,6 @@ def test_try_uv_from_nix_flake_returns_path_when_valid(monkeypatch, tmp_path, ca
     uv_bin = UvBin(tmp_path / ".appenv")
 
     # Mock subprocess.run to return success
-    class FakeResult:
-        returncode = 0
-        stdout = ""
-        stderr = ""
-
     monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: FakeResult())
 
     # Mock UvBin.get_uv_version to return a valid version
@@ -524,11 +513,6 @@ def test_try_uv_from_nix_flake_returns_none_when_build_fails(
     # Create a UvBin instance
     uv_bin = UvBin(tmp_path / ".appenv")
 
-    # Mock subprocess.run to return failure
-    class FakeResult:
-        returncode = 1
-        stdout = ""
-        stderr = "flake build failed"
 
     # Cap logs at DEBUG level
     caplog.set_level(logging.DEBUG)
@@ -550,12 +534,10 @@ def test_try_uv_from_nix_flake_returns_none_when_invalid_version(
     uv_bin = UvBin(tmp_path / ".appenv")
 
     # Mock subprocess.run to return success
-    class FakeResult:
-        returncode = 0
-        stdout = ""
-        stderr = b""
-
-    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: FakeResult())
+    monkeypatch.setattr(
+        subprocess, "run",
+        lambda *args, **kwargs: FakeResult(stderr=b""),
+    )
 
     # Mock UvBin.get_uv_version to return unknown version (invalid)
     monkeypatch.setattr(UvBin, "get_uv_version", lambda path: UvVersion.unknown())
@@ -582,22 +564,10 @@ def test_try_uv_from_pip_returns_path_when_valid(monkeypatch, tmp_path, caplog):
 
     # Mock subprocess.run for ensurepip to return success
     def mock_run_ensurepip(*args, **kwargs):
-        class FakeResult:
-            returncode = 0
-            stdout = "ensurepip output"
-            stderr = ""
-
-        return FakeResult()
-
+        return FakeResult(stdout="ensurepip output")
     # Mock subprocess.run for pip install to return success
     def mock_run_pip(*args, **kwargs):
-        class FakeResult:
-            returncode = 0
-            stdout = "Successfully installed uv"
-            stderr = ""
-
-        return FakeResult()
-
+        return FakeResult(stdout="Successfully installed uv")
     # Side effect to handle different calls
     def mock_run_side_effect(*args, **kwargs):
         if "ensurepip" in args[0]:
@@ -637,13 +607,7 @@ def test_try_uv_from_pip_returns_none_when_ensurepip_fails(
 
     # Mock subprocess.run for pip install (should not be called)
     def mock_run_pip(*args, **kwargs):
-        class FakeResult:
-            returncode = 0
-            stdout = ""
-            stderr = ""
-
         return FakeResult()
-
     # Side effect to handle different calls
     def mock_run_side_effect(*args, **kwargs):
         if "ensurepip" in args[0]:
@@ -674,13 +638,7 @@ def test_try_uv_from_pip_returns_none_when_pip_install_fails(
 
     # Mock subprocess.run for ensurepip to return success
     def mock_run_ensurepip(*args, **kwargs):
-        class FakeResult:
-            returncode = 0
-            stdout = "ensurepip output"
-            stderr = ""
-
-        return FakeResult()
-
+        return FakeResult(stdout="ensurepip output")
     # Mock subprocess.run for pip install to return failure
     def mock_run_pip(*args, **kwargs):
         raise subprocess.CalledProcessError(1, "pip install")
@@ -715,22 +673,10 @@ def test_try_uv_from_pip_returns_none_when_invalid_version(
 
     # Mock subprocess.run for ensurepip to return success
     def mock_run_ensurepip(*args, **kwargs):
-        class FakeResult:
-            returncode = 0
-            stdout = "ensurepip output"
-            stderr = ""
-
-        return FakeResult()
-
+        return FakeResult(stdout="ensurepip output")
     # Mock subprocess.run for pip install to return success
     def mock_run_pip(*args, **kwargs):
-        class FakeResult:
-            returncode = 0
-            stdout = "Successfully installed uv"
-            stderr = ""
-
-        return FakeResult()
-
+        return FakeResult(stdout="Successfully installed uv")
     # Side effect to handle different calls
     def mock_run_side_effect(*args, **kwargs):
         if "ensurepip" in args[0]:
@@ -875,14 +821,6 @@ def test_uv_bin_pip_fallback_raises_error(tmp_path, monkeypatch):
     monkeypatch.setattr("shutil.which", mock_which)
 
     pip_called = []
-
-    class FakeResult:
-        stdout = "uv 0.10.3 (abc123 2024-01-01)\n"
-        returncode = 0
-
-        def __init__(self, stdout="", returncode=0):
-            self.stdout = stdout
-            self.returncode = returncode
 
     def mock_run(cmd, **kwargs):
         pip_called.append(cmd)

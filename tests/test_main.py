@@ -15,6 +15,8 @@ import pytest
 import appenv
 from appenv import UvVersion
 
+from .conftest import strip_ansi_codes
+
 # main() tests
 
 
@@ -282,14 +284,11 @@ def test_meta_calls_run_script(monkeypatch, tmp_path, app_env):
 # run() tests
 
 
-def test_run_sets_env_and_execs(monkeypatch, tmp_path, app_env):
+def test_run_sets_env_and_execs(monkeypatch, tmp_path, app_env, make_pyproject):
     env = app_env()
 
     # Add pyproject.toml and uv.lock so _prepare_venv doesn't exit
-    (tmp_path / "pyproject.toml").write_text(
-        '[project]\nname = "test"\nversion = "0.1.0"\n'
-    )
-    (tmp_path / "uv.lock").write_text("version = 1\n")
+    make_pyproject(tmp_path, '[project]\nname = "test"\nversion = "0.1.0"\n')
 
     env_dir = tmp_path / ".appenv" / "abc123"
     env_dir.mkdir(parents=True)
@@ -378,7 +377,7 @@ def test_print_colored_diff_returns_true_when_changes(capsys):
 
     assert result is True
     captured = capsys.readouterr()
-    output = re.sub(r"\x1b\[[0-9;]*m", "", captured.out)
+    output = strip_ansi_codes(captured.out)
 
     expected = """\
 --- old.txt
@@ -877,29 +876,6 @@ def test_main_entry_point_subprocess():
 # ==============================================================================
 
 
-def get_source_version():
-    """Get version from src/appenv.py __version__."""
-    appenv_py = Path(__file__).parent.parent / "src" / "appenv.py"
-    content = appenv_py.read_text()
-    match = re.search(r'^__version__\s*=\s*"([^"]+)"', content, re.MULTILINE)
-    if not match:
-        msg = "Could not find __version__ in src/appenv.py"
-        raise ValueError(msg)
-    return match.group(1)
-
-
-def get_appenv_version():
-    """Get version from ./appenv version command."""
-    result = subprocess.run(
-        ["./appenv", "version"],
-        capture_output=True,
-        text=True,
-        cwd=Path(__file__).parent.parent,
-    )
-    # Output is "appenv X.Y.Z"
-    return result.stdout.strip().split()[-1]
-
-
 def test_version_consistency():
     """Version in appenv.py matches version in appenv bootstrap script."""
     # Read version from appenv module
@@ -908,9 +884,6 @@ def test_version_consistency():
     # Read version from src/appenv.py
     appenv_path = Path(__file__).parent.parent / "src" / "appenv.py"
     appenv_content = appenv_path.read_text()
-
-    # Extract version from appenv file
-    import re
 
     match = re.search(r'__version__ = "([^"]+)"', appenv_content)
     assert match, "Could not find __version__ in appenv file"

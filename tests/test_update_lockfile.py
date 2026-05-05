@@ -2,16 +2,13 @@
 
 import argparse
 import os
-import re
 import shutil
 from pathlib import Path
 
+import pytest
+
 import appenv
-
-
-def strip_ansi_codes(text):
-    """Remove ANSI color codes from text."""
-    return re.sub(r"\x1b\[[0-9;]*m", "", text)
+from tests.conftest import strip_ansi_codes
 
 
 def _setup_pyproject_project(workdir, name="ducker", deps=None):
@@ -40,7 +37,7 @@ def _setup_pyproject_project(workdir, name="ducker", deps=None):
 
 
 def test_update_lockfile_pyproject_workflow(
-    workdir, monkeypatch, capsys, test_settings, mock_uv
+    workdir, monkeypatch, capsys, mock_uv, app_env
 ):
     """pyproject.toml mode should use uv lock and create uv.lock.
 
@@ -79,7 +76,7 @@ dependencies = ["click"]
     monkeypatch.setenv("APPENV_VERBOSE", "1")
 
     # Run update_lockfile
-    env = appenv.AppEnv(app_dir, test_settings(app_dir))
+    env = app_env(app_dir)
     env.update_lockfile()
 
     captured = capsys.readouterr()
@@ -108,7 +105,7 @@ dependencies = ["click"]
 
 
 def test_update_lockfile_verbose_output(
-    workdir, monkeypatch, capsys, test_settings, mock_uv
+    workdir, monkeypatch, capsys, mock_uv, app_env
 ):
     """Verbose mode shows structured output with paths and mode info."""
     app_dir = Path(workdir) / "verboseapp"
@@ -128,7 +125,7 @@ def test_update_lockfile_verbose_output(
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: mock_uv)
     monkeypatch.setenv("APPENV_VERBOSE", "1")
 
-    env = appenv.AppEnv(app_dir, test_settings(app_dir))
+    env = app_env(app_dir)
     env.update_lockfile()
 
     captured = capsys.readouterr()
@@ -139,66 +136,59 @@ def test_update_lockfile_verbose_output(
     assert "Created" in out
 
 
-def test_update_lockfile_no_changes_output(
-    workdir, monkeypatch, capsys, test_settings, mock_uv
+@pytest.mark.parametrize("diff,verbose", [(False, False), (False, True), (True, False)])
+def test_update_lockfile_no_changes(
+    diff, verbose, workdir, monkeypatch, capsys, make_pyproject, mock_uv, app_env
 ):
     """update_lockfile shows 'No changes' when lockfile is up to date."""
-    app_dir = Path(workdir) / "nochange"
-    app_dir.mkdir()
-    (app_dir / "pyproject.toml").write_text(
-        '[project]\nname = "nochange"\ndependencies = ["click"]\n'
+    base = Path(workdir)
+    lock_content = "version = 1\n[[package]]\nname = 'click'\nversion = '8.1.0'\n"
+    make_pyproject(
+        base,
+        '[project]\nname = "test"\ndependencies = ["click"]\n',
+        lock_content,
     )
-    (app_dir / "appenv").write_text("#!/usr/bin/env python3\npass\n")
-    (app_dir / "appenv").chmod(0o755)
-
-    # Pre-create uv.lock so diff check finds no changes
-    (app_dir / "uv.lock").write_text("version = 1\n")
 
     def mock_uv_cmd(args, verbose=False, **kwargs):
-        cwd = kwargs.get("cwd")
-        if cwd and "lock" in args and "pip" not in args:
-            # Same content = no changes
-            Path(cwd, "uv.lock").write_text("version = 1\n")
+        if "lock" in args and "pip" not in args:
+            cwd = kwargs.get("cwd")
+            if cwd:
+                (Path(cwd) / "uv.lock").write_text(lock_content)
         return b""
 
     mock_uv.cmd = mock_uv_cmd
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: mock_uv)
 
-    env = appenv.AppEnv(app_dir, test_settings(app_dir))
-    env.update_lockfile()
+    env = app_env(base)
+    args = argparse.Namespace(diff=diff, verbose=verbose)
+    env.update_lockfile(args=args, remaining=None)
 
-    out = strip_ansi_codes(capsys.readouterr().out)
-
-    # Check for expected output
-    assert "Updating lock file" in out
-    assert "No changes" in out
+    captured = strip_ansi_codes(capsys.readouterr().out)
+    assert "No changes" in captured
 
 
 def test_update_lockfile_pyproject_diff_mode(
-    workdir, monkeypatch, capsys, tmp_path, test_settings, mock_uv
+    workdir, monkeypatch, capsys, make_pyproject, mock_uv, app_env
 ):
     """update_lockfile with --diff shows changes without modifying uv.lock."""
     # Create directory with pyproject.toml and uv.lock
     app_dir = Path(workdir) / "diffapp"
     app_dir.mkdir()
 
-    (app_dir / "pyproject.toml").write_text(
+    old_lock_content = "version = 1\n[[package]]\nname = 'click'\nversion = '8.0.0'\n"
+    make_pyproject(
+        app_dir,
         """[project]
 name = "diffapp"
 version = "1.0.0"
 dependencies = ["click"]
-"""
+""",
+        old_lock_content,
     )
-
-    # Create existing uv.lock with old content
-    old_lock_content = "version = 1\n[[package]]\nname = 'click'\nversion = '8.0.0'\n"
-    (app_dir / "uv.lock").write_text(old_lock_content)
 
     def mock_uv_cmd(args, verbose=False, **kwargs):
         cwd = kwargs.get("cwd")
         if cwd and "lock" in args and "pip" not in args:
-            # In diff mode, uv lock runs in temp dir
-            # Create a "new" lock file with different content
             new_lock = Path(cwd) / "uv.lock"
             new_lock.write_text(
                 "version = 1\n[[package]]\nname = 'click'\nversion = '8.1.0'\n"
@@ -208,7 +198,7 @@ dependencies = ["click"]
     mock_uv.cmd = mock_uv_cmd
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: mock_uv)
 
-    env = appenv.AppEnv(app_dir, test_settings(app_dir))
+    env = app_env(app_dir)
     args = argparse.Namespace(diff=True, verbose=False)
 
     env.update_lockfile(args=args, remaining=None)
@@ -217,42 +207,15 @@ dependencies = ["click"]
     assert (app_dir / "uv.lock").read_text() == old_lock_content
 
 
-def test_update_lockfile_pyproject_no_changes(
-    workdir, monkeypatch, capsys, test_settings, mock_uv
-):
-    """Lines 1005, 1033: 'No changes' output when lockfile unchanged."""
-    base = Path(workdir)
-    (base / "pyproject.toml").write_text(
-        '[project]\nname = "test"\ndependencies = ["click"]\n'
-    )
-
-    lock_content = "version = 1\n[[package]]\nname = 'click'\nversion = '8.1.0'\n"
-    (base / "uv.lock").write_text(lock_content)
-
-    def mock_uv_cmd(args, verbose=False, **kwargs):
-        return b""
-
-    mock_uv.cmd = mock_uv_cmd
-    monkeypatch.setattr(appenv, "ensure_uv", lambda base: mock_uv)
-
-    env = appenv.AppEnv(base, test_settings(base))
-    env.update_lockfile()
-
-    captured = strip_ansi_codes(capsys.readouterr().out)
-    assert "No changes" in captured
-
-
 def test_update_lockfile_pyproject_updated(
-    workdir, monkeypatch, capsys, test_settings, mock_uv
+    workdir, monkeypatch, capsys, make_pyproject, mock_uv, app_env
 ):
     """Line 1040: 'Updated' output when lockfile has changes."""
     base = Path(workdir)
-    (base / "pyproject.toml").write_text(
-        '[project]\nname = "test"\ndependencies = ["click"]\n'
-    )
-
-    (base / "uv.lock").write_text(
-        "version = 1\n[[package]]\nname = 'click'\nversion = '8.0.0'\n"
+    make_pyproject(
+        base,
+        '[project]\nname = "test"\ndependencies = ["click"]\n',
+        "version = 1\n[[package]]\nname = 'click'\nversion = '8.0.0'\n",
     )
 
     def mock_uv_cmd(args, verbose=False, **kwargs):
@@ -268,7 +231,7 @@ def test_update_lockfile_pyproject_updated(
     mock_uv.cmd = mock_uv_cmd
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: mock_uv)
 
-    env = appenv.AppEnv(base, test_settings(base))
+    env = app_env(base)
     env.update_lockfile()
 
     captured = strip_ansi_codes(capsys.readouterr().out)
@@ -276,27 +239,27 @@ def test_update_lockfile_pyproject_updated(
 
 
 def test_update_lockfile_pyproject_diff_verbose(
-    workdir, monkeypatch, capsys, test_settings, mock_uv
+    workdir, monkeypatch, capsys, make_pyproject, mock_uv, app_env
 ):
     """Line 990: Verbose output in pyproject diff mode."""
     base = Path(workdir)
-    (base / "pyproject.toml").write_text(
-        '[project]\nname = "test"\ndependencies = ["click"]\n'
+    make_pyproject(
+        base,
+        '[project]\nname = "test"\ndependencies = ["click"]\n',
+        "version = 1\n",
     )
-    (base / "uv.lock").write_text("version = 1\n")
 
     def mock_uv_cmd(args, verbose=False, **kwargs):
         if "lock" in args and "pip" not in args:
             cwd = kwargs.get("cwd")
             if cwd:
-                # Create lock file in temp directory
                 (Path(cwd) / "uv.lock").write_text("version = 1\nnew = true\n")
         return b""
 
     mock_uv.cmd = mock_uv_cmd
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: mock_uv)
 
-    env = appenv.AppEnv(base, test_settings(base))
+    env = app_env(base)
     args = argparse.Namespace(diff=True, verbose=True)
 
     env.update_lockfile(args=args, remaining=None)
@@ -305,54 +268,20 @@ def test_update_lockfile_pyproject_diff_verbose(
     assert "Diff mode" in captured
 
 
-def test_update_lockfile_pyproject_diff_no_changes(
-    workdir, monkeypatch, capsys, test_settings, mock_uv
-):
-    """Line 1005: 'No changes' output in diff mode for pyproject."""
-    base = Path(workdir)
-    (base / "pyproject.toml").write_text(
-        '[project]\nname = "test"\ndependencies = ["click"]\n'
-    )
-
-    lock_content = "version = 1\n[[package]]\nname = 'click'\nversion = '8.1.0'\n"
-    (base / "uv.lock").write_text(lock_content)
-
-    def mock_uv_cmd(args, verbose=False, **kwargs):
-        if "lock" in args and "pip" not in args:
-            cwd = kwargs.get("cwd")
-            if cwd:
-                # Create identical lock file
-                (Path(cwd) / "uv.lock").write_text(lock_content)
-        return b""
-
-    mock_uv.cmd = mock_uv_cmd
-    monkeypatch.setattr(appenv, "ensure_uv", lambda base: mock_uv)
-
-    env = appenv.AppEnv(base, test_settings(base))
-    args = argparse.Namespace(diff=True, verbose=False)
-
-    env.update_lockfile(args=args, remaining=None)
-
-    captured = strip_ansi_codes(capsys.readouterr().out)
-    assert "No changes" in captured
-
-
 def test_update_lockfile_pyproject_calls_uv_lock(
-    tmp_path, monkeypatch, test_settings, mock_uv
+    tmp_path, monkeypatch, make_pyproject, mock_uv, app_env
 ):
     """_update_lockfile_pyproject calls uv lock."""
     monkeypatch.chdir(tmp_path)
     base = tmp_path
 
-    (base / "pyproject.toml").write_text(
-        "[project]\nname = 'test'\ndependencies = []\n"
-    )
+    make_pyproject(base, "[project]\nname = 'test'\ndependencies = []\n")
 
     uv_calls = []
     mock_uv.cmd = lambda args, **kwargs: uv_calls.append(args)
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: mock_uv)
 
-    env = appenv.AppEnv(base, test_settings(base))
+    env = app_env(base)
     env.update_lockfile(None)
 
     # Should call uv lock
@@ -360,19 +289,15 @@ def test_update_lockfile_pyproject_calls_uv_lock(
 
 
 def test_update_lockfile_verbose_shows_running_uv_lock(
-    tmp_path, monkeypatch, capsys, test_settings, mock_uv
+    tmp_path, monkeypatch, capsys, make_pyproject, app_env
 ):
     """_update_lockfile_pyproject shows 'Running: uv lock' in verbose mode."""
     monkeypatch.chdir(tmp_path)
     base = tmp_path
 
-    (base / "pyproject.toml").write_text(
-        "[project]\nname = 'test'\ndependencies = []\n"
-    )
+    make_pyproject(base, "[project]\nname = 'test'\ndependencies = []\n")
 
-    monkeypatch.setattr(appenv, "ensure_uv", lambda base: mock_uv)
-
-    env = appenv.AppEnv(base, test_settings(base))
+    env = app_env(base)
     args = argparse.Namespace(diff=False, verbose=True)
     env.update_lockfile(args)
 

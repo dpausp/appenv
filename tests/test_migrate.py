@@ -3,6 +3,8 @@
 import argparse
 from pathlib import Path
 
+import pytest
+
 import appenv
 
 
@@ -254,51 +256,6 @@ def test_migrate_editable_missing_package_warns(
     assert "[tool.uv.sources]" not in pyproject
 
 
-def test_migrate_editable_git_url_warns(
-    tmp_path, monkeypatch, capsys, patterns, app_env
-):
-    """init_pyproject warns for git URL editable (not supported)."""
-    monkeypatch.chdir(tmp_path)
-    base = tmp_path
-
-    (base / "requirements.txt").write_text(
-        "-e git+https://github.com/user/repo.git\nrequests\n"
-    )
-
-    inputs = iter(["myproject"])
-    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
-
-    env = app_env()
-    env.migrate()
-
-    captured = capsys.readouterr()
-
-    patterns.any.optional("...")
-    patterns.main.merge("any")
-    patterns.main.in_order(
-        """\
-...warning: 1 editable install(s) skipped:
-...- -e git+https://github.com/user/repo.git
-...add them manually to pyproject.toml if needed."""
-    )
-
-    patterns.no_errors.optional("...")
-    patterns.no_errors.refused("...error...")
-    patterns.no_errors.refused("...exception...")
-    patterns.no_errors.refused("...traceback...")
-    patterns.no_errors.refused("...failed...")
-
-    full_pattern = patterns.full
-    full_pattern.merge("main", "no_errors")
-
-    full_pattern.generate_example()
-
-    assert full_pattern == captured.out.lower()
-
-    pyproject = (base / "pyproject.toml").read_text()
-    assert '"requests"' in pyproject
-    assert "[tool.uv.sources]" not in pyproject
-
 
 def test_migrate_editable_mixed_valid_and_invalid(
     tmp_path, monkeypatch, capsys, patterns, app_env
@@ -356,38 +313,46 @@ def test_migrate_editable_mixed_valid_and_invalid(
     assert "requests" in pyproject
 
 
-def test_migrate_editable_warnings_updated(
+@pytest.mark.parametrize("requirements,warning_pattern,regular_deps", [
+    (
+        "-e git+https://github.com/user/repo.git\nrequests\n",
+        "...warning: 1 editable install(s) skipped:\n"
+        "...- -e git+https://github.com/user/repo.git\n"
+        "...add them manually to pyproject.toml if needed.",
+        ['"requests"'],
+    ),
+    (
+        "-e git+https://github.com/user/pkg.git"
+        "\n-e package @ ./path"
+        "\nrequests\nclick\n",
+        "...warning: 2 editable install(s) skipped:\n"
+        "...- -e git+https://github.com/user/pkg.git\n"
+        "...- -e package @ ./path\n"
+        "...add them manually to pyproject.toml if needed.",
+        ['"requests"', '"click"'],
+    ),
+])
+def test_migrate_editable_unsupported_warns(
+    requirements, warning_pattern, regular_deps,
     tmp_path, monkeypatch, capsys, patterns, app_env
 ):
-    """init_pyproject warns about unsupported editable formats (git URLs, etc)."""
+    """init_pyproject warns about unsupported editable formats (git URLs, PEP 508)."""
     monkeypatch.chdir(tmp_path)
     base = tmp_path
 
-    # Create requirements.txt with git URLs (not supported)
-    (base / "requirements.txt").write_text(
-        "-e git+https://github.com/user/pkg.git\n"
-        "-e package @ ./path\n"  # PEP 508 format
-        "requests\nclick\n"
-    )
+    (base / "requirements.txt").write_text(requirements)
 
-    # Mock input to use defaults
     inputs = iter(["myproject"])
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
     env = app_env()
     env.migrate()
 
-    # Check output mentions editable installs warning
     captured = capsys.readouterr()
+
     patterns.any.optional("...")
     patterns.main.merge("any")
-    patterns.main.in_order(
-        """\
-...warning: 2 editable install(s) skipped:
-...- -e git+https://github.com/user/pkg.git
-...- -e package @ ./path
-...add them manually to pyproject.toml if needed."""
-    )
+    patterns.main.in_order(warning_pattern)
 
     patterns.no_errors.optional("...")
     patterns.no_errors.refused("...error...")
@@ -402,12 +367,10 @@ def test_migrate_editable_warnings_updated(
 
     assert full_pattern == captured.out.lower()
 
-    # Check pyproject.toml was created with only regular deps
     pyproject = (base / "pyproject.toml").read_text()
     assert "-e" not in pyproject
-    assert "requests" in pyproject
-    assert "click" in pyproject
-    assert "[tool.uv.sources]" not in pyproject
+    for dep in regular_deps:
+        assert dep in pyproject
     assert "[tool.uv.sources]" not in pyproject
 
 
