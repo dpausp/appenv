@@ -15,25 +15,15 @@ import pytest
 import appenv
 from appenv import UvVersion
 
-
-def mock_ensure_python(monkeypatch):
-    """Mock ensure_best_python to prevent re-exec."""
-    monkeypatch.setattr(appenv, "ensure_best_python", lambda base: None)
-
-
 # main() tests
 
 
-def test_main_shows_usage_without_subcommand(monkeypatch, capsys, tmp_path):
+def test_main_shows_usage_without_subcommand(
+    monkeypatch, capsys, tmp_path, no_ensure_python, mock_logdir
+):
     """Test that calling appenv without subcommand shows usage."""
-    mock_ensure_python(monkeypatch)
     monkeypatch.setattr("sys.argv", ["appenv"])
     monkeypatch.setattr(appenv, "__file__", "/some/path/appenv")
-
-    # Mock _set_up_logdir to use tmp_path
-    mock_log_dir = tmp_path / "logs"
-    mock_log_dir.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setattr(appenv.AppEnv, "_set_up_logdir", lambda self: mock_log_dir)
 
     # Should exit with usage message
     with pytest.raises(SystemExit):
@@ -79,16 +69,12 @@ def test_grouped_help_formatter_skips_command_not_in_choices():
     assert "Project:" in result
 
 
-def test_main_shows_grouped_help(monkeypatch, capsys, tmp_path, patterns):
+def test_main_shows_grouped_help(
+    monkeypatch, capsys, tmp_path, patterns, no_ensure_python, mock_logdir
+):
     """Test that help output shows commands grouped by category."""
-    mock_ensure_python(monkeypatch)
     monkeypatch.setattr("sys.argv", ["appenv", "--help"])
     monkeypatch.setattr(appenv, "__file__", "/some/path/appenv")
-
-    # Mock _set_up_logdir to use tmp_path
-    mock_log_dir = tmp_path / "logs"
-    mock_log_dir.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setattr(appenv.AppEnv, "_set_up_logdir", lambda self: mock_log_dir)
 
     with pytest.raises(SystemExit):
         appenv.main()
@@ -123,15 +109,11 @@ def test_main_shows_grouped_help(monkeypatch, capsys, tmp_path, patterns):
     assert full_pattern == captured.out
 
 
-def test_help_same_as_no_args(monkeypatch, capsys, tmp_path):
+def test_help_same_as_no_args(
+    monkeypatch, capsys, tmp_path, no_ensure_python, mock_logdir
+):
     """Test that --help shows grouped help output."""
-    mock_ensure_python(monkeypatch)
     monkeypatch.setattr(appenv, "__file__", "/some/path/appenv")
-
-    # Mock _set_up_logdir to use tmp_path
-    mock_log_dir = tmp_path / "logs"
-    mock_log_dir.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setattr(appenv.AppEnv, "_set_up_logdir", lambda self: mock_log_dir)
 
     # Get output with --help
     monkeypatch.setattr("sys.argv", ["appenv", "--help"])
@@ -144,8 +126,7 @@ def test_help_same_as_no_args(monkeypatch, capsys, tmp_path):
     assert "Commands:" in captured_help.out
 
 
-def test_main_clears_pythonpath(monkeypatch):
-    mock_ensure_python(monkeypatch)
+def test_main_clears_pythonpath(monkeypatch, no_ensure_python):
     monkeypatch.setattr("sys.argv", ["appenv"])
 
     monkeypatch.setenv("PYTHONPATH", "/some/path")
@@ -158,9 +139,7 @@ def test_main_clears_pythonpath(monkeypatch):
     assert "PYTHONPATH" not in os.environ
 
 
-def test_main_calls_run_when_not_appenv(monkeypatch, tmp_path):
-    mock_ensure_python(monkeypatch)
-
+def test_main_calls_run_when_not_appenv(monkeypatch, tmp_path, no_ensure_python):
     app_file = tmp_path / "myapp"
     app_file.write_text("#!/usr/bin/env python3\nprint('test')\n")
 
@@ -179,9 +158,7 @@ def test_main_calls_run_when_not_appenv(monkeypatch, tmp_path):
     assert run_called == [("myapp", ["--help"])]
 
 
-def test_main_calls_meta_when_appenv(monkeypatch):
-    mock_ensure_python(monkeypatch)
-
+def test_main_calls_meta_when_appenv(monkeypatch, no_ensure_python):
     meta_called = []
     monkeypatch.setattr(
         appenv.AppEnv,
@@ -240,8 +217,8 @@ def test_ensure_uv_returns_uvbin_from_path(monkeypatch, tmp_path):
 # meta() tests
 
 
-def test_meta_calls_reset(monkeypatch, tmp_path, test_settings):
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+def test_meta_calls_reset(monkeypatch, tmp_path, app_env):
+    env = app_env()
     monkeypatch.setattr("sys.argv", ["appenv", "reset"])
 
     reset_called = []
@@ -254,8 +231,8 @@ def test_meta_calls_reset(monkeypatch, tmp_path, test_settings):
     assert reset_called == [True]
 
 
-def test_meta_calls_prepare(monkeypatch, tmp_path, test_settings):
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+def test_meta_calls_prepare(monkeypatch, tmp_path, app_env):
+    env = app_env()
     monkeypatch.setattr("sys.argv", ["appenv", "prepare"])
 
     prepare_called = []
@@ -270,8 +247,8 @@ def test_meta_calls_prepare(monkeypatch, tmp_path, test_settings):
     assert prepare_called == [True]
 
 
-def test_meta_calls_python(monkeypatch, tmp_path, test_settings):
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+def test_meta_calls_python(monkeypatch, tmp_path, app_env):
+    env = app_env()
     monkeypatch.setattr("sys.argv", ["appenv", "python"])
 
     python_called = []
@@ -286,8 +263,8 @@ def test_meta_calls_python(monkeypatch, tmp_path, test_settings):
     assert len(python_called) == 1
 
 
-def test_meta_calls_run_script(monkeypatch, tmp_path, test_settings):
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+def test_meta_calls_run_script(monkeypatch, tmp_path, app_env):
+    env = app_env()
     monkeypatch.setattr("sys.argv", ["appenv", "run", "myscript"])
 
     run_called = []
@@ -305,8 +282,8 @@ def test_meta_calls_run_script(monkeypatch, tmp_path, test_settings):
 # run() tests
 
 
-def test_run_sets_env_and_execs(monkeypatch, tmp_path, test_settings):
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+def test_run_sets_env_and_execs(monkeypatch, tmp_path, app_env):
+    env = app_env()
 
     # Add pyproject.toml and uv.lock so _prepare_venv doesn't exit
     (tmp_path / "pyproject.toml").write_text(
@@ -337,9 +314,9 @@ def test_run_sets_env_and_execs(monkeypatch, tmp_path, test_settings):
 
 
 def test_run_missing_binary_shows_helpful_error(
-    monkeypatch, tmp_path, capsys, test_settings, patterns
+    monkeypatch, tmp_path, capsys, app_env, patterns
 ):
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env = app_env()
 
     env_dir = tmp_path / ".appenv" / "venv"
     bin_dir = env_dir / "bin"
@@ -379,8 +356,8 @@ def test_run_missing_binary_shows_helpful_error(
     assert full_pattern == captured.out
 
 
-def test_python_method_calls_run(monkeypatch, tmp_path, test_settings):
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+def test_python_method_calls_run(monkeypatch, tmp_path, app_env):
+    env = app_env()
 
     run_called = []
     monkeypatch.setattr(env, "run", lambda cmd, argv: run_called.append((cmd, argv)))
@@ -509,7 +486,7 @@ def test_find_available_pythons_sorting(monkeypatch):
 
     result = appenv.find_available_pythons()
 
-    # Must be numerically sorted: 3.14, 3.13, 3.12, 3.11, 3.10, 3.9
+    # Must be numerically sorted: 3.14, 3.13, 3.12, 3.11, 3.10
     # (lexikographic would be wrong: 3.9 > 3.10)
     versions = [v for v, _ in result]
     assert versions == ["3.14", "3.13", "3.12", "3.11", "3.10"]
@@ -656,9 +633,9 @@ def test_version_satisfies_constraints_edge_cases():
     )  # [3,10] < [3,10,0]
 
 
-def test_run_script_delegates(capsys, tmp_path, test_settings):
+def test_run_script_delegates(capsys, tmp_path, app_env):
     """run_script() shows deprecation message with alternatives."""
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env = app_env()
 
     with pytest.raises(SystemExit) as exc_info:
         env.run_script(argparse.Namespace(script="pytest"), ["-v", "test.py"])
@@ -669,9 +646,9 @@ def test_run_script_delegates(capsys, tmp_path, test_settings):
     assert "ln -s appenv pytest" in captured.out
 
 
-def test_show_version(tmp_path, capsys, patterns, test_settings):
+def test_show_version(tmp_path, capsys, patterns, app_env):
     """show_version() prints the appenv version."""
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env = app_env()
     env.show_version()
 
     captured = capsys.readouterr()
@@ -1016,7 +993,7 @@ def test_pyproject_builder_merges_with_existing_content(tmp_path):
     assert "requests" in content
 
 
-def test_uv_sync_with_extras(tmp_path, monkeypatch):
+def test_uv_sync_with_extras(tmp_path, monkeypatch, make_mock_uv):
     """Line 1087: _uv_sync with extras setting."""
     # Create settings with extras
     settings = appenv.AppEnvSettings(
@@ -1029,11 +1006,9 @@ def test_uv_sync_with_extras(tmp_path, monkeypatch):
     # Mock uv.cmd to capture sync args
     sync_calls = []
 
-    class MockUvBin:
-        def cmd(self, args, **kwargs):
-            sync_calls.append(list(args))
-
-    uv = MockUvBin()
+    uv = make_mock_uv(
+        cmd_fn=lambda args, **kwargs: sync_calls.append(list(args)) or "",
+    )
     env._uv_sync(dev_mode=True, uv=cast("appenv.UvBin", uv))
 
     # Verify extras were added to sync command
@@ -1219,9 +1194,7 @@ def test_migrate_single_python_version(tmp_path, capsys):
     assert req_info.python_versions == ["3.12"]
 
 
-def test_init_skips_appenv_script_creation(
-    tmp_path, monkeypatch, capsys, test_settings
-):
+def test_init_skips_appenv_script_creation(tmp_path, monkeypatch, capsys, app_env):
     """Line 894-900: init() skips appenv script creation when it already exists."""
     base = tmp_path
 
@@ -1239,7 +1212,7 @@ def test_init_skips_appenv_script_creation(
         appenv.AppEnv, "_set_up_command_symlink", lambda self, **kwargs: None
     )
 
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env = app_env()
 
     with pytest.raises(SystemExit):
         env.init()
@@ -1295,9 +1268,9 @@ def test_grouped_help_formatter_truncates_long_help():
     assert "A" * 47 + "..." in result
 
 
-def test_run_missing_binary_empty_venv(monkeypatch, tmp_path, capsys, test_settings):
+def test_run_missing_binary_empty_venv(monkeypatch, tmp_path, capsys, app_env):
     """Line 690: run() shows 'No binaries found' when venv/bin/ is empty."""
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env = app_env()
 
     # Create empty venv/bin/ directory (no binaries)
     env_dir = tmp_path / ".appenv" / "venv"
@@ -1315,9 +1288,9 @@ def test_run_missing_binary_empty_venv(monkeypatch, tmp_path, capsys, test_setti
     assert "No binaries found in the virtual environment" in captured.out
 
 
-def test_meta_unrecognized_arguments(tmp_path, test_settings, capsys):
+def test_meta_unrecognized_arguments(tmp_path, app_env, capsys):
     """Lines 791-793: meta() exits with USAGE on unrecognized arguments."""
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env = app_env()
 
     with pytest.raises(SystemExit) as exc_info:
         env.meta(remaining_args=["--totally-bogus-flag"])

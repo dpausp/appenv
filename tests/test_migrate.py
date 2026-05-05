@@ -7,7 +7,7 @@ import appenv
 
 
 def test_migrate_uses_python_preference_from_requirements(
-    tmp_path, monkeypatch, capsys, test_settings
+    tmp_path, monkeypatch, capsys, app_env
 ):
     """Migrate reads python preference from requirements.txt."""
     monkeypatch.chdir(tmp_path)
@@ -22,7 +22,7 @@ def test_migrate_uses_python_preference_from_requirements(
     inputs = iter(["test-project"])  # project name
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env = app_env()
     env.migrate()
 
     # Classic assertions for pyproject.toml with python version range specifier
@@ -39,7 +39,7 @@ def test_migrate_uses_python_preference_from_requirements(
     assert "Note: Versions 3.13" in captured.out
 
 
-def test_migrate_existing_symlinks(tmp_path, monkeypatch, capsys, test_settings):
+def test_migrate_existing_symlinks(tmp_path, monkeypatch, capsys, app_env):
     """Migrate detects and preserves existing symlinks during migration."""
     monkeypatch.chdir(tmp_path)
     base = tmp_path
@@ -58,7 +58,7 @@ def test_migrate_existing_symlinks(tmp_path, monkeypatch, capsys, test_settings)
     inputs = iter(["myproject"])  # project name
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env = app_env()
     env.migrate()
 
     # Simple assertion for console output
@@ -71,7 +71,7 @@ def test_migrate_existing_symlinks(tmp_path, monkeypatch, capsys, test_settings)
     assert myapp_link.resolve() == appenv_script.resolve()
 
 
-def test_migrate_empty_dependencies(tmp_path, monkeypatch, capsys, test_settings):
+def test_migrate_empty_dependencies(tmp_path, monkeypatch, capsys, app_env):
     """Migrate handles requirements.txt with only comments (no dependencies)."""
     monkeypatch.chdir(tmp_path)
     base = tmp_path
@@ -85,7 +85,7 @@ def test_migrate_empty_dependencies(tmp_path, monkeypatch, capsys, test_settings
     inputs = iter(["empty-project"])  # project name
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env = app_env()
     env.migrate()
 
     # Check pyproject.toml was created with empty dependencies
@@ -97,7 +97,7 @@ def test_migrate_empty_dependencies(tmp_path, monkeypatch, capsys, test_settings
     assert "0 dependency" in captured.out or "Found 0" in captured.out
 
 
-def test_migrate_uses_directory_name(tmp_path, monkeypatch, capsys, test_settings):
+def test_migrate_uses_directory_name(tmp_path, monkeypatch, capsys, app_env):
     """Migrate uses directory name as project name (non-interactive)."""
     monkeypatch.chdir(tmp_path)
     base = tmp_path
@@ -105,7 +105,7 @@ def test_migrate_uses_directory_name(tmp_path, monkeypatch, capsys, test_setting
     # Create requirements.txt to trigger migration
     (base / "requirements.txt").write_text("requests>=2.0\n")
 
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env = app_env()
     env.migrate()
 
     # Verify pyproject.toml uses directory name as project name
@@ -117,7 +117,7 @@ def test_migrate_uses_directory_name(tmp_path, monkeypatch, capsys, test_setting
     assert "Migrating" in captured.out
 
 
-def test_migrate_already_exists(tmp_path, monkeypatch, capsys, patterns, test_settings):
+def test_migrate_already_exists(tmp_path, monkeypatch, capsys, patterns, app_env):
     """Migrate returns early when pyproject.toml already exists."""
     monkeypatch.chdir(tmp_path)
     base = tmp_path
@@ -127,7 +127,7 @@ def test_migrate_already_exists(tmp_path, monkeypatch, capsys, patterns, test_se
         '[project]\nname = "existing"\ndependencies = []\n'
     )
 
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env = app_env()
     env.migrate()
 
     # Pattern-test for console output
@@ -147,12 +147,12 @@ Nothing to do."""
 
 
 def test_migrate_no_requirements_txt(
-    workdir, monkeypatch, capsys, patterns, test_settings
+    workdir, monkeypatch, capsys, patterns, app_env
 ):
     """Lines 888-890: migrate() returns early when requirements.txt not found."""
     Path(workdir)
 
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env = app_env()
     env.migrate()
 
     captured = capsys.readouterr()
@@ -172,7 +172,7 @@ Use 'init' to create a new project."""
 
 
 def test_migrate_full_flow_pattern(
-    tmp_path, monkeypatch, capsys, patterns, test_settings
+    tmp_path, monkeypatch, capsys, patterns, app_env, mock_uv_lock
 ):
     """Pattern-test for the full migration flow from requirements.txt."""
     monkeypatch.chdir(tmp_path)
@@ -180,10 +180,7 @@ def test_migrate_full_flow_pattern(
 
     (base / "requirements.txt").write_text("requests\n")
 
-    # Mock _uv_lock per spec::mocking-strategy (ensure_uv already mocked by conftest)
-    monkeypatch.setattr(appenv.AppEnv, "_uv_lock", lambda self, uv, diff=False: "")
-
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env = app_env()
     env.migrate()
 
     captured = capsys.readouterr()
@@ -211,7 +208,7 @@ Preparing/cleaning .appenv directory ...
 
 
 def test_migrate_editable_missing_package_warns(
-    tmp_path, monkeypatch, capsys, patterns, test_settings
+    tmp_path, monkeypatch, capsys, patterns, app_env
 ):
     """init_pyproject warns when editable path has no package metadata."""
     monkeypatch.chdir(tmp_path)
@@ -225,7 +222,7 @@ def test_migrate_editable_missing_package_warns(
     inputs = iter(["myproject"])
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env = app_env()
     env.migrate()
 
     captured = capsys.readouterr()
@@ -258,7 +255,7 @@ def test_migrate_editable_missing_package_warns(
 
 
 def test_migrate_editable_git_url_warns(
-    tmp_path, monkeypatch, capsys, patterns, test_settings
+    tmp_path, monkeypatch, capsys, patterns, app_env
 ):
     """init_pyproject warns for git URL editable (not supported)."""
     monkeypatch.chdir(tmp_path)
@@ -271,7 +268,7 @@ def test_migrate_editable_git_url_warns(
     inputs = iter(["myproject"])
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env = app_env()
     env.migrate()
 
     captured = capsys.readouterr()
@@ -304,7 +301,7 @@ def test_migrate_editable_git_url_warns(
 
 
 def test_migrate_editable_mixed_valid_and_invalid(
-    tmp_path, monkeypatch, capsys, patterns, test_settings
+    tmp_path, monkeypatch, capsys, patterns, app_env
 ):
     """init_pyproject handles mix of valid and invalid editables."""
     monkeypatch.chdir(tmp_path)
@@ -326,7 +323,7 @@ def test_migrate_editable_mixed_valid_and_invalid(
     inputs = iter(["myproject"])
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env = app_env()
     env.migrate()
 
     captured = capsys.readouterr()
@@ -360,7 +357,7 @@ def test_migrate_editable_mixed_valid_and_invalid(
 
 
 def test_migrate_editable_warnings_updated(
-    tmp_path, monkeypatch, capsys, patterns, test_settings
+    tmp_path, monkeypatch, capsys, patterns, app_env
 ):
     """init_pyproject warns about unsupported editable formats (git URLs, etc)."""
     monkeypatch.chdir(tmp_path)
@@ -377,7 +374,7 @@ def test_migrate_editable_warnings_updated(
     inputs = iter(["myproject"])
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env = app_env()
     env.migrate()
 
     # Check output mentions editable installs warning
@@ -415,7 +412,7 @@ def test_migrate_editable_warnings_updated(
 
 
 def test_migrate_existing_pyproject_no_project_section(
-    tmp_path, monkeypatch, capsys, patterns, test_settings
+    tmp_path, monkeypatch, capsys, patterns, app_env, mock_uv_lock
 ):
     """Line 884: migrate() when pyproject.toml exists but has no [project] section."""
     monkeypatch.chdir(tmp_path)
@@ -442,10 +439,7 @@ def test_migrate_existing_pyproject_no_project_section(
     # Mock print_migration_info
     monkeypatch.setattr(appenv.Pyproject, "print_migration_info", lambda self: None)
 
-    # Mock _uv_lock to prevent actual uv execution
-    monkeypatch.setattr(appenv.AppEnv, "_uv_lock", lambda self, uv, diff=False: None)
-
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env = app_env()
     env.migrate()
 
     captured = capsys.readouterr()
@@ -453,7 +447,7 @@ def test_migrate_existing_pyproject_no_project_section(
 
 
 def test_migrate_updates_appenv_script_on_version_mismatch(
-    tmp_path, monkeypatch, capsys, test_settings
+    tmp_path, monkeypatch, capsys, app_env, mock_uv_lock
 ):
     """migrate replaces ./appenv when its version differs from the running one."""
     monkeypatch.chdir(tmp_path)
@@ -469,14 +463,13 @@ def test_migrate_updates_appenv_script_on_version_mismatch(
     )
     old_script.chmod(0o755)
 
-    # Mock ensure_uv and _uv_lock to prevent actual uv execution
+    # Mock ensure_uv to prevent actual uv execution
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
-    monkeypatch.setattr(appenv.AppEnv, "_uv_lock", lambda self, uv, diff=False: None)
 
     inputs = iter(["myproject"])
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env = app_env()
     env.migrate()
 
     captured = capsys.readouterr()
@@ -492,7 +485,7 @@ def test_migrate_updates_appenv_script_on_version_mismatch(
 
 
 def test_migrate_skips_appenv_script_on_same_version(
-    tmp_path, monkeypatch, capsys, test_settings
+    tmp_path, monkeypatch, capsys, app_env, mock_uv_lock
 ):
     """migrate does NOT replace ./appenv when versions already match."""
     monkeypatch.chdir(tmp_path)
@@ -511,14 +504,13 @@ def test_migrate_skips_appenv_script_on_same_version(
     current_script.chmod(0o755)
     original_mtime = current_script.stat().st_mtime
 
-    # Mock ensure_uv and _uv_lock
+    # Mock ensure_uv
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
-    monkeypatch.setattr(appenv.AppEnv, "_uv_lock", lambda self, uv, diff=False: None)
 
     inputs = iter(["myproject"])
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env = app_env()
     env.migrate()
 
     captured = capsys.readouterr()
@@ -530,7 +522,7 @@ def test_migrate_skips_appenv_script_on_same_version(
 
 
 def test_migrate_updates_appenv_script_without_version(
-    tmp_path, monkeypatch, capsys, test_settings
+    tmp_path, monkeypatch, capsys, app_env, mock_uv_lock
 ):
     """migrate replaces ./appenv when it has no __version__ (unknown version)."""
     monkeypatch.chdir(tmp_path)
@@ -544,14 +536,13 @@ def test_migrate_updates_appenv_script_without_version(
     old_script.write_text("#!/usr/bin/env python3\nprint('old')\n")
     old_script.chmod(0o755)
 
-    # Mock ensure_uv and _uv_lock
+    # Mock ensure_uv
     monkeypatch.setattr(appenv, "ensure_uv", lambda base: None)
-    monkeypatch.setattr(appenv.AppEnv, "_uv_lock", lambda self, uv, diff=False: None)
 
     inputs = iter(["myproject"])
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env = app_env()
     env.migrate()
 
     captured = capsys.readouterr()
@@ -565,7 +556,7 @@ def test_migrate_updates_appenv_script_without_version(
 
 
 def test_migrate_with_path_argument(
-    tmp_path, monkeypatch, capsys, test_settings
+    tmp_path, monkeypatch, capsys, app_env, mock_uv_lock
 ):
     """Lines 892-893: migrate() with --path creates target directory."""
     base = tmp_path
@@ -575,10 +566,7 @@ def test_migrate_with_path_argument(
     subdir.mkdir()
     (subdir / "requirements.txt").write_text("requests\n")
 
-    env = appenv.AppEnv(base, test_settings(base))
-
-    # Mock _uv_lock to prevent actual uv execution
-    monkeypatch.setattr(appenv.AppEnv, "_uv_lock", lambda self, uv, diff=False: None)
+    env = app_env(base)
 
     args = argparse.Namespace(path="subdir")
     env.migrate(args)

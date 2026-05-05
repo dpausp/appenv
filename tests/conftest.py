@@ -105,3 +105,77 @@ def subprocess_run_fail(monkeypatch):
         )
 
     monkeypatch.setattr(subprocess, "run", fail)
+
+
+@pytest.fixture
+def app_env(test_settings):
+    """Factory fixture for AppEnv with test defaults."""
+    def _app_env(basedir=None):
+        basedir = basedir or Path.cwd()
+        return appenv.AppEnv(basedir, test_settings(basedir))
+    return _app_env
+
+
+@pytest.fixture
+def make_mock_uv():
+    """Factory fixture for creating MockUvBin with custom version/cmd."""
+    def _make(version=None, cmd_fn=None):
+        if version is None:
+            version = UvVersion(0, 5, 0)
+        uv = MockUvBin()
+        uv._version = version
+        if cmd_fn:
+            uv.cmd = cmd_fn
+        return uv
+    return _make
+
+
+@pytest.fixture
+def no_ensure_python(monkeypatch):
+    """Mock ensure_best_python to prevent re-exec."""
+    monkeypatch.setattr(appenv, "ensure_best_python", lambda base: None)
+
+
+@pytest.fixture
+def mock_cmd_python(monkeypatch):
+    """Mock appenv.cmd to return Python 3.12.0."""
+    monkeypatch.setattr(appenv, "cmd", lambda c, **kwargs: b"Python 3.12.0")
+
+
+@pytest.fixture
+def create_venv(tmp_path):
+    """Factory fixture for creating venv directory structures."""
+    def _create(base=None, python_output="Python 3.12.0"):
+        base = base or tmp_path
+        venv = base / ".appenv" / "venv"
+        venv.mkdir(parents=True, exist_ok=True)
+        (venv / "bin").mkdir(exist_ok=True)
+        python = venv / "bin" / "python"
+        python.write_text(f"#!/bin/sh\necho {python_output}\n")
+        python.chmod(0o755)
+        return venv
+    return _create
+
+
+@pytest.fixture
+def mock_uv_lock(monkeypatch):
+    """Mock AppEnv._uv_lock to prevent actual uv execution."""
+    monkeypatch.setattr(
+        appenv.AppEnv, "_uv_lock", lambda self, uv, diff=False: None
+    )
+
+
+@pytest.fixture
+def mock_logdir(tmp_path, monkeypatch):
+    """Mock AppEnv._set_up_logdir to use tmp_path/logs."""
+    mock_log_dir = tmp_path / "logs"
+    mock_log_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(appenv.AppEnv, "_set_up_logdir", lambda self: mock_log_dir)
+
+
+
+@pytest.fixture
+def clean_uv_project_env():
+    """Ensure UV_PROJECT_ENVIRONMENT is cleaned up after test."""
+    yield
+    os.environ.pop("UV_PROJECT_ENVIRONMENT", None)

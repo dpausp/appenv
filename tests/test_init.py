@@ -10,14 +10,11 @@ import appenv
 
 
 def test_init_fresh_start_interactive(
-    tmp_path, monkeypatch, capsys, test_settings, mock_uv, patterns
+    tmp_path, monkeypatch, capsys, app_env, patterns
 ):
     """Init fresh start flow with interactive inputs."""
     monkeypatch.chdir(tmp_path)
     base = tmp_path
-
-    # Mock ensure_uv to return a mock UvBin with valid version
-    monkeypatch.setattr(appenv, "ensure_uv", lambda base: mock_uv)
 
     # No requirements.txt - triggers fresh start flow
     # Inputs: command name, deps (2), empty, project name, desc, py version
@@ -34,7 +31,7 @@ def test_init_fresh_start_interactive(
     )
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env = app_env()
     env.init()
 
     # Verify pyproject.toml was created
@@ -77,14 +74,11 @@ Use `./myapp` to run the myapp binary"""
 
 
 def test_init_fresh_start_default_dependencies(
-    tmp_path, monkeypatch, capsys, test_settings, mock_uv
+    tmp_path, monkeypatch, capsys, app_env
 ):
     """Init fresh start uses command name as default dependency when empty."""
     monkeypatch.chdir(tmp_path)
     base = tmp_path
-
-    # Mock ensure_uv to return a mock UvBin with valid version
-    monkeypatch.setattr(appenv, "ensure_uv", lambda base: mock_uv)
 
     # No requirements.txt - triggers fresh start flow
     # Use a real package name that exists on PyPI
@@ -100,7 +94,7 @@ def test_init_fresh_start_default_dependencies(
     )
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env = app_env()
     env.init()
 
     # Verify pyproject.toml was created with command name as dependency
@@ -111,13 +105,10 @@ def test_init_fresh_start_default_dependencies(
 
 
 def test_init_empty_command_name_uses_app(
-    workdir, monkeypatch, capsys, test_settings, mock_uv
+    workdir, monkeypatch, capsys, app_env
 ):
     """Test fresh start with default command name and dependencies."""
     base = Path(workdir)
-
-    # Mock ensure_uv to return a mock UvBin with valid version
-    monkeypatch.setattr(appenv, "ensure_uv", lambda base: mock_uv)
 
     inputs = iter(
         [
@@ -130,7 +121,7 @@ def test_init_empty_command_name_uses_app(
     )
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env = app_env()
     env.init()
 
     pyproject = (base / "pyproject.toml").read_text()
@@ -139,13 +130,10 @@ def test_init_empty_command_name_uses_app(
 
 
 def test_init_unlink_broken_symlink(
-    workdir, monkeypatch, capsys, test_settings, mock_uv
+    workdir, monkeypatch, capsys, app_env
 ):
     """Unlinks broken symlink before creating new one."""
     base = Path(workdir)
-
-    # Mock ensure_uv to return a mock UvBin with valid version
-    monkeypatch.setattr(appenv, "ensure_uv", lambda base: mock_uv)
 
     broken_link = base / "myapp"
     broken_link.symlink_to("nonexistent_target")
@@ -163,7 +151,7 @@ def test_init_unlink_broken_symlink(
     )
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env = app_env()
     env.init()
 
     assert (base / "myapp").is_symlink()
@@ -171,7 +159,7 @@ def test_init_unlink_broken_symlink(
     assert (base / "myapp").resolve() == (base / "appenv").resolve()
 
 
-def test_init_already_exists(workdir, monkeypatch, capsys, test_settings):
+def test_init_already_exists(workdir, monkeypatch, capsys, app_env):
     """Lines 838-841: init() returns early when pyproject.toml exists."""
     base = Path(workdir)
 
@@ -179,7 +167,7 @@ def test_init_already_exists(workdir, monkeypatch, capsys, test_settings):
         '[project]\nname = "existing"\ndependencies = []\n'
     )
 
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env = app_env()
 
     with pytest.raises(SystemExit) as exc_info:
         env.init()
@@ -192,13 +180,10 @@ def test_init_already_exists(workdir, monkeypatch, capsys, test_settings):
 
 
 def test_init_empty_command_name_defaults_to_app(
-    workdir, monkeypatch, capsys, test_settings, mock_uv
+    workdir, monkeypatch, capsys, app_env
 ):
     """Line 847: init() uses 'app' as default when command name is empty."""
     base = Path(workdir)
-
-    # Mock ensure_uv to return a mock UvBin with valid version
-    monkeypatch.setattr(appenv, "ensure_uv", lambda base: mock_uv)
 
     # Empty command name -> defaults to "app"
     inputs = iter(
@@ -212,7 +197,7 @@ def test_init_empty_command_name_defaults_to_app(
     )
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env = app_env()
     env.init()
 
     pyproject = (base / "pyproject.toml").read_text()
@@ -221,14 +206,11 @@ def test_init_empty_command_name_defaults_to_app(
 
 
 def test_init_with_path_creates_directory(
-    tmp_path, monkeypatch, capsys, test_settings, mock_uv
+    tmp_path, monkeypatch, capsys, app_env
 ):
     """init with path argument creates directory and initializes there."""
     base = tmp_path
     target_dir = base / "myproject"
-
-    # Mock ensure_uv to return a mock UvBin with valid version
-    monkeypatch.setattr(appenv, "ensure_uv", lambda base: mock_uv)
 
     inputs = iter(
         [
@@ -241,7 +223,7 @@ def test_init_with_path_creates_directory(
     )
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(base, test_settings(base))
+    env = app_env(base)
     args = argparse.Namespace(path="myproject")
     env.init(args)
 
@@ -261,14 +243,11 @@ def test_init_with_path_creates_directory(
 
 
 def test_init_with_nested_path_creates_directories(
-    tmp_path, monkeypatch, capsys, test_settings, mock_uv
+    tmp_path, monkeypatch, capsys, app_env
 ):
     """init with nested path creates all parent directories."""
     base = tmp_path
     target_dir = base / "some" / "nested" / "path"
-
-    # Mock ensure_uv to return a mock UvBin with valid version
-    monkeypatch.setattr(appenv, "ensure_uv", lambda base: mock_uv)
 
     inputs = iter(
         [
@@ -281,7 +260,7 @@ def test_init_with_nested_path_creates_directories(
     )
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(base, test_settings(base))
+    env = app_env(base)
     args = argparse.Namespace(path="some/nested/path")
     env.init(args)
 
@@ -296,15 +275,12 @@ def test_init_with_nested_path_creates_directories(
 
 
 def test_init_with_existing_directory(
-    tmp_path, monkeypatch, capsys, test_settings, mock_uv
+    tmp_path, monkeypatch, capsys, app_env
 ):
     """init with path to existing directory initializes inside it."""
     base = tmp_path
     target_dir = base / "existing"
     target_dir.mkdir()
-
-    # Mock ensure_uv to return a mock UvBin with valid version
-    monkeypatch.setattr(appenv, "ensure_uv", lambda base: mock_uv)
 
     inputs = iter(
         [
@@ -317,7 +293,7 @@ def test_init_with_existing_directory(
     )
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(base, test_settings(base))
+    env = app_env(base)
     args = argparse.Namespace(path="existing")
     env.init(args)
 
@@ -328,14 +304,11 @@ def test_init_with_existing_directory(
 
 
 def test_init_without_path_uses_current_directory(
-    tmp_path, monkeypatch, capsys, test_settings, mock_uv
+    tmp_path, monkeypatch, capsys, app_env
 ):
     """init without path argument uses current directory (original_cwd)."""
     base = tmp_path
     monkeypatch.chdir(base)
-
-    # Mock ensure_uv to return a mock UvBin with valid version
-    monkeypatch.setattr(appenv, "ensure_uv", lambda base: mock_uv)
 
     inputs = iter(
         [
@@ -348,7 +321,7 @@ def test_init_without_path_uses_current_directory(
     )
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env = app_env()
     # Call init without args (path=None is default)
     env.init()
 
@@ -359,25 +332,21 @@ def test_init_without_path_uses_current_directory(
 
 
 def test_init_appenv_script_already_exists(
-    workdir, monkeypatch, capsys, test_settings, mock_uv
+    workdir, monkeypatch, capsys, app_env
 ):
     """Branch 882->889: init() skips appenv script creation when it already exists."""
     base = Path(workdir) / "myproject_init_exists"
     base.mkdir()
     os.chdir(base)
 
-    settings = test_settings(Path.cwd())
-    app = appenv.AppEnv(Path.cwd(), settings)
+    env = app_env()
 
     # Create appenv script BEFORE calling init
-    app.appenv_script.write_text("#!/usr/bin/env python3\nprint('existing')\n")
-    app.appenv_script.chmod(0o755)
+    env.appenv_script.write_text("#!/usr/bin/env python3\nprint('existing')\n")
+    env.appenv_script.chmod(0o755)
 
-    original_content = app.appenv_script.read_text()
-    original_mtime = app.appenv_script.stat().st_mtime
-
-    # Mock ensure_uv
-    monkeypatch.setattr(appenv, "ensure_uv", lambda base: mock_uv)
+    original_content = env.appenv_script.read_text()
+    original_mtime = env.appenv_script.stat().st_mtime
 
     # Inputs for init
     inputs = iter(
@@ -391,11 +360,11 @@ def test_init_appenv_script_already_exists(
     )
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    app.init()
+    env.init()
 
     # Verify appenv script was NOT overwritten
-    assert app.appenv_script.read_text() == original_content
-    assert app.appenv_script.stat().st_mtime == original_mtime
+    assert env.appenv_script.read_text() == original_content
+    assert env.appenv_script.stat().st_mtime == original_mtime
 
     # Verify pyproject.toml was still created
     assert (base / "pyproject.toml").exists()
@@ -406,26 +375,22 @@ def test_init_appenv_script_already_exists(
 
 
 def test_init_warns_on_version_mismatch(
-    workdir, monkeypatch, capsys, test_settings, mock_uv
+    workdir, monkeypatch, capsys, app_env
 ):
     """init warns when local ./appenv has a different version."""
     base = Path(workdir) / "myproject_init_version"
     base.mkdir()
     os.chdir(base)
 
-    settings = test_settings(Path.cwd())
-    app = appenv.AppEnv(Path.cwd(), settings)
+    env = app_env()
 
     # Create appenv script with a different version
-    app.appenv_script.write_text(
+    env.appenv_script.write_text(
         '#!/usr/bin/env python3\n__version__ = "0.0.1"\nprint("old")\n'
     )
-    app.appenv_script.chmod(0o755)
+    env.appenv_script.chmod(0o755)
 
-    original_content = app.appenv_script.read_text()
-
-    # Mock ensure_uv
-    monkeypatch.setattr(appenv, "ensure_uv", lambda base: mock_uv)
+    original_content = env.appenv_script.read_text()
 
     # Inputs for init
     inputs = iter(
@@ -439,10 +404,10 @@ def test_init_warns_on_version_mismatch(
     )
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    app.init()
+    env.init()
 
     # Verify appenv script was NOT overwritten (warn only, no update)
-    assert app.appenv_script.read_text() == original_content
+    assert env.appenv_script.read_text() == original_content
 
     captured = capsys.readouterr()
     assert "Warning" in captured.out
@@ -452,7 +417,7 @@ def test_init_warns_on_version_mismatch(
 
 
 def test_init_existing_pyproject_no_project_section(
-    tmp_path, monkeypatch, capsys, test_settings, mock_uv
+    tmp_path, monkeypatch, capsys, app_env
 ):
     """Line 833: init() with existing pyproject.toml without [project] section."""
     monkeypatch.chdir(tmp_path)
@@ -461,12 +426,10 @@ def test_init_existing_pyproject_no_project_section(
     # Create pyproject.toml WITHOUT [project] section (e.g., only tool config)
     (base / "pyproject.toml").write_text("[tool.ruff]\nline-length = 100\n")
 
-    monkeypatch.setattr(appenv, "ensure_uv", lambda base: mock_uv)
-
     inputs = iter(["myapp", "", "myproject", "Test", "3.13"])
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env = app_env()
     env.init()
 
     captured = capsys.readouterr()
