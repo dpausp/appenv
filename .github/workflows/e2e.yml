@@ -39,6 +39,39 @@ jobs:
       - name: Run http
         run: cd /tmp/testproject && ./http --version
 
+  # E2E: Bare Debian Bookworm — only python3, astral.sh installer fallback
+  debian-bookworm-minimal:
+    runs-on: ubuntu-24.04
+    container:
+      image: debian:bookworm
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install python3
+        run: apt-get update && apt-get install -y python3
+
+      - name: Bootstrap appenv (astral.sh installer)
+        run: |
+          mkdir /tmp/testproject && cd /tmp/testproject
+
+          cp $GITHUB_WORKSPACE/src/appenv.py appenv
+          chmod +x appenv
+
+          cat > pyproject.toml << 'EOF'
+          [project]
+          name = "bootstrap-test"
+          version = "0.1.0"
+          dependencies = ["httpie"]
+          requires-python = ">=3.10"
+          EOF
+
+          ./appenv update-lockfile
+          ln -s appenv http
+
+      - name: Run http
+        run: cd /tmp/testproject && ./http --version
+
   # E2E: uvx from git — user has only uv, runs uvx appenv init
   ubuntu-uvx:
     runs-on: ubuntu-24.04

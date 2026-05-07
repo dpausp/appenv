@@ -494,6 +494,7 @@ class UvBin:
         3. Build with nix-build from nixpkgs channel
         4. Build with nix build from nixpkgs flake
         5. pip install
+        6. astral.sh installer (curl)
         """
         log.debug("searching for uv, appenv_dir=%s", self.appenv_dir)
 
@@ -503,6 +504,7 @@ class UvBin:
             or self._try_uv_from_nix_channel()
             or self._try_uv_from_nix_flake()
             or self._try_uv_from_pip()
+            or self._try_uv_from_installer()
         )
         if not uv_bin:
             msg = "uv not found and could not be installed"
@@ -616,6 +618,63 @@ class UvBin:
             return None
 
         log.debug("pip install uv: %s", result.stdout)
+
+        version = UvBin.get_uv_version(self.managed_uv)
+        log.debug("uv version is %s, valid: %s", version, version.valid)
+
+        return self.managed_uv if version.valid else None
+
+    def _try_uv_from_installer(self):
+        """Download uv via astral.sh installer (curl/wget).
+
+        Uses UV_UNMANAGED_INSTALL to place the binary in .appenv/.uv/bin
+        without modifying shell profiles or system state.
+        """
+        log.debug("attempting to install uv via astral.sh installer ...")
+
+        curl = shutil.which("curl")
+        wget = shutil.which("wget")
+        if not curl and not wget:
+            log.debug("no curl or wget found, skipping installer")
+            return None
+
+        install_dir = str(self.uv_dir / "bin")
+        env = {**os.environ, "UV_UNMANAGED_INSTALL": install_dir}
+
+        try:
+            if curl:
+                result = subprocess.run(
+                    [curl, "-LsSf", "https://astral.sh/uv/install.sh"],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                subprocess.run(
+                    ["sh"],
+                    input=result.stdout,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                    env=env,
+                )
+            else:
+                script = subprocess.run(
+                    [str(wget), "-qO", "-", "https://astral.sh/uv/install.sh"],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                subprocess.run(
+                    ["sh"],
+                    input=script.stdout,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                    env=env,
+                )
+        except subprocess.CalledProcessError as e:
+            log.debug("astral.sh installer failed: %s", e.stderr)
+            return None
 
         version = UvBin.get_uv_version(self.managed_uv)
         log.debug("uv version is %s, valid: %s", version, version.valid)
