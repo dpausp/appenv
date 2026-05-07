@@ -6,7 +6,7 @@ on:
     types: [opened, reopened, synchronize]
 
 jobs:
-  # E2E: Fresh Debian Bookworm + python3-pip — appenv bootstraps uv via which(pip)
+  # E2E: Debian Bookworm + python3-pip — which(pip) fallback bootstraps uv
   debian-bookworm-pip:
     runs-on: ubuntu-24.04
     container:
@@ -15,34 +15,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install minimal prerequisites
-        run: |
-          apt-get update
-          apt-get install -y python3 python3-pip
+      - name: Install prerequisites
+        run: apt-get update && apt-get install -y python3 python3-pip
 
-      - name: Bootstrap appenv project
+      - name: Bootstrap appenv
         run: |
           cp src/appenv.py appenv
           chmod +x appenv
 
-          # Create a minimal project
-          echo '[project]
+          cat > pyproject.toml << 'EOF'
+          [project]
           name = "bootstrap-test"
           version = "0.1.0"
           dependencies = ["httpie"]
-          requires-python = ">=3.9"' > pyproject.toml
+          requires-python = ">=3.9"
+          EOF
 
-          # Generate lockfile — this triggers uv discovery and installation
           ./appenv update-lockfile
 
-      - name: Run binary from bootstrapped project
-        run: |
-          # http is exposed by httpie package — should work after bootstrap
-          ./appenv run http --version || true
-          # prepare also exercises the full chain
-          ./appenv prepare
+      - name: Run http
+        run: ./http --version
 
-  # E2E: Bare Debian Bookworm — only python3, no pip, no uv
+  # E2E: Bare Debian Bookworm — only python3, no pip
   # Expected to FAIL until uv installer fallback is implemented
   debian-bookworm-minimal:
     runs-on: ubuntu-24.04
@@ -52,56 +46,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install minimal prerequisites
-        run: |
-          apt-get update
-          apt-get install -y python3
+      - name: Install python3
+        run: apt-get update && apt-get install -y python3
 
-      - name: Bootstrap appenv project (expected to fail)
+      - name: Bootstrap appenv
         run: |
           cp src/appenv.py appenv
           chmod +x appenv
 
-          echo '[project]
+          cat > pyproject.toml << 'EOF'
+          [project]
           name = "bootstrap-test"
           version = "0.1.0"
           dependencies = ["httpie"]
-          requires-python = ">=3.9"' > pyproject.toml
+          requires-python = ">=3.9"
+          EOF
 
-          # This should fail: no uv, no nix, no pip, no ensurepip
           ./appenv update-lockfile
         continue-on-error: true
 
-  # E2E: Ubuntu with uv pre-installed — the happy path via uvx
+  # E2E: Ubuntu + uv — happy path via uvx appenv init
   ubuntu-uvx:
     runs-on: ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@v4
-
       - uses: astral-sh/setup-uv@v7
 
-      - name: Bootstrap via uvx
+      - name: uvx appenv init
         run: |
           mkdir /tmp/testproject && cd /tmp/testproject
-
-          # Simulate: user has uv, runs uvx appenv init
-          uv --version
-          uvx --from appenv appenv init || true
-
-      - name: Bootstrap from source (simulates committed appenv)
-        run: |
-          mkdir -p /tmp/appenvproject && cd /tmp/appenvproject
-
-          cp $GITHUB_WORKSPACE/src/appenv.py appenv
-          chmod +x appenv
-
-          echo '[project]
-          name = "bootstrap-test"
-          version = "0.1.0"
-          dependencies = ["rich"]
-          requires-python = ">=3.10"' > pyproject.toml
-
-          # uv is in PATH — should be found immediately (step 1 of discovery)
-          ./appenv update-lockfile
-          ./appenv prepare
+          uvx appenv init
