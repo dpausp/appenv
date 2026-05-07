@@ -93,9 +93,7 @@ def test_ensure_best_python_respects_upper_bound(
     monkeypatch.delenv("APPENV_BEST_PYTHON", raising=False)
 
     # Create pyproject.toml with upper bound
-    make_pyproject(
-        base, '[project]\nname = "test"\nrequires-python = ">=3.11,<3.14"\n'
-    )
+    make_pyproject(base, '[project]\nname = "test"\nrequires-python = ">=3.11,<3.14"\n')
 
     # Mock find_available_pythons to return versions including ones exceeding bound
     monkeypatch.setattr(

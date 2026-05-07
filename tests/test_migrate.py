@@ -148,9 +148,7 @@ Nothing to do."""
     assert full_pattern == captured.out
 
 
-def test_migrate_no_requirements_txt(
-    workdir, monkeypatch, capsys, patterns, app_env
-):
+def test_migrate_no_requirements_txt(workdir, monkeypatch, capsys, patterns, app_env):
     """Lines 888-890: migrate() returns early when requirements.txt not found."""
     Path(workdir)
 
@@ -256,7 +254,6 @@ def test_migrate_editable_missing_package_warns(
     assert "[tool.uv.sources]" not in pyproject
 
 
-
 def test_migrate_editable_mixed_valid_and_invalid(
     tmp_path, monkeypatch, capsys, patterns, app_env
 ):
@@ -313,28 +310,37 @@ def test_migrate_editable_mixed_valid_and_invalid(
     assert "requests" in pyproject
 
 
-@pytest.mark.parametrize("requirements,warning_pattern,regular_deps", [
-    (
-        "-e git+https://github.com/user/repo.git\nrequests\n",
-        "...warning: 1 editable install(s) skipped:\n"
-        "...- -e git+https://github.com/user/repo.git\n"
-        "...add them manually to pyproject.toml if needed.",
-        ['"requests"'],
-    ),
-    (
-        "-e git+https://github.com/user/pkg.git"
-        "\n-e package @ ./path"
-        "\nrequests\nclick\n",
-        "...warning: 2 editable install(s) skipped:\n"
-        "...- -e git+https://github.com/user/pkg.git\n"
-        "...- -e package @ ./path\n"
-        "...add them manually to pyproject.toml if needed.",
-        ['"requests"', '"click"'],
-    ),
-])
+@pytest.mark.parametrize(
+    "requirements,warning_pattern,regular_deps",
+    [
+        (
+            "-e git+https://github.com/user/repo.git\nrequests\n",
+            "...warning: 1 editable install(s) skipped:\n"
+            "...- -e git+https://github.com/user/repo.git\n"
+            "...add them manually to pyproject.toml if needed.",
+            ['"requests"'],
+        ),
+        (
+            "-e git+https://github.com/user/pkg.git"
+            "\n-e package @ ./path"
+            "\nrequests\nclick\n",
+            "...warning: 2 editable install(s) skipped:\n"
+            "...- -e git+https://github.com/user/pkg.git\n"
+            "...- -e package @ ./path\n"
+            "...add them manually to pyproject.toml if needed.",
+            ['"requests"', '"click"'],
+        ),
+    ],
+)
 def test_migrate_editable_unsupported_warns(
-    requirements, warning_pattern, regular_deps,
-    tmp_path, monkeypatch, capsys, patterns, app_env
+    requirements,
+    warning_pattern,
+    regular_deps,
+    tmp_path,
+    monkeypatch,
+    capsys,
+    patterns,
+    app_env,
 ):
     """init_pyproject warns about unsupported editable formats (git URLs, PEP 508)."""
     monkeypatch.chdir(tmp_path)

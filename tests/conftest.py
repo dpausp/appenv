@@ -116,15 +116,18 @@ def subprocess_run_fail(monkeypatch):
 @pytest.fixture
 def app_env(test_settings):
     """Factory fixture for AppEnv with test defaults."""
+
     def _app_env(basedir=None):
         basedir = basedir or Path.cwd()
         return appenv.AppEnv(basedir, test_settings(basedir))
+
     return _app_env
 
 
 @pytest.fixture
 def make_mock_uv():
     """Factory fixture for creating MockUvBin with custom version/cmd."""
+
     def _make(version=None, cmd_fn=None):
         if version is None:
             version = UvVersion(0, 5, 0)
@@ -133,6 +136,7 @@ def make_mock_uv():
         if cmd_fn:
             uv.cmd = cmd_fn
         return uv
+
     return _make
 
 
@@ -151,6 +155,7 @@ def mock_cmd_python(monkeypatch):
 @pytest.fixture
 def create_venv(tmp_path):
     """Factory fixture for creating venv directory structures."""
+
     def _create(base=None, python_output="Python 3.12.0"):
         base = base or tmp_path
         venv = base / ".appenv" / "venv"
@@ -160,15 +165,14 @@ def create_venv(tmp_path):
         python.write_text(f"#!/bin/sh\necho {python_output}\n")
         python.chmod(0o755)
         return venv
+
     return _create
 
 
 @pytest.fixture
 def mock_uv_lock(monkeypatch):
     """Mock AppEnv._uv_lock to prevent actual uv execution."""
-    monkeypatch.setattr(
-        appenv.AppEnv, "_uv_lock", lambda self, uv, diff=False: None
-    )
+    monkeypatch.setattr(appenv.AppEnv, "_uv_lock", lambda self, uv, diff=False: None)
 
 
 @pytest.fixture
@@ -177,7 +181,6 @@ def mock_logdir(tmp_path, monkeypatch):
     mock_log_dir = tmp_path / "logs"
     mock_log_dir.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(appenv.AppEnv, "_set_up_logdir", lambda self: mock_log_dir)
-
 
 
 @pytest.fixture
@@ -190,9 +193,11 @@ def clean_uv_project_env():
 @pytest.fixture
 def make_pyproject():
     """Factory to create pyproject.toml + uv.lock in a base directory."""
+
     def _make(base, pyproject_content, lock_content="version = 1\n"):
         (base / "pyproject.toml").write_text(pyproject_content)
         (base / "uv.lock").write_text(lock_content)
+
     return _make
 
 
@@ -201,6 +206,7 @@ def capture_appenv_logs():
     """Capture appenv debug logs to stdout for pattern assertions."""
     import logging
     import sys
+
     log = logging.getLogger("appenv")
     handler = logging.StreamHandler(sys.stdout)
     handler.setLevel(logging.DEBUG)

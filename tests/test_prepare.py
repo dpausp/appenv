@@ -105,8 +105,14 @@ def test_prepare_syncs_with_frozen_flag(
 
 
 def test_prepare_verbose_output(
-    workdir, monkeypatch, capsys, patterns, app_env, mock_uv,
-    mock_cmd_python, make_pyproject
+    workdir,
+    monkeypatch,
+    capsys,
+    patterns,
+    app_env,
+    mock_uv,
+    mock_cmd_python,
+    make_pyproject,
 ):
     """Verbose mode shows structured output with paths, mode, and sync info."""
     # Setup logging to capture debug output
@@ -159,8 +165,14 @@ def test_prepare_verbose_output(
 
 
 def test_prepare_pyproject_mode_verbose(
-    workdir, monkeypatch, capsys, patterns, app_env, mock_uv,
-    mock_cmd_python, make_pyproject
+    workdir,
+    monkeypatch,
+    capsys,
+    patterns,
+    app_env,
+    mock_uv,
+    mock_cmd_python,
+    make_pyproject,
 ):
     """Line 590: Verbose output shows mode."""
     # Setup logging to capture debug output
@@ -269,9 +281,7 @@ def test_prepare_pyproject_unlink_file_in_appenv(
 # ==============================================================================
 
 
-def test_run_uv_sets_environment_and_execs(
-    workdir, monkeypatch, app_env
-):
+def test_run_uv_sets_environment_and_execs(workdir, monkeypatch, app_env):
     """run_uv sets UV_PROJECT_ENVIRONMENT and execs uv binary."""
     base = Path(workdir)
 
@@ -296,9 +306,7 @@ def test_run_uv_sets_environment_and_execs(
     assert os.environ.get("UV_PROJECT_ENVIRONMENT") == str(base / ".appenv" / "venv")
 
 
-def test_update_lockfile_exits_67_no_project(
-    monkeypatch, tmp_path, capsys, app_env
-):
+def test_update_lockfile_exits_67_no_project(monkeypatch, tmp_path, capsys, app_env):
     """update_lockfile exits with code 67 when no pyproject.toml found."""
     monkeypatch.chdir(tmp_path)
 
@@ -398,9 +406,7 @@ def test_prepare_pyproject_keeps_appenv_if_requirements_exists(
     assert (base / ".appenv").exists()
 
 
-def test_prepare_exits_without_project_files(
-    tmp_path, monkeypatch, capsys, app_env
-):
+def test_prepare_exits_without_project_files(tmp_path, monkeypatch, capsys, app_env):
     """prepare() exits with error if no pyproject.toml found."""
     monkeypatch.chdir(tmp_path)
 
@@ -415,9 +421,7 @@ def test_prepare_exits_without_project_files(
     assert "pyproject.toml" in captured.out
 
 
-def test_prepare_pyproject_missing_uv_lock(
-    tmp_path, monkeypatch, capsys, app_env
-):
+def test_prepare_pyproject_missing_uv_lock(tmp_path, monkeypatch, capsys, app_env):
     """_prepare_pyproject exits with code 67 when uv.lock is missing."""
     monkeypatch.chdir(tmp_path)
     base = tmp_path
@@ -471,6 +475,7 @@ def test_prepare_pyproject_corrupted_venv(
     assert not (venv_real / "broken_marker.txt").exists()
     # venv command should be called
     assert any("venv" in c for c in uv_calls), f"Expected venv call, got {uv_calls}"
+
 
 def test_prepare_pyproject_sets_uv_project_environment(
     tmp_path, monkeypatch, app_env, make_pyproject
@@ -583,8 +588,13 @@ def test_detect_project_type_none(tmp_path, monkeypatch):
 
 
 def test_prepare_venv_replaces_current_symlink(
-    workdir, monkeypatch, app_env, make_mock_uv, mock_cmd_python,
-    clean_uv_project_env, make_pyproject
+    workdir,
+    monkeypatch,
+    app_env,
+    make_mock_uv,
+    mock_cmd_python,
+    clean_uv_project_env,
+    make_pyproject,
 ):
     """Line 1176: _prepare_venv replaces existing current symlink."""
     base = Path(workdir) / "myproject_venv_test"
@@ -620,8 +630,14 @@ def test_prepare_venv_replaces_current_symlink(
 
 
 def test_prepare_venv_existing_venv(
-    workdir, monkeypatch, app_env, make_mock_uv, mock_cmd_python,
-    create_venv, clean_uv_project_env, make_pyproject
+    workdir,
+    monkeypatch,
+    app_env,
+    make_mock_uv,
+    mock_cmd_python,
+    create_venv,
+    clean_uv_project_env,
+    make_pyproject,
 ):
     """Branch 1148->1154: _prepare_venv skips uv venv when venv already exists."""
     base = Path(workdir) / "myproject_existing_venv"
@@ -653,8 +669,14 @@ def test_prepare_venv_existing_venv(
 
 
 def test_prepare_venv_current_is_directory(
-    workdir, monkeypatch, app_env, make_mock_uv, mock_cmd_python,
-    create_venv, clean_uv_project_env, make_pyproject
+    workdir,
+    monkeypatch,
+    app_env,
+    make_mock_uv,
+    mock_cmd_python,
+    create_venv,
+    clean_uv_project_env,
+    make_pyproject,
 ):
     """Branch 1177->1180: _prepare_venv skips symlink when current is a real dir."""
     base = Path(workdir) / "myproject_current_dir"
@@ -693,7 +715,12 @@ def test_prepare_venv_current_is_directory(
 
 
 def test_stale_venv_broken_python(
-    tmp_path, monkeypatch, app_env, mock_uv, create_venv, make_pyproject,
+    tmp_path,
+    monkeypatch,
+    app_env,
+    mock_uv,
+    create_venv,
+    make_pyproject,
 ):
     """Stale-venv broken python: cmd() raises ValueError, venv removed and recreated."""
     monkeypatch.chdir(tmp_path)
@@ -728,7 +755,12 @@ def test_stale_venv_broken_python(
 
 
 def test_stale_venv_version_mismatch(
-    tmp_path, monkeypatch, app_env, mock_uv, create_venv, make_pyproject,
+    tmp_path,
+    monkeypatch,
+    app_env,
+    mock_uv,
+    create_venv,
+    make_pyproject,
 ):
     """Stale-venv version mismatch: venv Python too old for requires-python."""
     monkeypatch.chdir(tmp_path)
@@ -799,7 +831,12 @@ def test_stale_venv_max_version_constraint(
 
 
 def test_extras_sync_args(
-    tmp_path, monkeypatch, app_env, mock_uv, mock_cmd_python, make_pyproject,
+    tmp_path,
+    monkeypatch,
+    app_env,
+    mock_uv,
+    mock_cmd_python,
+    make_pyproject,
 ):
     """Extras in AppEnvSettings produce --extra flag in uv sync args."""
     monkeypatch.chdir(tmp_path)
@@ -833,8 +870,14 @@ def test_extras_sync_args(
 
 
 def test_prepare_venv_link_is_symlink_survives_unlink(
-    tmp_path, monkeypatch, capsys, app_env, mock_cmd_python,
-    create_venv, clean_uv_project_env, make_pyproject
+    tmp_path,
+    monkeypatch,
+    capsys,
+    app_env,
+    mock_cmd_python,
+    create_venv,
+    clean_uv_project_env,
+    make_pyproject,
 ):
     """Branch 1186->1194: .venv symlink survives unlink (race / mock).
 
@@ -879,8 +922,13 @@ def test_prepare_venv_link_is_symlink_survives_unlink(
 
 
 def test_prepare_removes_legacy_current_symlink(
-    tmp_path, monkeypatch, app_env, mock_uv, mock_cmd_python,
-    clean_uv_project_env, make_pyproject
+    tmp_path,
+    monkeypatch,
+    app_env,
+    mock_uv,
+    mock_cmd_python,
+    clean_uv_project_env,
+    make_pyproject,
 ):
     """Line 1196: _prepare_venv removes existing .appenv/current symlink."""
     monkeypatch.chdir(tmp_path)

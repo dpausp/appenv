@@ -9,9 +9,7 @@ import pytest
 import appenv
 
 
-def test_init_fresh_start_interactive(
-    tmp_path, monkeypatch, capsys, app_env, patterns
-):
+def test_init_fresh_start_interactive(tmp_path, monkeypatch, capsys, app_env, patterns):
     """Init fresh start flow with interactive inputs."""
     monkeypatch.chdir(tmp_path)
     base = tmp_path
@@ -73,9 +71,7 @@ Use `./myapp` to run the myapp binary"""
     assert full_pattern == captured.out
 
 
-def test_init_fresh_start_default_dependencies(
-    tmp_path, monkeypatch, capsys, app_env
-):
+def test_init_fresh_start_default_dependencies(tmp_path, monkeypatch, capsys, app_env):
     """Init fresh start uses command name as default dependency when empty."""
     monkeypatch.chdir(tmp_path)
     base = tmp_path
@@ -104,9 +100,7 @@ def test_init_fresh_start_default_dependencies(
     assert 'requires-python = ">=3.13"' in pyproject  # default version
 
 
-def test_init_empty_command_name_uses_app(
-    workdir, monkeypatch, capsys, app_env
-):
+def test_init_empty_command_name_uses_app(workdir, monkeypatch, capsys, app_env):
     """Test fresh start with default command name and dependencies."""
     base = Path(workdir)
 
@@ -129,9 +123,7 @@ def test_init_empty_command_name_uses_app(
     assert '"app"' in pyproject  # dependency defaults to command name
 
 
-def test_init_unlink_broken_symlink(
-    workdir, monkeypatch, capsys, app_env
-):
+def test_init_unlink_broken_symlink(workdir, monkeypatch, capsys, app_env):
     """Unlinks broken symlink before creating new one."""
     base = Path(workdir)
 
@@ -179,9 +171,7 @@ def test_init_already_exists(workdir, monkeypatch, capsys, app_env):
     assert "Nothing to do" in captured.out
 
 
-def test_init_empty_command_name_defaults_to_app(
-    workdir, monkeypatch, capsys, app_env
-):
+def test_init_empty_command_name_defaults_to_app(workdir, monkeypatch, capsys, app_env):
     """Line 847: init() uses 'app' as default when command name is empty."""
     base = Path(workdir)
 
@@ -205,9 +195,7 @@ def test_init_empty_command_name_defaults_to_app(
     assert '"app"' in pyproject  # dependency also defaults to app
 
 
-def test_init_with_path_creates_directory(
-    tmp_path, monkeypatch, capsys, app_env
-):
+def test_init_with_path_creates_directory(tmp_path, monkeypatch, capsys, app_env):
     """init with path argument creates directory and initializes there."""
     base = tmp_path
     target_dir = base / "myproject"
@@ -274,9 +262,7 @@ def test_init_with_nested_path_creates_directories(
     assert target_dir.name in pyproject
 
 
-def test_init_with_existing_directory(
-    tmp_path, monkeypatch, capsys, app_env
-):
+def test_init_with_existing_directory(tmp_path, monkeypatch, capsys, app_env):
     """init with path to existing directory initializes inside it."""
     base = tmp_path
     target_dir = base / "existing"
@@ -331,9 +317,7 @@ def test_init_without_path_uses_current_directory(
     assert base.name in pyproject
 
 
-def test_init_appenv_script_already_exists(
-    workdir, monkeypatch, capsys, app_env
-):
+def test_init_appenv_script_already_exists(workdir, monkeypatch, capsys, app_env):
     """Branch 882->889: init() skips appenv script creation when it already exists."""
     base = Path(workdir) / "myproject_init_exists"
     base.mkdir()
@@ -374,9 +358,7 @@ def test_init_appenv_script_already_exists(
     assert "Created appenv" not in captured.out
 
 
-def test_init_warns_on_version_mismatch(
-    workdir, monkeypatch, capsys, app_env
-):
+def test_init_warns_on_version_mismatch(workdir, monkeypatch, capsys, app_env):
     """init warns when local ./appenv has a different version."""
     base = Path(workdir) / "myproject_init_version"
     base.mkdir()

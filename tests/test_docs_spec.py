@@ -24,6 +24,7 @@ def test_file_cleanup_deleted_files_not_present():
         "docs/_snippets/quickstart.md should be deleted"
     )
 
+
 def test_flat_toctree_index_has_toctree():
     """flat-toctree: docs/index.md must contain a {toctree} directive."""
     content = (ROOT / "docs" / "index.md").read_text()
@@ -62,6 +63,7 @@ def test_flat_toctree_conf_suppress_warnings_only_myst():
     assert entries == ["myst.header"], (
         f"suppress_warnings should be only ['myst.header'], got {entries}"
     )
+
 
 def test_factual_corrections_pyi_has_exit_code_usage():
     """factual-corrections: src/appenv.pyi must declare EXIT_CODE_USAGE."""
@@ -130,15 +132,13 @@ def test_run_command_removal_no_run_command_in_commands_doc():
         if stripped.startswith("## run") or stripped.startswith("## `run`"):
             pytest.fail(f"Found run command section header: {stripped}")
 
+
 def test_python_version_statement_nuance_in_index():
     """python-version-statement: docs/index.md must mention both 3.9 and 3.10."""
     content = (ROOT / "docs" / "index.md").read_text()
-    assert "3.9" in content, (
-        "docs/index.md must mention Python 3.9 (bootstrap compat)"
-    )
-    assert "3.10" in content, (
-        "docs/index.md must mention Python 3.10 (managed envs)"
-    )
+    assert "3.9" in content, "docs/index.md must mention Python 3.9 (bootstrap compat)"
+    assert "3.10" in content, "docs/index.md must mention Python 3.10 (managed envs)"
+
 
 def test_quick_start_rewrite_prompt_text_matches_source():
     """quick-start-rewrite / factual-corrections:
@@ -148,8 +148,7 @@ def test_quick_start_rewrite_prompt_text_matches_source():
         "commands.md must contain correct prompt text 'Binary to expose'"
     )
     assert "What should the command be named" not in content, (
-        "commands.md must not contain stale prompt "
-        "'What should the command be named'"
+        "commands.md must not contain stale prompt 'What should the command be named'"
     )
 
 
@@ -163,8 +162,7 @@ def test_quick_start_rewrite_dependency_is_httpie():
         for section in sections:
             if section.startswith("Quick Start"):
                 assert "httpie" in section.lower(), (
-                    "Quick Start must reference httpie "
-                    "(not requests) as the dependency"
+                    "Quick Start must reference httpie (not requests) as the dependency"
                 )
                 assert "requests" not in section or "httpie" in section.lower(), (
                     "Quick Start should not use requests as the example dependency"

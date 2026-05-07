@@ -104,9 +104,7 @@ dependencies = ["click"]
     assert len(lock_calls) >= 1, "Expected at least one uv lock call"
 
 
-def test_update_lockfile_verbose_output(
-    workdir, monkeypatch, capsys, mock_uv, app_env
-):
+def test_update_lockfile_verbose_output(workdir, monkeypatch, capsys, mock_uv, app_env):
     """Verbose mode shows structured output with paths and mode info."""
     app_dir = Path(workdir) / "verboseapp"
     app_dir.mkdir()
