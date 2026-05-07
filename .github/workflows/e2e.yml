@@ -1,4 +1,4 @@
-name: Bootstrap
+name: E2E Tests
 
 on:
   push:
@@ -32,6 +32,7 @@ jobs:
           EOF
 
           ./appenv update-lockfile
+          ln -s appenv http
 
       - name: Run http
         run: ./http --version
