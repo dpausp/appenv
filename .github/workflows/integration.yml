@@ -1,0 +1,53 @@
+name: Integration
+
+on:
+  push:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+jobs:
+  # Test the which(pip) fallback on Debian Bookworm where ensurepip is disabled
+  debian-bookworm:
+    runs-on: ubuntu-24.04
+    container:
+      image: debian:bookworm
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Python and pip
+        run: |
+          apt-get update
+          apt-get install -y python3 python3-pip
+
+      - name: Install test dependencies
+        run: |
+          python3 -m pip install --break-system-packages pytest pytest-timeout
+
+      - name: Run pip integration tests
+        run: |
+          python3 -m pytest tests/integration/test_pip_install_uv.py -v -m slow --timeout=180
+
+  # Test the -m pip path on Ubuntu without uv pre-installed
+  ubuntu-no-uv:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: pip install pytest pytest-timeout
+
+      - name: Remove uv from PATH to force pip fallback
+        run: |
+          UV_PATH=$(which uv || true)
+          if [ -n "$UV_PATH" ]; then
+            sudo rm -f "$UV_PATH"
+          fi
+
+      - name: Run pip integration tests
+        run: pytest tests/integration/test_pip_install_uv.py -v -m slow --timeout=180
