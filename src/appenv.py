@@ -573,6 +573,10 @@ class UvBin:
     def _try_uv_from_nix_flake(self):
         """Tries more expensive but fresh nix build from nixpkgs flake"""
 
+        if shutil.which("nix") is None:
+            log.debug("skipping (nix not in PATH)")
+            return None
+
         try:
             result = subprocess.run(
                 ["nix", "build", "nixpkgs#uv", "--out-link", str(self.uv_dir)],

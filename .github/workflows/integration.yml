@@ -65,14 +65,29 @@ jobs:
           ./appenv update-lockfile
         continue-on-error: true
 
-  # E2E: Ubuntu + uv — happy path via uvx appenv init
-  ubuntu-uvx:
+  # E2E: Ubuntu + uv in PATH — uv discovered immediately, happy path
+  ubuntu-uv:
     runs-on: ubuntu-24.04
 
     steps:
+      - uses: actions/checkout@v4
+
       - uses: astral-sh/setup-uv@v7
 
-      - name: uvx appenv init
+      - name: Bootstrap appenv
         run: |
-          mkdir /tmp/testproject && cd /tmp/testproject
-          printf 'http\n\n\n\n\n' | uvx appenv init
+          cp src/appenv.py appenv
+          chmod +x appenv
+
+          cat > pyproject.toml << 'EOF'
+          [project]
+          name = "bootstrap-test"
+          version = "0.1.0"
+          dependencies = ["httpie"]
+          requires-python = ">=3.10"
+          EOF
+
+          ./appenv update-lockfile
+
+      - name: Run http
+        run: ./http --version
