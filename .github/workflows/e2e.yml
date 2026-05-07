@@ -50,3 +50,6 @@ jobs:
         run: |
           mkdir /tmp/testproject && cd /tmp/testproject
           printf 'http\nhttpie\n\n\n\n\n' | uvx --from git+https://github.com/flyingcircusio/appenv@${{ github.head_ref || github.ref_name }} appenv init
+
+      - name: Run http
+        run: cd /tmp/testproject && ./http --version
