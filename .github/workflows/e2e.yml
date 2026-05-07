@@ -20,7 +20,9 @@ jobs:
 
       - name: Bootstrap appenv
         run: |
-          cp src/appenv.py appenv
+          mkdir /tmp/testproject && cd /tmp/testproject
+
+          cp $GITHUB_WORKSPACE/src/appenv.py appenv
           chmod +x appenv
 
           cat > pyproject.toml << 'EOF'
@@ -35,7 +37,7 @@ jobs:
           ln -s appenv http
 
       - name: Run http
-        run: ./http --version
+        run: cd /tmp/testproject && ./http --version
 
   # E2E: uvx from git — user has only uv, runs uvx appenv init
   ubuntu-uvx:
