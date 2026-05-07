@@ -595,31 +595,14 @@ class UvBin:
         """Try to install uv via pip."""
         log.debug("attempting to install uv via pip ...")
 
-        try:
-            result = subprocess.run(
-                [sys.executable, "-m", "ensurepip"],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-        except subprocess.CalledProcessError as e:
-            log.debug("pip -mensurepip failed, skipping pip install: %s", e.stderr)
+        pip_cmd = self._resolve_pip_command()
+        if not pip_cmd:
+            log.debug("no pip found, skipping pip install")
             return None
 
-        log.debug("pip --version: %s", result.stdout)
-
         try:
             result = subprocess.run(
-                [
-                    sys.executable,
-                    "-m",
-                    "pip",
-                    "install",
-                    "uv",
-                    "--upgrade",
-                    "-t",
-                    self.uv_dir,
-                ],
+                [*pip_cmd, "install", "uv", "--upgrade", "-t", self.uv_dir],
                 capture_output=True,
                 text=True,
                 check=True,
@@ -634,6 +617,35 @@ class UvBin:
         log.debug("uv version is %s, valid: %s", version, version.valid)
 
         return self.managed_uv if version.valid else None
+
+    def _resolve_pip_command(self):
+        """Find a working pip command.
+
+        Tries ensurepip first (blessed way), then falls back to
+        shutil.which("pip"/"pip3") for systems where ensurepip is
+        disabled (e.g. Debian Bookworm).
+        """
+        try:
+            subprocess.run(
+                [sys.executable, "-m", "ensurepip"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as e:
+            log.debug("ensurepip failed: %s", e.stderr)
+        else:
+            log.debug("ensurepip succeeded, using python -m pip")
+            return [sys.executable, "-m", "pip"]
+
+        # ensurepip failed — try finding pip in PATH
+        for candidate in ("pip", "pip3"):
+            pip_path = shutil.which(candidate)
+            if pip_path:
+                log.debug("found pip via which(%s): %s", candidate, pip_path)
+                return [pip_path]
+
+        return None
 
     def _cleanup_appenv_uv(self):
         """Remove leftover .appenv/.uv directory."""

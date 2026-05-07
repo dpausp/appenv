@@ -5,6 +5,9 @@ via symlinks — one file, no installation step. Drop it into a repository,
 commit it, and every checkout (local or remote) gets the same tools at the
 same versions by running `./http`, `./mkdocs`, `./batou`, or whatever you need.
 
+**appenv never modifies your system** — all state lives in `.appenv/` inside
+the project directory. Remove that folder and nothing is left behind.
+
 ## Using an existing appenv project
 
 Someone gave you a project that already uses appenv? Just run the command:

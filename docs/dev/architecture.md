@@ -8,6 +8,7 @@ appenv is a single-file Python CLI that pins packages to exact versions and expo
 
 This shapes every architectural decision:
 
+- **Zero system modification**: appenv never installs anything outside the project directory. All state lives in `.appenv/` — venv, cached uv binary, logs. No system packages, no global bin directories, no PATH modifications. Drop the script, remove `.appenv/`, and the system is unchanged.
 - **Symlink dispatch**: When invoked as `./http` (a symlink to `appenv`), it prepares the venv and runs `.appenv/venv/bin/http`. When invoked as `./appenv`, it parses subcommands via argparse. The script detects its own filename (`Path(__file__).stem`) to choose the mode. Multiple symlinks can coexist to expose different binaries from the same venv.
 - **Type hints in stubs only**: Implementation lives in `appenv.py` with minimal typing. Complete type annotations (public and private methods) live in `appenv.pyi`. Any signature change must update both files. See {doc}`contributing` for the full policy.
 - **Guard-then-act pattern**: `ensure_*` functions validate preconditions and exit with specific error codes if unsatisfied. The main flow only proceeds after all guards pass.

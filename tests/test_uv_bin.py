@@ -1,4 +1,5 @@
 import logging
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -13,7 +14,6 @@ class FakeResult:
         self.returncode = returncode
         self.stdout = stdout
         self.stderr = stderr
-
 
 
 def test_uv_bin_cmd_raises_when_uv_not_found(monkeypatch):
@@ -324,7 +324,8 @@ def test_try_uv_from_nix_channel_returns_path_when_created(
 
     # Mock subprocess.run to return success
     monkeypatch.setattr(
-        subprocess, "run",
+        subprocess,
+        "run",
         lambda *args, **kwargs: FakeResult(stderr=b""),
     )
 
@@ -397,7 +398,8 @@ def test_try_uv_from_nix_channel_returns_none_when_invalid_version(
 
     # Mock subprocess.run to return success
     monkeypatch.setattr(
-        subprocess, "run",
+        subprocess,
+        "run",
         lambda *args, **kwargs: FakeResult(stderr=b""),
     )
 
@@ -513,7 +515,6 @@ def test_try_uv_from_nix_flake_returns_none_when_build_fails(
     # Create a UvBin instance
     uv_bin = UvBin(tmp_path / ".appenv")
 
-
     # Cap logs at DEBUG level
     caplog.set_level(logging.DEBUG)
 
@@ -535,7 +536,8 @@ def test_try_uv_from_nix_flake_returns_none_when_invalid_version(
 
     # Mock subprocess.run to return success
     monkeypatch.setattr(
-        subprocess, "run",
+        subprocess,
+        "run",
         lambda *args, **kwargs: FakeResult(stderr=b""),
     )
 
@@ -565,9 +567,11 @@ def test_try_uv_from_pip_returns_path_when_valid(monkeypatch, tmp_path, caplog):
     # Mock subprocess.run for ensurepip to return success
     def mock_run_ensurepip(*args, **kwargs):
         return FakeResult(stdout="ensurepip output")
+
     # Mock subprocess.run for pip install to return success
     def mock_run_pip(*args, **kwargs):
         return FakeResult(stdout="Successfully installed uv")
+
     # Side effect to handle different calls
     def mock_run_side_effect(*args, **kwargs):
         if "ensurepip" in args[0]:
@@ -597,7 +601,7 @@ def test_try_uv_from_pip_returns_path_when_valid(monkeypatch, tmp_path, caplog):
 def test_try_uv_from_pip_returns_none_when_ensurepip_fails(
     monkeypatch, tmp_path, caplog
 ):
-    """_try_uv_from_pip returns None when ensurepip fails."""
+    """_try_uv_from_pip returns None when ensurepip fails and no pip in PATH."""
     # Create a UvBin instance
     uv_bin = UvBin(tmp_path / ".appenv")
 
@@ -608,6 +612,7 @@ def test_try_uv_from_pip_returns_none_when_ensurepip_fails(
     # Mock subprocess.run for pip install (should not be called)
     def mock_run_pip(*args, **kwargs):
         return FakeResult()
+
     # Side effect to handle different calls
     def mock_run_side_effect(*args, **kwargs):
         if "ensurepip" in args[0]:
@@ -616,6 +621,8 @@ def test_try_uv_from_pip_returns_none_when_ensurepip_fails(
         return mock_run_pip(*args, **kwargs)
 
     monkeypatch.setattr(subprocess, "run", mock_run_side_effect)
+    # Mock shutil.which to return None — no pip in PATH
+    monkeypatch.setattr(shutil, "which", lambda name: None)
 
     # Cap logs at DEBUG level
     caplog.set_level(logging.DEBUG)
@@ -626,7 +633,7 @@ def test_try_uv_from_pip_returns_none_when_ensurepip_fails(
     # Verify results
     assert result is None
     # Check that we logged the ensurepip failure
-    assert "pip -mensurepip failed, skipping pip install" in caplog.text
+    assert "ensurepip failed" in caplog.text
 
 
 def test_try_uv_from_pip_returns_none_when_pip_install_fails(
@@ -639,6 +646,7 @@ def test_try_uv_from_pip_returns_none_when_pip_install_fails(
     # Mock subprocess.run for ensurepip to return success
     def mock_run_ensurepip(*args, **kwargs):
         return FakeResult(stdout="ensurepip output")
+
     # Mock subprocess.run for pip install to return failure
     def mock_run_pip(*args, **kwargs):
         raise subprocess.CalledProcessError(1, "pip install")
@@ -674,9 +682,11 @@ def test_try_uv_from_pip_returns_none_when_invalid_version(
     # Mock subprocess.run for ensurepip to return success
     def mock_run_ensurepip(*args, **kwargs):
         return FakeResult(stdout="ensurepip output")
+
     # Mock subprocess.run for pip install to return success
     def mock_run_pip(*args, **kwargs):
         return FakeResult(stdout="Successfully installed uv")
+
     # Side effect to handle different calls
     def mock_run_side_effect(*args, **kwargs):
         if "ensurepip" in args[0]:
