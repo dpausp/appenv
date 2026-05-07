@@ -36,58 +36,14 @@ jobs:
       - name: Run http
         run: ./http --version
 
-  # E2E: Bare Debian Bookworm — only python3, no pip
-  # Expected to FAIL until uv installer fallback is implemented
-  debian-bookworm-minimal:
-    runs-on: ubuntu-24.04
-    container:
-      image: debian:bookworm
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install python3
-        run: apt-get update && apt-get install -y python3
-
-      - name: Bootstrap appenv
-        run: |
-          cp src/appenv.py appenv
-          chmod +x appenv
-
-          cat > pyproject.toml << 'EOF'
-          [project]
-          name = "bootstrap-test"
-          version = "0.1.0"
-          dependencies = ["httpie"]
-          requires-python = ">=3.10"
-          EOF
-
-          ./appenv update-lockfile
-        continue-on-error: true
-
-  # E2E: Ubuntu + uv in PATH — uv discovered immediately, happy path
-  ubuntu-uv:
+  # E2E: uvx from git — user has only uv, runs uvx appenv init
+  ubuntu-uvx:
     runs-on: ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@v4
-
       - uses: astral-sh/setup-uv@v7
 
-      - name: Bootstrap appenv
+      - name: uvx appenv init from current branch
         run: |
-          cp src/appenv.py appenv
-          chmod +x appenv
-
-          cat > pyproject.toml << 'EOF'
-          [project]
-          name = "bootstrap-test"
-          version = "0.1.0"
-          dependencies = ["httpie"]
-          requires-python = ">=3.10"
-          EOF
-
-          ./appenv update-lockfile
-
-      - name: Run http
-        run: ./http --version
+          mkdir /tmp/testproject && cd /tmp/testproject
+          printf 'http\n\n\n\n\n' | uvx --from git+https://github.com/flyingcircusio/appenv@${{ github.head_ref || github.ref_name }} appenv init
