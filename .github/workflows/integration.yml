@@ -28,7 +28,7 @@ jobs:
           name = "bootstrap-test"
           version = "0.1.0"
           dependencies = ["httpie"]
-          requires-python = ">=3.9"
+          requires-python = ">=3.10"
           EOF
 
           ./appenv update-lockfile
@@ -59,7 +59,7 @@ jobs:
           name = "bootstrap-test"
           version = "0.1.0"
           dependencies = ["httpie"]
-          requires-python = ">=3.9"
+          requires-python = ">=3.10"
           EOF
 
           ./appenv update-lockfile
@@ -75,4 +75,4 @@ jobs:
       - name: uvx appenv init
         run: |
           mkdir /tmp/testproject && cd /tmp/testproject
-          uvx appenv init
+          printf 'http\n\n\n\n\n' | uvx appenv init
