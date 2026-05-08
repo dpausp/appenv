@@ -86,3 +86,64 @@ jobs:
 
       - name: Run http
         run: cd /tmp/testproject && ./http --version
+
+  # E2E: Alpine Linux — musl libc, astral.sh installer must use linux-musl triple
+  alpine-musl:
+    runs-on: ubuntu-24.04
+    container:
+      image: alpine:latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install python3 + ca-certificates
+        run: apk add python3 ca-certificates
+
+      - name: Bootstrap appenv (musl installer)
+        run: |
+          mkdir /tmp/testproject && cd /tmp/testproject
+
+          cp $GITHUB_WORKSPACE/src/appenv.py appenv
+          chmod +x appenv
+
+          cat > pyproject.toml << 'EOF'
+          [project]
+          name = "bootstrap-test"
+          version = "0.1.0"
+          dependencies = ["httpie"]
+          requires-python = ">=3.10"
+          EOF
+
+          ./appenv update-lockfile
+          ln -s appenv http
+
+      - name: Run http
+        run: cd /tmp/testproject && ./http --version
+
+  # E2E: macOS ARM64 — native aarch64-apple-darwin, tests Apple Silicon triple
+  macos-arm64:
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bootstrap appenv (macOS ARM64)
+        run: |
+          mkdir /tmp/testproject && cd /tmp/testproject
+
+          cp $GITHUB_WORKSPACE/src/appenv.py appenv
+          chmod +x appenv
+
+          cat > pyproject.toml << 'EOF'
+          [project]
+          name = "bootstrap-test"
+          version = "0.1.0"
+          dependencies = ["httpie"]
+          requires-python = ">=3.10"
+          EOF
+
+          ./appenv update-lockfile
+          ln -s appenv http
+
+      - name: Run http
+        run: cd /tmp/testproject && ./http --version
