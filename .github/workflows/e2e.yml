@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install prerequisites
-        run: apt-get update && apt-get install -y python3 python3-pip
+        run: apt-get update && apt-get install -y python3 python3-pip ca-certificates
 
       - name: Bootstrap appenv
         run: |
@@ -28,13 +28,7 @@ jobs:
           cp $GITHUB_WORKSPACE/src/appenv.py appenv
           chmod +x appenv
 
-          cat > pyproject.toml << 'EOF'
-          [project]
-          name = "bootstrap-test"
-          version = "0.1.0"
-          dependencies = ["httpie"]
-          requires-python = ">=3.10"
-          EOF
+          printf 'http\nhttpie\n\n\n\n3.12\n' | ./appenv init
 
           ./appenv version
           python3 --version
@@ -165,6 +159,38 @@ jobs:
           dependencies = ["httpie"]
           requires-python = ">=3.10"
           EOF
+
+          ./appenv version
+          python3 --version
+          ./appenv update-lockfile
+          ln -s appenv http
+
+      - name: Run http
+        run: cd /tmp/testproject && ./http --version
+
+  # E2E: Debian Bullseye + Python 3.9 — minimum supported Python version
+  debian-bullseye-39:
+    runs-on: ubuntu-24.04
+    container:
+      image: debian:bullseye
+
+    env:
+      APPENV_VERBOSE: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install prerequisites
+        run: apt-get update && apt-get install -y python3 python3-pip ca-certificates
+
+      - name: Bootstrap appenv (Python 3.9 init)
+        run: |
+          mkdir /tmp/testproject && cd /tmp/testproject
+
+          cp $GITHUB_WORKSPACE/src/appenv.py appenv
+          chmod +x appenv
+
+          printf 'http\nhttpie\n\n\n\n3.9\n' | ./appenv init
 
           ./appenv version
           python3 --version

@@ -7,6 +7,8 @@ lifecycle:
     completed_at: "2026-05-08T19:00:00+02:00"
     git_rev: "d0418d6"
   plan:
+    completed_at: "2026-05-08T19:30:00+02:00"
+    git_rev: "2e3459c"
   workflow:
   verify:
 ---
@@ -119,3 +121,27 @@ Test coverage is the E2E workflow itself. Six E2E jobs after completion: debian-
 - `installation.md` UV section: add "or will be downloaded automatically from astral.sh" phrasing with link to `architecture.md`
 - `architecture.md` "uv Management" section: update from 5 to 6 steps, add "Platform Detection" subsection with triple table (x86_64/aarch64/armv7 × gnu/musl/darwin)
 - All E2E jobs keep `APPENV_VERBOSE: "1"` env and `./appenv version` + `python3 --version` info display
+
+## Appendix
+
+```yaml
+# implementation_plan
+description: "Align E2E tests with user/dev documentation — tested docs"
+id: docs-e2e-alignment
+created_at: "2026-05-08T19:30:00+02:00"
+git_rev: "2e3459c"
+specs:
+  - .agents/impl_specs/docs-e2e-alignment.md
+target_tests:
+  - file: tests/impl_spec/test_docs_e2e_alignment.py
+    tests:
+      - test_init_e2e_coverage_bookworm_pip_uses_printf_init
+      - test_python39_e2e_job_exists
+      - test_python39_e2e_uses_bullseye_container
+      - test_python39_e2e_requires_python_39
+      - test_installation_md_mentions_auto_download
+      - test_installation_md_links_to_architecture
+      - test_architecture_md_has_six_discovery_steps
+      - test_architecture_md_has_platform_detection_section
+      - test_architecture_md_platform_detection_has_triple_table
+```

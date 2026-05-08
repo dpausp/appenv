@@ -83,11 +83,13 @@ If you cloned the repo and want to create a new appenv project, you are in the w
 
 ## uv Installation
 
-appenv requires uv for virtual environment management. If uv is not found, appenv will attempt to install it automatically using one of these methods:
+appenv requires uv for virtual environment management. If uv is not found, appenv will attempt to install it automatically — either via nix, pip, or by downloading it directly from astral.sh. Common methods include:
 
 1. **PATH uv**: If a suitable uv (>=0.5.0) is in PATH, use it
 2. **Nix**: Build uv with `nix build nixpkgs#uv`
 3. **pip**: Install with `pip install uv`
+
+If none of these are available, uv will be downloaded automatically from [astral.sh](https://astral.sh) (using only Python stdlib — no curl or wget needed). See the [full discovery chain](../dev/architecture.md#uv-management) in the architecture docs for details.
 
 ### Manual uv Installation
 

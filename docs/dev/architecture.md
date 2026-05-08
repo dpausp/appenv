@@ -47,15 +47,28 @@ Each candidate is probed by running `python -c "print(1)"` to verify the binary 
 
 ### Discovery Chain
 
-`UvBin` discovers the `uv` binary through a five-step cascade. Each step validates the version before accepting — see `UvVersion.minimum()` in the API reference for the current minimum:
+`UvBin` discovers the `uv` binary through a six-step cascade. Each step validates the version before accepting — see `UvVersion.minimum()` in the API reference for the current minimum:
 
 1. **PATH** — `shutil.which("uv")`, validate version
 2. **Cached binary** — `.appenv/.uv/bin/uv` from a previous nix/pip install
 3. **Nix channel** — `nix-build <nixpkgs> -A uv` into `.appenv/.uv`
 4. **Nix flake** — `nix build nixpkgs#uv` into `.appenv/.uv` (more expensive, fresher packages)
 5. **pip install** — `pip install uv -t .appenv/.uv` as last resort
+6. **Direct download** — download the uv binary tarball from [astral-sh/uv GitHub releases](https://github.com/astral-sh/uv/releases) via `urllib` + `tarfile` (stdlib only), extract to `.appenv/.uv/bin/uv`. See [](#platform-detection) for supported platforms.
 
 When a PATH uv is valid, any previously cached `.appenv/.uv` is cleaned up automatically. The cascade handles environments where uv may not be pre-installed (CI, NixOS, minimal containers).
+
+### Platform Detection
+
+The direct-download step (6) needs to know the correct release archive for the current platform. `_uv_platform_triple()` in `src/appenv.py` maps `platform.machine()` and `sys.platform` to the archive naming convention used by astral-sh/uv:
+
+| Architecture | Linux (glibc) | Linux (musl/Alpine) | macOS |
+| ------------ | -------------------------- | -------------------------- | --------------------- |
+| x86_64 | `x86_64-unknown-linux-gnu` | `x86_64-unknown-linux-musl` | `x86_64-apple-darwin` |
+| aarch64 | `aarch64-unknown-linux-gnu` | `aarch64-unknown-linux-musl` | `aarch64-apple-darwin` |
+| armv7 | `armv7-unknown-linux-gnu` | `armv7-unknown-linux-musl` | — |
+
+Linux glibc vs. musl is detected by checking for `/etc/alpine-release` (Alpine uses musl). Unsupported platforms (unrecognized architecture or OS) cause the direct-download step to be skipped silently.
 
 ### Version Enforcement
 
