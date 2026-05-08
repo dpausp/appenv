@@ -487,6 +487,9 @@ def test_try_uv_from_nix_flake_returns_path_when_valid(monkeypatch, tmp_path, ca
     # Create a UvBin instance
     uv_bin = UvBin(tmp_path / ".appenv")
 
+    # Mock shutil.which to find nix
+    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/nix" if name == "nix" else None)
+
     # Mock subprocess.run to return success
     monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: FakeResult())
 
@@ -515,6 +518,9 @@ def test_try_uv_from_nix_flake_returns_none_when_build_fails(
     # Create a UvBin instance
     uv_bin = UvBin(tmp_path / ".appenv")
 
+    # Mock shutil.which to find nix
+    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/nix" if name == "nix" else None)
+
     # Cap logs at DEBUG level
     caplog.set_level(logging.DEBUG)
 
@@ -533,6 +539,9 @@ def test_try_uv_from_nix_flake_returns_none_when_invalid_version(
     """_try_uv_from_nix_flake returns None when uv built but version invalid."""
     # Create a UvBin instance
     uv_bin = UvBin(tmp_path / ".appenv")
+
+    # Mock shutil.which to find nix
+    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/nix" if name == "nix" else None)
 
     # Mock subprocess.run to return success
     monkeypatch.setattr(
