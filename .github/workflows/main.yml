@@ -7,29 +7,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  lint:
-    runs-on: ubuntu-24.04
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-
-      - run: uv tool install pre-commit --with pre-commit-uv
-
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cache/pre-commit
-          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
-
-      - run: pre-commit run --all-files
-
-      - run: uv tool install tox --with tox-uv-bare --with tox-gh
-
-      - run: tox -e fix
-
   build:
     strategy:
       fail-fast: false
