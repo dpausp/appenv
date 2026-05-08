@@ -49,7 +49,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install python3
-        run: apt-get update && apt-get install -y python3
+        run: apt-get update && apt-get install -y python3 ca-certificates
 
       - name: Bootstrap appenv (astral.sh installer)
         run: |
