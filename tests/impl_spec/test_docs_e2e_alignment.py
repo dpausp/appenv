@@ -74,18 +74,17 @@ def test_python39_e2e_uses_bullseye_container():
 
 
 def test_python39_e2e_requires_python_39():
-    """SPEC: python39-e2e — validates that the printf pipe passes 3.9 as the
-    python version answer to ./appenv init (which generates requires-python
-    dynamically)."""
+    """SPEC: python39-e2e — validates that the debian-bullseye-39 job uses a heredoc
+    pyproject.toml with requires-python >= 3.9 (since appenv init enforces a
+    minimum of 3.10, which cannot be satisfied on bullseye's Python 3.9)."""
     wf = _load_e2e_yaml()
     job = wf["jobs"]["debian-bullseye-39"]
 
     all_run_scripts = [step["run"] for step in job["steps"] if "run" in step]
 
     combined = "\n".join(all_run_scripts)
-    assert "3.9\\n" in combined, (
-        "debian-bullseye-39 printf pipe must pass 3.9 as python version "
-        "answer to ./appenv init"
+    assert "requires-python" in combined and "3.9" in combined, (
+        "debian-bullseye-39 must set requires-python >= 3.9 via heredoc pyproject.toml"
     )
 
 

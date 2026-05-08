@@ -28,7 +28,7 @@ jobs:
           cp $GITHUB_WORKSPACE/src/appenv.py appenv
           chmod +x appenv
 
-          printf 'http\nhttpie\n\n\n\n3.12\n' | ./appenv init
+          printf 'http\nhttpie\n\n\n\n3.11\n' | ./appenv init
 
           ./appenv version
           python3 --version
@@ -183,14 +183,19 @@ jobs:
       - name: Install prerequisites
         run: apt-get update && apt-get install -y python3 python3-pip ca-certificates
 
-      - name: Bootstrap appenv (Python 3.9 init)
+      - name: Bootstrap appenv (Python 3.9)
         run: |
           mkdir /tmp/testproject && cd /tmp/testproject
 
           cp $GITHUB_WORKSPACE/src/appenv.py appenv
           chmod +x appenv
 
-          printf 'http\nhttpie\n\n\n\n3.9\n' | ./appenv init
+          cat > pyproject.toml << 'EOF'
+          [project]
+          name = 'testproject'
+          requires-python = '>=3.9'
+          dependencies = ['httpie']
+          EOF
 
           ./appenv version
           python3 --version
