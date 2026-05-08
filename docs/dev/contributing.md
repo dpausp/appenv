@@ -33,6 +33,8 @@ Any method signature change requires updating both `src/appenv.py` and `src/appe
 
 The `src/py.typed` marker file signals PEP 561 compliance to type checkers.
 
+Test files follow the same stub-only policy — every `.py` in `tests/` has a matching `.pyi`. See [](#test-type-stubs) for patterns and fixture types.
+
 ### Exit Codes
 
 Use BSD sysexits.h constants (`EXIT_CODE_DATAERR`, `EXIT_CODE_NOINPUT`, `EXIT_CODE_UNAVAILABLE`) defined at module level. See {doc}`architecture` for the full error handling strategy.
@@ -84,6 +86,58 @@ Any test consistently exceeding 2 seconds gets `@pytest.mark.slow`. The threshol
 - Default `pytest` configuration excludes slow tests (`-m "not slow"`)
 - `tox` cov environment runs all tests including slow
 - E2E tests should target under 2s to avoid needing the marker
+
+(test-type-stubs)=
+### Test Type Stubs
+
+Test stubs live alongside their `.py` files in `tests/`. Every test function, helper, and class has a corresponding stub entry. Markers (`@pytest.mark.slow`, `@pytest.mark.parametrize(...)`) are preserved in stubs.
+
+**Signature patterns:**
+
+```python
+def test_example(monkeypatch: MonkeyPatch, tmp_path: Path) -> None: ...
+def helper(verbose: bool = ...) -> None: ...
+```
+
+**Builtin pytest fixture types:**
+
+| Fixture | Type |
+|---------|------|
+| `monkeypatch` | `MonkeyPatch` |
+| `capsys` | `CaptureFixture[str]` |
+| `tmp_path` | `Path` |
+| `request` | `FixtureRequest` |
+| `caplog` | `LogCaptureFixture` |
+
+**Project fixture types** (from `tests/conftest.pyi`):
+
+| Fixture | Return type |
+|---------|-------------|
+| `workdir` | `Path` |
+| `mock_uv` | `MockUvBin` |
+| `mock_uv_version` | `None` |
+| `subprocess_run_fail` | `None` |
+| `app_env` | `Callable[..., AppEnv]` |
+| `make_mock_uv` | `Callable[..., MockUvBin]` |
+| `no_ensure_python` | `None` |
+| `mock_cmd_python` | `None` |
+| `create_venv` | `Callable[..., Path]` |
+| `mock_uv_lock` | `None` |
+| `mock_logdir` | `Path` |
+| `clean_uv_project_env` | `None` |
+| `make_pyproject` | `Callable[..., None]` |
+| `capture_appenv_logs` | `logging.Logger` |
+| `test_settings` | `Callable[..., AppEnvSettings]` |
+| `patterns` | pytest-patterns plugin type |
+
+**Validation:**
+
+```bash
+uv run ruff check --select PYI tests/
+uv run ty check tests/
+```
+
+Stubs must stay in sync with their `.py` counterparts — any signature change updates both files. Ty runs on `src/` only in CI; test stub validation is manual until a follow-up enables it.
 
 ### Test Strategy
 

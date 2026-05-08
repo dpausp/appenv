@@ -5,44 +5,36 @@ from pytest import CaptureFixture, MonkeyPatch
 
 from appenv import AppEnvSettings
 
-def test_reset_nonexisting_envdir_silent(
-    tmp_path: Path, test_settings: Callable[..., AppEnvSettings]
-) -> None: ...
-def test_reset_removes_envdir_with_subdirs(
-    tmp_path: Path, test_settings: Callable[..., AppEnvSettings]
-) -> None: ...
-def test_reset_removes_venv(
+def test_self_update_updates_on_version_mismatch(
     tmp_path: Path,
+    monkeypatch: MonkeyPatch,
     capsys: CaptureFixture[str],
     test_settings: Callable[..., AppEnvSettings],
 ) -> None: ...
-def test_reset_removes_both_venv_and_appenv(
+def test_self_update_noop_on_same_version(
     tmp_path: Path,
-    capsys: CaptureFixture[str],
-    test_settings: Callable[..., AppEnvSettings],
-) -> None: ...
-def test_reset_unlinks_file_in_appenv(
-    workdir: Path, monkeypatch: MonkeyPatch, capsys: CaptureFixture[str]
-) -> None: ...
-def test_reset_removes_venv_symlink(
-    workdir: Path,
     monkeypatch: MonkeyPatch,
     capsys: CaptureFixture[str],
     test_settings: Callable[..., AppEnvSettings],
 ) -> None: ...
-def test_reset_removes_real_venv(
-    workdir: Path,
+def test_self_update_check_no_drift(
+    tmp_path: Path,
     monkeypatch: MonkeyPatch,
     capsys: CaptureFixture[str],
     test_settings: Callable[..., AppEnvSettings],
 ) -> None: ...
-def test_reset_removes_old_venv_directory(
-    workdir: Path,
+def test_self_update_check_detects_drift(
+    tmp_path: Path,
     monkeypatch: MonkeyPatch,
     capsys: CaptureFixture[str],
     test_settings: Callable[..., AppEnvSettings],
 ) -> None: ...
-def test_reset_keeps_uv_binary(
+def test_self_update_no_script(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+    test_settings: Callable[..., AppEnvSettings],
+) -> None: ...
+def test_self_update_unknown_version(
     tmp_path: Path,
     monkeypatch: MonkeyPatch,
     capsys: CaptureFixture[str],

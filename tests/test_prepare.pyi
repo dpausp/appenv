@@ -1,56 +1,223 @@
-def test_prepare_creates_envdir(workdir, monkeypatch, test_settings, mock_uv): ...
-def test_prepare_creates_venv_symlink(workdir, monkeypatch, test_settings, mock_uv): ...
-def test_develop_syncs_with_dev_group(workdir, monkeypatch, test_settings, mock_uv): ...
+from collections.abc import Callable
+from pathlib import Path
+
+from pytest import CaptureFixture, LogCaptureFixture, MonkeyPatch
+from pytest_patterns.plugin import PatternsLib
+
+from appenv import AppEnv
+from tests.conftest import MockUvBin
+
+def make_venv_creating_cmd(
+    base: Path, python_content: str = ...
+) -> Callable[..., str]: ...
+def test_prepare_creates_envdir(
+    workdir: Path,
+    monkeypatch: MonkeyPatch,
+    app_env: Callable[..., AppEnv],
+    mock_uv: MockUvBin,
+    mock_cmd_python: None,
+    make_pyproject: Callable[..., None],
+) -> None: ...
+def test_prepare_creates_venv_symlink(
+    workdir: Path,
+    monkeypatch: MonkeyPatch,
+    app_env: Callable[..., AppEnv],
+    mock_uv: MockUvBin,
+    mock_cmd_python: None,
+    make_pyproject: Callable[..., None],
+) -> None: ...
 def test_prepare_syncs_with_frozen_flag(
-    workdir, monkeypatch, test_settings, mock_uv
-): ...
+    workdir: Path,
+    monkeypatch: MonkeyPatch,
+    app_env: Callable[..., AppEnv],
+    mock_uv: MockUvBin,
+    mock_cmd_python: None,
+    make_pyproject: Callable[..., None],
+) -> None: ...
 def test_prepare_verbose_output(
-    workdir, monkeypatch, capsys, patterns, test_settings, mock_uv
-): ...
+    workdir: Path,
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
+    patterns: PatternsLib,
+    app_env: Callable[..., AppEnv],
+    mock_uv: MockUvBin,
+    mock_cmd_python: None,
+    make_pyproject: Callable[..., None],
+) -> None: ...
 def test_prepare_pyproject_mode_verbose(
-    workdir, monkeypatch, capsys, patterns, test_settings, mock_uv
-): ...
+    workdir: Path,
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
+    patterns: PatternsLib,
+    app_env: Callable[..., AppEnv],
+    mock_uv: MockUvBin,
+    mock_cmd_python: None,
+    make_pyproject: Callable[..., None],
+) -> None: ...
 def test_prepare_pyproject_unlink_file_in_appenv(
-    workdir, monkeypatch, capsys, patterns, test_settings, mock_uv
-): ...
+    workdir: Path,
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
+    patterns: PatternsLib,
+    app_env: Callable[..., AppEnv],
+    make_pyproject: Callable[..., None],
+) -> None: ...
 def test_run_uv_sets_environment_and_execs(
-    workdir, monkeypatch, test_settings, mock_uv
-): ...
+    workdir: Path,
+    monkeypatch: MonkeyPatch,
+    app_env: Callable[..., AppEnv],
+) -> None: ...
 def test_update_lockfile_exits_67_no_project(
-    monkeypatch, tmp_path, capsys, test_settings, mock_uv
-): ...
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+    app_env: Callable[..., AppEnv],
+) -> None: ...
 def test_prepare_pyproject_cleanup_old_appenv(
-    tmp_path, monkeypatch, test_settings, mock_uv
-): ...
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+    app_env: Callable[..., AppEnv],
+    make_pyproject: Callable[..., None],
+) -> None: ...
 def test_prepare_pyproject_removes_symlink_in_appenv(
-    tmp_path, monkeypatch, caplog, test_settings, mock_uv
-): ...
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+    caplog: LogCaptureFixture,
+    app_env: Callable[..., AppEnv],
+    make_pyproject: Callable[..., None],
+) -> None: ...
 def test_prepare_pyproject_keeps_appenv_if_requirements_exists(
-    tmp_path, monkeypatch, test_settings, mock_uv
-): ...
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+    app_env: Callable[..., AppEnv],
+    make_pyproject: Callable[..., None],
+) -> None: ...
 def test_prepare_exits_without_project_files(
-    tmp_path, monkeypatch, capsys, test_settings
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
+    app_env: Callable[..., AppEnv],
 ) -> None: ...
 def test_prepare_pyproject_missing_uv_lock(
-    tmp_path, monkeypatch, capsys, test_settings
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
+    app_env: Callable[..., AppEnv],
 ) -> None: ...
 def test_prepare_pyproject_corrupted_venv(
-    tmp_path, monkeypatch, test_settings, mock_uv
-): ...
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+    app_env: Callable[..., AppEnv],
+    mock_uv: MockUvBin,
+    make_pyproject: Callable[..., None],
+) -> None: ...
 def test_prepare_pyproject_sets_uv_project_environment(
-    tmp_path, monkeypatch, test_settings, mock_uv
-): ...
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+    app_env: Callable[..., AppEnv],
+    make_pyproject: Callable[..., None],
+) -> None: ...
 def test_prepare_pyproject_updates_broken_symlink(
-    tmp_path, monkeypatch, test_settings, mock_uv
-): ...
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+    app_env: Callable[..., AppEnv],
+    make_pyproject: Callable[..., None],
+) -> None: ...
 def test_prepare_pyproject_keeps_real_venv_directory(
-    tmp_path, monkeypatch, test_settings, mock_uv
-): ...
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
+    app_env: Callable[..., AppEnv],
+    make_pyproject: Callable[..., None],
+) -> None: ...
 def test_prepare_pyproject_keeps_dot_uv_dir(
-    tmp_path, monkeypatch, test_settings, mock_uv
-): ...
-def test_detect_project_type_pyproject(tmp_path, monkeypatch) -> None: ...
-def test_detect_project_type_none(tmp_path, monkeypatch) -> None: ...
-def test_prepare_venv_replaces_current_symlink(workdir, monkeypatch, test_settings): ...
-def test_prepare_venv_existing_venv(workdir, monkeypatch, test_settings): ...
-def test_prepare_venv_current_is_directory(workdir, monkeypatch, test_settings): ...
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+    app_env: Callable[..., AppEnv],
+    make_pyproject: Callable[..., None],
+) -> None: ...
+def test_detect_project_type_pyproject(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None: ...
+def test_detect_project_type_none(tmp_path: Path, monkeypatch: MonkeyPatch) -> None: ...
+def test_prepare_venv_replaces_current_symlink(
+    workdir: Path,
+    monkeypatch: MonkeyPatch,
+    app_env: Callable[..., AppEnv],
+    make_mock_uv: Callable[..., MockUvBin],
+    mock_cmd_python: None,
+    clean_uv_project_env: None,
+    make_pyproject: Callable[..., None],
+) -> None: ...
+def test_prepare_venv_existing_venv(
+    workdir: Path,
+    monkeypatch: MonkeyPatch,
+    app_env: Callable[..., AppEnv],
+    make_mock_uv: Callable[..., MockUvBin],
+    mock_cmd_python: None,
+    create_venv: Callable[..., Path],
+    clean_uv_project_env: None,
+    make_pyproject: Callable[..., None],
+) -> None: ...
+def test_prepare_venv_current_is_directory(
+    workdir: Path,
+    monkeypatch: MonkeyPatch,
+    app_env: Callable[..., AppEnv],
+    make_mock_uv: Callable[..., MockUvBin],
+    mock_cmd_python: None,
+    create_venv: Callable[..., Path],
+    clean_uv_project_env: None,
+    make_pyproject: Callable[..., None],
+) -> None: ...
+def test_stale_venv_broken_python(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+    app_env: Callable[..., AppEnv],
+    mock_uv: MockUvBin,
+    create_venv: Callable[..., Path],
+    make_pyproject: Callable[..., None],
+) -> None: ...
+def test_stale_venv_version_mismatch(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+    app_env: Callable[..., AppEnv],
+    mock_uv: MockUvBin,
+    create_venv: Callable[..., Path],
+    make_pyproject: Callable[..., None],
+) -> None: ...
+def test_stale_venv_max_version_constraint(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
+    app_env: Callable[..., AppEnv],
+    mock_uv: MockUvBin,
+    create_venv: Callable[..., Path],
+    make_pyproject: Callable[..., None],
+) -> None: ...
+def test_extras_sync_args(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+    app_env: Callable[..., AppEnv],
+    mock_uv: MockUvBin,
+    mock_cmd_python: None,
+    make_pyproject: Callable[..., None],
+) -> None: ...
+def test_prepare_venv_link_is_symlink_survives_unlink(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
+    app_env: Callable[..., AppEnv],
+    mock_cmd_python: None,
+    create_venv: Callable[..., Path],
+    clean_uv_project_env: None,
+    make_pyproject: Callable[..., None],
+) -> None: ...
+def test_prepare_removes_legacy_current_symlink(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+    app_env: Callable[..., AppEnv],
+    mock_uv: MockUvBin,
+    mock_cmd_python: None,
+    clean_uv_project_env: None,
+    make_pyproject: Callable[..., None],
+) -> None: ...
