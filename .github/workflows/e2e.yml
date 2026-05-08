@@ -12,6 +12,9 @@ jobs:
     container:
       image: debian:bookworm
 
+    env:
+      APPENV_VERBOSE: "1"
+
     steps:
       - uses: actions/checkout@v4
 
@@ -33,6 +36,8 @@ jobs:
           requires-python = ">=3.10"
           EOF
 
+          ./appenv version
+          python3 --version
           ./appenv update-lockfile
           ln -s appenv http
 
@@ -44,6 +49,9 @@ jobs:
     runs-on: ubuntu-24.04
     container:
       image: debian:bookworm
+
+    env:
+      APPENV_VERBOSE: "1"
 
     steps:
       - uses: actions/checkout@v4
@@ -66,6 +74,8 @@ jobs:
           requires-python = ">=3.10"
           EOF
 
+          ./appenv version
+          python3 --version
           ./appenv update-lockfile
           ln -s appenv http
 
@@ -76,6 +86,9 @@ jobs:
   ubuntu-uvx:
     runs-on: ubuntu-24.04
 
+    env:
+      APPENV_VERBOSE: "1"
+
     steps:
       - uses: astral-sh/setup-uv@v7
 
@@ -83,6 +96,9 @@ jobs:
         run: |
           mkdir /tmp/testproject && cd /tmp/testproject
           printf 'http\nhttpie\n\n\n\n3.12\n' | uvx --from git+https://github.com/flyingcircusio/appenv@${{ github.head_ref || github.ref_name }} appenv init
+
+      - name: Show info
+        run: cd /tmp/testproject && ./appenv version && python3 --version
 
       - name: Run http
         run: cd /tmp/testproject && ./http --version
@@ -92,6 +108,9 @@ jobs:
     runs-on: ubuntu-24.04
     container:
       image: alpine:latest
+
+    env:
+      APPENV_VERBOSE: "1"
 
     steps:
       - uses: actions/checkout@v4
@@ -114,6 +133,8 @@ jobs:
           requires-python = ">=3.10"
           EOF
 
+          ./appenv version
+          python3 --version
           ./appenv update-lockfile
           ln -s appenv http
 
@@ -123,6 +144,9 @@ jobs:
   # E2E: macOS ARM64 — native aarch64-apple-darwin, tests Apple Silicon triple
   macos-arm64:
     runs-on: macos-14
+
+    env:
+      APPENV_VERBOSE: "1"
 
     steps:
       - uses: actions/checkout@v4
@@ -142,6 +166,8 @@ jobs:
           requires-python = ">=3.10"
           EOF
 
+          ./appenv version
+          python3 --version
           ./appenv update-lockfile
           ln -s appenv http
 
