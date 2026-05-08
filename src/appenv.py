@@ -17,8 +17,8 @@ __version__ = "2026.4.28"
 
 import argparse
 import difflib
-import logging
 import io
+import logging
 import os
 import re
 import shutil
@@ -696,7 +696,7 @@ class UvBin:
         if system == "linux":
             libc = "musl" if Path("/etc/alpine-release").exists() else "gnu"
             return f"{arch}-unknown-linux-{libc}"
-        elif system == "darwin":
+        if system == "darwin":
             return f"{arch}-apple-darwin"
         return None
 
