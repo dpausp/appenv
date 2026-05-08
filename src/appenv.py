@@ -18,6 +18,7 @@ __version__ = "2026.4.28"
 import argparse
 import difflib
 import logging
+import io
 import os
 import re
 import shutil
@@ -625,45 +626,79 @@ class UvBin:
         return self.managed_uv if version.valid else None
 
     def _try_uv_from_installer(self):
-        """Download uv via astral.sh installer script.
+        """Download uv binary directly from GitHub releases.
 
-        Uses urllib (stdlib) to fetch the script, then runs it with
-        UV_UNMANAGED_INSTALL to place the binary in .appenv/.uv/bin
-        without modifying shell profiles or system state.
+        Detects platform, downloads the appropriate tarball via urllib
+        (stdlib), extracts and places the binary in .appenv/.uv/bin/uv.
+        No curl, no wget, no shell script needed.
         """
-        log.debug("attempting to install uv via astral.sh installer ...")
+        log.debug("attempting to download uv binary from GitHub releases ...")
 
-        try:
-            import urllib.request
-
-            resp = urllib.request.urlopen(
-                "https://astral.sh/uv/install.sh", timeout=30
-            )
-            script = resp.read().decode()
-        except Exception as e:
-            log.debug("failed to download astral.sh installer: %s", e)
+        triple = self._uv_platform_triple()
+        if not triple:
+            log.debug("unsupported platform, skipping direct download")
             return None
 
-        install_dir = str(self.uv_dir / "bin")
-        env = {**os.environ, "UV_UNMANAGED_INSTALL": install_dir}
+        url = f"https://github.com/astral-sh/uv/releases/latest/download/uv-{triple}.tar.gz"
 
         try:
-            subprocess.run(
-                ["sh"],
-                input=script,
-                capture_output=True,
-                text=True,
-                check=True,
-                env=env,
-            )
-        except subprocess.CalledProcessError as e:
-            log.debug("astral.sh installer failed: %s", e.stderr)
+            import tarfile
+            import urllib.request
+
+            log.debug("downloading %s", url)
+            resp = urllib.request.urlopen(url, timeout=60)
+            data = resp.read()
+
+            with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tar:
+                # tar contains uv-<triple>/uv — extract the binary
+                for member in tar:
+                    if member.name.endswith("/uv") and not member.isdir():
+                        member.name = "bin/uv"
+                        self.uv_dir.mkdir(parents=True, exist_ok=True)
+                        tar.extract(member, self.uv_dir)
+                        break
+        except Exception as e:
+            log.debug("failed to download/extract uv: %s", e)
+            return None
+
+        if not self.managed_uv.exists():
+            log.debug("uv binary not found after extraction")
             return None
 
         version = UvBin.get_uv_version(self.managed_uv)
         log.debug("uv version is %s, valid: %s", version, version.valid)
 
         return self.managed_uv if version.valid else None
+
+    @staticmethod
+    def _uv_platform_triple():
+        """Return the UV release triple for the current platform.
+
+        Maps Python's platform.machine() and sys.platform to the
+        archive naming used by astral-sh/uv GitHub releases.
+        Returns None for unsupported platforms.
+        """
+        import platform
+
+        machine = platform.machine().lower()
+        system = sys.platform
+
+        # Map architecture names to UV triples
+        if machine in ("x86_64", "amd64"):
+            arch = "x86_64"
+        elif machine in ("aarch64", "arm64"):
+            arch = "aarch64"
+        elif machine == "armv7l":
+            arch = "armv7"
+        else:
+            return None
+
+        if system == "linux":
+            libc = "musl" if Path("/etc/alpine-release").exists() else "gnu"
+            return f"{arch}-unknown-linux-{libc}"
+        elif system == "darwin":
+            return f"{arch}-apple-darwin"
+        return None
 
     def _resolve_pip_command(self):
         """Find a working pip command.
