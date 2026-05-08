@@ -11,7 +11,7 @@ lifecycle:
     git_rev: "2e3459c"
   workflow:
     completed_at: "2026-05-08T20:00:00+02:00"
-    git_rev: "23700c2"
+    git_rev: "3dddb8d"
   verify:
 ---
 
