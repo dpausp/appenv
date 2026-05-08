@@ -4,8 +4,14 @@ lifecycle:
     completed_at: "2026-05-09T12:00:00Z"
     git_rev: "HEAD"
   design:
+    completed_at: "2026-05-09T12:30:00Z"
+    git_rev: "1525042"
   plan:
+    completed_at: "2026-05-09T12:30:00Z"
+    git_rev: "1525042"
   workflow:
+    completed_at: "2026-05-09T13:00:00Z"
+    git_rev: "1525042"
   verify:
 ---
 
@@ -176,3 +182,23 @@ Quality gates are ruff PYI and ty check. No test execution needed for stub-only 
 - All fixture parameters are typed in stubs
 - `ruff check --select PYI tests/` passes with 0 issues
 - `ty check tests/` passes with 0 errors
+
+## Appendix
+
+```yaml
+implementation_plan:
+  id: test-type-annotations
+  description: "Create missing .pyi stubs for 6 test modules and update 4 outdated stubs with full fixture typing"
+  specs:
+    - .agents/impl_specs/test-type-annotations.md
+  target_tests:
+    - file: tests/impl_spec/test_test_type_annotations.py
+      tests:
+        - test_complete_stub_coverage
+        - test_stub_sync_function_count
+        - test_no_phantom_functions
+        - test_fixture_parameter_typing
+        - test_specific_new_stubs_exist
+        - test_specific_updated_stubs_sync
+  created_at: "2026-05-09T12:30:00Z"
+```
