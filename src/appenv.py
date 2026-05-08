@@ -625,53 +625,37 @@ class UvBin:
         return self.managed_uv if version.valid else None
 
     def _try_uv_from_installer(self):
-        """Download uv via astral.sh installer (curl/wget).
+        """Download uv via astral.sh installer script.
 
-        Uses UV_UNMANAGED_INSTALL to place the binary in .appenv/.uv/bin
+        Uses urllib (stdlib) to fetch the script, then runs it with
+        UV_UNMANAGED_INSTALL to place the binary in .appenv/.uv/bin
         without modifying shell profiles or system state.
         """
         log.debug("attempting to install uv via astral.sh installer ...")
 
-        curl = shutil.which("curl")
-        wget = shutil.which("wget")
-        if not curl and not wget:
-            log.debug("no curl or wget found, skipping installer")
+        try:
+            import urllib.request
+
+            resp = urllib.request.urlopen(
+                "https://astral.sh/uv/install.sh", timeout=30
+            )
+            script = resp.read().decode()
+        except Exception as e:
+            log.debug("failed to download astral.sh installer: %s", e)
             return None
 
         install_dir = str(self.uv_dir / "bin")
         env = {**os.environ, "UV_UNMANAGED_INSTALL": install_dir}
 
         try:
-            if curl:
-                result = subprocess.run(
-                    [curl, "-LsSf", "https://astral.sh/uv/install.sh"],
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                )
-                subprocess.run(
-                    ["sh"],
-                    input=result.stdout,
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                    env=env,
-                )
-            else:
-                script = subprocess.run(
-                    [str(wget), "-qO", "-", "https://astral.sh/uv/install.sh"],
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                )
-                subprocess.run(
-                    ["sh"],
-                    input=script.stdout,
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                    env=env,
-                )
+            subprocess.run(
+                ["sh"],
+                input=script,
+                capture_output=True,
+                text=True,
+                check=True,
+                env=env,
+            )
         except subprocess.CalledProcessError as e:
             log.debug("astral.sh installer failed: %s", e.stderr)
             return None
