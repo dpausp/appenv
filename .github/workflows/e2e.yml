@@ -162,6 +162,7 @@ jobs:
     env:
       APPENV_VERBOSE: "1"
       UV_PYTHON_PREFERENCE: only-system
+      UV_PYTHON: /usr/bin/python3
     steps:
       - uses: actions/checkout@v4
 
