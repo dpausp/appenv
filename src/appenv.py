@@ -13,6 +13,8 @@ Assumptions:
   - pyproject.toml next to the appenv file
 """
 
+from __future__ import annotations
+
 __version__ = "2026.4.28"
 
 import argparse
@@ -25,11 +27,12 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from argparse import Namespace
 from dataclasses import dataclass
 from functools import cached_property
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
-from typing import NamedTuple, cast
+from typing import Any, NamedTuple, cast
 
 # Global logger instance
 log = logging.getLogger("appenv")
@@ -48,7 +51,7 @@ VERSION_PARTS_COUNT = 3
 class GroupedHelpFormatter(argparse.HelpFormatter):
     """Group subcommands by category in help output."""
 
-    def _format_action(self, action):
+    def _format_action(self, action: argparse.Action) -> str:
         groups = (
             ("Project", ["init", "migrate", "self-update", "update-lockfile"]),
             ("Venv", ["prepare", "reset"]),
@@ -85,7 +88,7 @@ class RequirementsTxtInfo(NamedTuple):
     python_versions: list[str]
 
 
-def convert_version_preference(versions):
+def convert_version_preference(versions: list[str]) -> tuple[str, list[str]]:
     """Convert version list to requires-python specifier.
 
     Returns (specifier, missing_versions) where missing_versions
@@ -115,7 +118,9 @@ def convert_version_preference(versions):
     return f">={min_v},<{next_minor}", missing
 
 
-def version_satisfies_constraints(version, min_version, max_version=None):
+def version_satisfies_constraints(
+    version: str, min_version: str, max_version: str | None = None
+) -> bool:
     ver_parts = [int(p) for p in version.split(".")]
     min_parts = [int(p) for p in min_version.split(".")]
 
@@ -130,7 +135,7 @@ def version_satisfies_constraints(version, min_version, max_version=None):
     return True
 
 
-def remove_path(path):
+def remove_path(path: Path) -> None:
     """Remove a path regardless of type (symlink, file, or directory).
 
     Logs the type before removal for debugging purposes.
@@ -149,17 +154,17 @@ def remove_path(path):
 class Pyproject:
     """Encapsulates pyproject.toml parsing, migration, and generation."""
 
-    def __init__(self, base):
+    def __init__(self, base: Path) -> None:
         self.path = base / "pyproject.toml"
         self.requirements_path = base / "requirements.txt"
 
     @cached_property
-    def content(self):
+    def content(self) -> str:
         if not self.exists:
             return ""
         return self.path.read_text()
 
-    def migrate_from_requirements_txt(self):
+    def migrate_from_requirements_txt(self) -> Pyproject:
         req_info = self.requirements_txt_info
 
         requires_python, missing = convert_version_preference(req_info.python_versions)
@@ -178,7 +183,7 @@ class Pyproject:
         return Pyproject(self.path.parent)
 
     @property
-    def requires_python(self):
+    def requires_python(self) -> tuple[str | None, str | None]:
         """Parse requires-python from pyproject.toml.
 
         Returns tuple of (min_version, max_version) where max may be None.
@@ -206,11 +211,11 @@ class Pyproject:
         return (min_version, max_version)
 
     @property
-    def exists(self):
+    def exists(self) -> bool:
         return self.path.exists()
 
     @cached_property
-    def has_project_section(self):
+    def has_project_section(self) -> bool:
         """Check if TOML content has a [project] section."""
         for line in self.content.splitlines():
             stripped = line.strip()
@@ -219,14 +224,14 @@ class Pyproject:
         return False
 
     @property
-    def can_be_created_from_requirements_txt(self):
+    def can_be_created_from_requirements_txt(self) -> bool:
         return not self.has_project_section and self.requirements_path.exists()
 
     @cached_property
-    def requirements_txt_info(self):
+    def requirements_txt_info(self) -> RequirementsTxtInfo:
         return self._parse_requirements_file()
 
-    def print_migration_info(self):
+    def print_migration_info(self) -> None:
         req_info = self.requirements_txt_info
 
         if req_info.editable_dependencies:
@@ -247,7 +252,7 @@ class Pyproject:
             f"{', '.join(req_info.dependencies)}"
         )
 
-    def _parse_requirements_file(self):
+    def _parse_requirements_file(self) -> RequirementsTxtInfo:
         """Parse requirements.txt content into dependencies and info."""
         content = self.requirements_path.read_text()
         all_deps = [
@@ -262,7 +267,7 @@ class Pyproject:
         python_versions = self._parse_python_preference()
         return RequirementsTxtInfo(dependencies, editable_specs, python_versions)
 
-    def _parse_python_preference(self):
+    def _parse_python_preference(self) -> list[str]:
         """Parse python preference from requirements.txt content."""
         content = self.requirements_path.read_text()
         for line in content.splitlines():
@@ -274,8 +279,12 @@ class Pyproject:
         return ["3.10", "3.11", "3.12", "3.13", "3.14"]
 
     def _generate_content_with_project(
-        self, project_name, description, dependencies, requires_python
-    ):
+        self,
+        project_name: str,
+        description: str,
+        dependencies: list[str],
+        requires_python: str,
+    ) -> str:
         """Generate pyproject.toml content string with [project] section."""
         # Generate [project] section
         if dependencies:
@@ -301,8 +310,12 @@ requires-python = "{requires_python}"
         return pyproject_content
 
     def with_project_section(
-        self, project_name, description, dependencies, requires_python=">=3.10"
-    ):
+        self,
+        project_name: str,
+        description: str,
+        dependencies: list[str],
+        requires_python: str = ">=3.10",
+    ) -> Pyproject:
         """Add [project] section, write file, return fresh instance.
 
         This method writes the updated content to disk and returns a new
@@ -318,7 +331,13 @@ requires-python = "{requires_python}"
         return Pyproject(self.path.parent)
 
 
-def create_pyproject(target, project_name, description, dependencies, python_version):
+def create_pyproject(
+    target: Path,
+    project_name: str,
+    description: str,
+    dependencies: list[str],
+    python_version: str,
+) -> Pyproject:
     """Factory function to create a new pyproject.toml file."""
     pyproject = Pyproject(target)
     return pyproject.with_project_section(
@@ -332,18 +351,18 @@ def create_pyproject(target, project_name, description, dependencies, python_ver
 class LockFile:
     """Encapsulates lockfile operations and diff logic."""
 
-    def __init__(self, base):
+    def __init__(self, base: Path) -> None:
         self.path = base / "uv.lock"
 
     @property
-    def exists(self):
+    def exists(self) -> bool:
         return self.path.exists()
 
     @cached_property
-    def content(self):
+    def content(self) -> str:
         return self.path.read_text() if self.path.exists() else ""
 
-    def diff(self, uv_bin, base, verbose):
+    def diff(self, uv_bin: UvBin, base: Path, verbose: bool) -> str:
         """Run uv lock in temp dir, return diff string."""
         log.debug("starting")
         old_content = self.content
@@ -360,9 +379,9 @@ class LockFile:
         )
         if not has_changes:
             return "No changes"
-        return has_changes
+        return "Changed"
 
-    def diff_summary(self, old_lines):
+    def diff_summary(self, old_lines: set[str]) -> str:
         """Create summary like '✓ Created (+42 lines)'."""
         new_lines = self.read_lockfile_lines()
         added = new_lines - old_lines
@@ -384,7 +403,7 @@ class LockFile:
             return f"{check} Created ({added_str} lines)"
         return f"{check} Updated ({added_str} / {removed_str} lines)"
 
-    def read_lockfile_lines(self):
+    def read_lockfile_lines(self) -> set[str]:
         """Read lockfile lines as a set of non-comment lines."""
         try:
             return {
@@ -402,25 +421,25 @@ class UvVersion:
     minor: int
     patch: int
 
-    def __str__(self):
+    def __str__(self) -> str:
         if self.major == 0 and self.minor == 0 and self.patch == 0:
             return "unknown"
         return f"{self.major}.{self.minor}.{self.patch}"
 
     @property
-    def valid(self):
+    def valid(self) -> bool:
         return self >= UvVersion.minimum()
 
     @staticmethod
-    def unknown():
+    def unknown() -> UvVersion:
         return UvVersion(0, 0, 0)
 
     @staticmethod
-    def minimum():
+    def minimum() -> UvVersion:
         return UvVersion(0, 5, 0)
 
     @staticmethod
-    def from_string(version_str):
+    def from_string(version_str: str) -> UvVersion:
         parts = version_str.split(".")
         if len(parts) == VERSION_PARTS_COUNT:
             try:
@@ -436,13 +455,13 @@ class UvVersion:
 class UvBin:
     """Encapsulates UV binary discovery, version check, and command execution."""
 
-    def __init__(self, appenv_dir):
+    def __init__(self, appenv_dir: Path) -> None:
         self.appenv_dir = appenv_dir
         self.uv_dir = appenv_dir / ".uv"
         self.managed_uv = self.uv_dir / "bin/uv"
         self.bin = self._get_uv_bin()
 
-    def cmd(self, args, *, verbose=False, **kwargs):
+    def cmd(self, args: list[str], *, verbose: bool = False, **kwargs: Any) -> str:
         """Execute uv command and return stdout."""
         cmd_args = [str(self.bin)]
         if verbose:
@@ -456,11 +475,11 @@ class UvBin:
         return uv_output
 
     @cached_property
-    def version(self):
+    def version(self) -> UvVersion:
         return UvBin.get_uv_version(self.bin)
 
     @staticmethod
-    def get_uv_version(uv_path):
+    def get_uv_version(uv_path: Path) -> UvVersion:
         """Get uv version by calling uv --version."""
         try:
             result = subprocess.run(
@@ -488,7 +507,7 @@ class UvBin:
             log.exception("Cannot parse version string, version unknown")
             return UvVersion.unknown()
 
-    def _get_uv_bin(self):
+    def _get_uv_bin(self) -> Path:
         """Get path to valid uv binary via discovery chain:
         1. uv from PATH
         2. Check .appenv/.uv from previous run
@@ -513,7 +532,7 @@ class UvBin:
 
         return uv_bin
 
-    def _try_uv_from_path(self):
+    def _try_uv_from_path(self) -> Path | None:
         """Try to find uv in PATH."""
         uv_in_path = shutil.which("uv")
         log.debug("uv in PATH = %s", uv_in_path)
@@ -528,7 +547,7 @@ class UvBin:
 
         return None
 
-    def _try_uv_from_appenv_dir(self):
+    def _try_uv_from_appenv_dir(self) -> Path | None:
         log.debug("Trying appenv-managed uv at %s", self.managed_uv)
         if not self.managed_uv.exists():
             log.debug("no appenv-managed uv found at %s", self.managed_uv)
@@ -539,7 +558,7 @@ class UvBin:
 
         return self.managed_uv if version.valid else None
 
-    def _try_uv_from_nix_channel(self):
+    def _try_uv_from_nix_channel(self) -> Path | None:
         """Try nix-build with nixpkgs channel"""
         nix_bin = shutil.which("nix")
         log.debug("appenv_dir=%s, nix_bin=%s", self.appenv_dir, nix_bin)
@@ -573,7 +592,7 @@ class UvBin:
 
         return self.managed_uv if version.valid else None
 
-    def _try_uv_from_nix_flake(self):
+    def _try_uv_from_nix_flake(self) -> Path | None:
         """Tries more expensive but fresh nix build from nixpkgs flake"""
 
         if shutil.which("nix") is None:
@@ -598,7 +617,7 @@ class UvBin:
 
         return self.managed_uv if version.valid else None
 
-    def _try_uv_from_pip(self):
+    def _try_uv_from_pip(self) -> Path | None:
         """Try to install uv via pip."""
         log.debug("attempting to install uv via pip ...")
 
@@ -625,7 +644,7 @@ class UvBin:
 
         return self.managed_uv if version.valid else None
 
-    def _try_uv_from_installer(self):
+    def _try_uv_from_installer(self) -> Path | None:
         """Download uv binary directly from GitHub releases.
 
         Detects platform, downloads the appropriate tarball via urllib
@@ -643,6 +662,7 @@ class UvBin:
 
         try:
             import tarfile
+            import urllib.error
             import urllib.request
 
             log.debug("downloading %s", url)
@@ -657,7 +677,7 @@ class UvBin:
                         self.uv_dir.mkdir(parents=True, exist_ok=True)
                         tar.extract(member, self.uv_dir)
                         break
-        except Exception as e:
+        except (urllib.error.URLError, OSError, tarfile.TarError) as e:
             log.debug("failed to download/extract uv: %s", e)
             return None
 
@@ -671,7 +691,7 @@ class UvBin:
         return self.managed_uv if version.valid else None
 
     @staticmethod
-    def _uv_platform_triple():
+    def _uv_platform_triple() -> str | None:
         """Return the UV release triple for the current platform.
 
         Maps Python's platform.machine() and sys.platform to the
@@ -700,7 +720,7 @@ class UvBin:
             return f"{arch}-apple-darwin"
         return None
 
-    def _resolve_pip_command(self):
+    def _resolve_pip_command(self) -> list[str] | None:
         """Find a working pip command.
 
         Tries ensurepip first (blessed way), then falls back to
@@ -729,7 +749,7 @@ class UvBin:
 
         return None
 
-    def _cleanup_appenv_uv(self):
+    def _cleanup_appenv_uv(self) -> None:
         """Remove leftover .appenv/.uv directory."""
         if self.uv_dir.exists():
             remove_path(self.uv_dir)
@@ -747,7 +767,7 @@ class AppEnvSettings:
 
 
 class AppEnv:
-    def __init__(self, original_cwd, settings):
+    def __init__(self, original_cwd: Path, settings: AppEnvSettings) -> None:
         self.base = settings.basedir.resolve()
         self.original_cwd = original_cwd
         self.settings = settings
@@ -759,7 +779,7 @@ class AppEnv:
         self.venv_link = self.base / ".venv"
         self.venv_python = self.venv_real / "bin" / "python"
 
-    def run(self, command, argv):
+    def run(self, command: str, argv: list[str]) -> None:
         log_dir = self._set_up_logdir()
         setup_logging(command, log_dir, self.settings.verbose)
 
@@ -795,7 +815,9 @@ class AppEnv:
 
         os.execv(str(cmd_path), argv)
 
-    def meta(self, remaining_args=None, prog="appenv"):
+    def meta(
+        self, remaining_args: list[str] | None = None, prog: str = "appenv"
+    ) -> None:
         log_dir = self._set_up_logdir()
         setup_logging(prog, log_dir, self.settings.verbose)
 
@@ -890,11 +912,13 @@ class AppEnv:
         else:
             args.func(args, remaining)
 
-    def prepare(self, args=None, remaining=None):
+    def prepare(
+        self, args: Namespace | None = None, remaining: list[str] | None = None
+    ) -> Path:
         """Prepare venv with production dependencies only."""
         return self._prepare_venv(dev_mode=False)
 
-    def _chdir_to_project(self, target):
+    def _chdir_to_project(self, target: Path) -> None:
         """Change to target directory and update all derived paths."""
         log.debug("chdir to %s", target)
         os.chdir(target)
@@ -906,7 +930,9 @@ class AppEnv:
         self.venv_link = self.base / ".venv"
         self.venv_python = self.venv_real / "bin" / "python"
 
-    def init(self, args=None, remaining=None):
+    def init(
+        self, args: Namespace | None = None, remaining: list[str] | None = None
+    ) -> None:
         """Create a new pyproject.toml project."""
         if args and args.path:
             target = (self.original_cwd / args.path).resolve()
@@ -980,7 +1006,9 @@ class AppEnv:
         print("\n=== Appenv project initialized ===")
         print(f"\nUse `./{command_name}` to run the {command_name} binary")
 
-    def migrate(self, args=None, remaining=None):
+    def migrate(
+        self, args: Namespace | None = None, remaining: list[str] | None = None
+    ) -> None:
         """Migrate from requirements.txt to pyproject.toml."""
         if args and args.path:
             target = (self.original_cwd / args.path).resolve()
@@ -1025,7 +1053,9 @@ class AppEnv:
         print("\n=== Pyproject Migration completed ===")
         print("requirements.{txt,lock} kept as legacy. You can delete these files now.")
 
-    def self_update(self, args=None, remaining=None):
+    def self_update(
+        self, args: Namespace | None = None, remaining: list[str] | None = None
+    ) -> None:
         """Update the local ./appenv script to match the running version."""
         if not self.appenv_script.exists():
             print(f"Error: No appenv script found at {self.appenv_script}")
@@ -1057,10 +1087,10 @@ class AppEnv:
         self.appenv_script.chmod(0o755)
         print(f"Updated {self.appenv_script} ({local_label} -> {running_version})")
 
-    def python(self, args, remaining):
+    def python(self, args: Namespace, remaining: list[str]) -> None:
         self.run("python", remaining)
 
-    def run_script(self, args, remaining):
+    def run_script(self, args: Namespace, remaining: list[str]) -> None:
         print("'run' has been removed. Use one of these instead:\n")
         print("  uv run <command>        — run any binary (includes dev dependencies)")
         print("  ./appenv python         — start Python REPL in the venv")
@@ -1068,7 +1098,7 @@ class AppEnv:
         print(f"  ./{args.script}              — then run the {args.script} binary")
         sys.exit(EXIT_CODE_USAGE)
 
-    def run_uv(self, args, remaining):
+    def run_uv(self, args: Namespace, remaining: list[str]) -> None:
         """Run uv with the appenv-configured uv binary."""
         uv = ensure_uv(self.appenv_dir)
 
@@ -1079,11 +1109,15 @@ class AppEnv:
         os.chdir(self.base)
         os.execv(str(uv.bin), uv_argv)
 
-    def show_version(self, args=None, remaining=None):
+    def show_version(
+        self, args: Namespace | None = None, remaining: list[str] | None = None
+    ) -> None:
         """Show appenv version."""
         print(f"appenv {__version__}")
 
-    def reset(self, args=None, remaining=None):
+    def reset(
+        self, args: Namespace | None = None, remaining: list[str] | None = None
+    ) -> None:
         """Remove appenv-managed files/directories"""
         log.debug("Resetting %s", self.settings.basedir)
         # Remove symlink if it exists
@@ -1112,14 +1146,16 @@ class AppEnv:
                     print(f"Removing {path} ...")
                     remove_path(path)
 
-    def update_lockfile(self, args=None, remaining=None):
+    def update_lockfile(
+        self, args: Namespace | None = None, remaining: list[str] | None = None
+    ) -> None:
         ensure_pyproject(self.base)
         uv = ensure_uv(self.appenv_dir)
         os.chdir(self.base)
         uv_lock_out = self._uv_lock(uv, diff=args.diff if args else False)
         print(uv_lock_out)
 
-    def _ensure_appenv_script(self, *, update=False):
+    def _ensure_appenv_script(self, *, update: bool = False) -> None:
         """
         Creates local ./appenv script if needed.
 
@@ -1169,13 +1205,13 @@ class AppEnv:
             print("Run './appenv self-update' to update the script.")
 
     @staticmethod
-    def _extract_version(script):
+    def _extract_version(script: Path) -> str | None:
         """Extract __version__ from an appenv script file."""
         content = script.read_text(errors="replace")
         match = re.search(r'__version__ = "([^"]+)"', content)
         return match.group(1) if match else None
 
-    def _uv_lock(self, uv, diff):
+    def _uv_lock(self, uv: UvBin, diff: bool) -> str:
         lock = LockFile(self.base)
 
         if diff:
@@ -1190,7 +1226,7 @@ class AppEnv:
 
         return update_info
 
-    def _uv_sync(self, *, dev_mode, uv):
+    def _uv_sync(self, *, dev_mode: bool, uv: UvBin) -> None:
         # Sync dependencies (idempotent)
         sync_args = ["sync"]
 
@@ -1203,11 +1239,11 @@ class AppEnv:
         log.debug("activated extras/optional deps: %s", self.settings.extras)
         uv.cmd(sync_args)
 
-    def _set_up_logdir(self):
+    def _set_up_logdir(self) -> Path:
         self.log_dir.mkdir(parents=True, exist_ok=True)
         return self.log_dir
 
-    def _prepare_venv(self, dev_mode):
+    def _prepare_venv(self, dev_mode: bool) -> Path:
         ensure_pyproject(self.base)
         ensure_lock_file(self.base)
         uv = ensure_uv(self.appenv_dir)
@@ -1293,14 +1329,14 @@ class AppEnv:
 
         return self.venv_real
 
-    def _set_up_command_symlink(self, command_name, project_name):
+    def _set_up_command_symlink(self, command_name: str, project_name: str) -> None:
         command_link = self.base / command_name
         if command_link.is_symlink() or command_link.exists():
             command_link.unlink(missing_ok=True)
         command_link.symlink_to("appenv")
         print(f"Created ./{command_name} -> appenv (runs the {command_name} binary)")
 
-    def _prepare_appenv_dir(self):
+    def _prepare_appenv_dir(self) -> None:
         """Remove old hash-based venvs and files from .appenv directory."""
         self.appenv_dir.mkdir(exist_ok=True)
         keep = {"venv", ".uv", "logs", "profiling", "current"}
@@ -1316,7 +1352,7 @@ class AppEnv:
             current.unlink()
 
 
-def ensure_uv(appenv_dir):
+def ensure_uv(appenv_dir: Path) -> UvBin:
     """Ensure uv is available and meets minimum version.
 
     Exits with error if uv is not available or too old.
@@ -1336,7 +1372,7 @@ def ensure_uv(appenv_dir):
     return uv
 
 
-def ensure_pyproject(base):
+def ensure_pyproject(base: Path) -> Pyproject:
     """Ensure pyproject.toml exists with [project] section, return Pyproject."""
     pyproject = Pyproject(base)
     if pyproject.has_project_section:
@@ -1358,7 +1394,7 @@ def ensure_pyproject(base):
         sys.exit(EXIT_CODE_NOINPUT)
 
 
-def ensure_lock_file(base):
+def ensure_lock_file(base: Path) -> LockFile:
     """Ensure lockfile exists, return LockFile instance."""
     lock = LockFile(base)
     if not lock.exists:
@@ -1369,7 +1405,7 @@ def ensure_lock_file(base):
     return lock
 
 
-def ensure_gitignore(base, entries):
+def ensure_gitignore(base: Path, entries: list[str]) -> None:
     """Ensure .gitignore contains the given entries.
 
     Idempotent: appends only missing entries, never modifies existing content.
@@ -1398,11 +1434,21 @@ def ensure_gitignore(base, entries):
         print(f"Created {gitignore_path}")
 
 
-def cmd(c, *, merge_stderr=True, quiet=False, cwd=None):
+def cmd(
+    c: str | list[str],
+    *,
+    merge_stderr: bool = True,
+    quiet: bool = False,
+    cwd: str | None = None,
+) -> bytes:
     # SPEC: SRS-F001-cmd-wrapper - Enrich subprocess errors with command output context
     try:
-        is_shell = isinstance(c, str)
-        cmd_list = cast("list[str]", [c] if is_shell else c)
+        if isinstance(c, str):
+            cmd_list = [c]
+            is_shell = True
+        else:
+            cmd_list = c
+            is_shell = False
         stderr = subprocess.STDOUT if merge_stderr else None
         return subprocess.check_output(cmd_list, shell=is_shell, stderr=stderr, cwd=cwd)
     except subprocess.CalledProcessError as e:
@@ -1412,7 +1458,7 @@ def cmd(c, *, merge_stderr=True, quiet=False, cwd=None):
         raise ValueError(e.output.decode("utf-8", "replace")) from e
 
 
-def ensure_best_python(base):
+def ensure_best_python(base: Path) -> None:
     """Ensure best Python for pyproject.toml workflow.
 
     Reads requires-python from pyproject.toml and selects the newest
@@ -1471,7 +1517,7 @@ def ensure_best_python(base):
     sys.exit(EXIT_CODE_DATAERR)
 
 
-def find_available_pythons():
+def find_available_pythons() -> list[tuple[str, str]]:
     """Find all available Python versions in PATH.
 
     Returns list of (version_str, path) tuples, sorted by version (newest first).
@@ -1504,7 +1550,9 @@ def find_available_pythons():
     return pythons
 
 
-def print_colored_diff(old_content, new_content, fromfile, tofile):
+def print_colored_diff(
+    old_content: str, new_content: str, fromfile: str, tofile: str
+) -> bool:
     """Print a unified diff with ANSI colors.
 
     Returns True if there were changes, False otherwise.
@@ -1534,7 +1582,7 @@ def print_colored_diff(old_content, new_content, fromfile, tofile):
     return has_changes
 
 
-def appenv_settings_from_env():
+def appenv_settings_from_env() -> AppEnvSettings:
     """Read settings from environment variables."""
     verbose = os.environ.get("APPENV_VERBOSE") is not None
     extras_raw = os.environ.get("APPENV_EXTRAS") or ""
@@ -1555,13 +1603,13 @@ class ColoredCallerFormatter(logging.Formatter):
     dim = "\033[2m"
     reset = "\033[0m"
 
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:
         caller = f"{record.funcName}:{record.lineno}"
         message = super().format(record)
         return f"{self.dim}{caller}{self.reset} {message}"
 
 
-def setup_logging(command_name, log_dir, verbose):
+def setup_logging(command_name: str, log_dir: Path, verbose: bool) -> None:
     """Setup command-specific logging with daily rotation."""
     log_file = log_dir / f"{command_name}.log"
 
@@ -1589,7 +1637,7 @@ def setup_logging(command_name, log_dir, verbose):
     log.debug("Logging configured log_file=%s verbose=%s", log_file, verbose)
 
 
-def main():
+def main() -> None:
     # Clear PYTHONPATH to ensure clean isolated environment.
     # Historical note: Some systems set PYTHONPATH globally which can interfere
     # with venv isolation. Clearing it ensures the venv's site-packages take precedence.

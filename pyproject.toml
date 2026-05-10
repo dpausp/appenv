@@ -115,6 +115,7 @@ addopts = [
   "--instafail",
   "--import-mode=importlib",
   "--timeout=120",
+  "--durations=10",
   "-W",
   "error",
   "-m",
@@ -175,6 +176,15 @@ dependency_groups = ["docs"]
 commands = [
   ["sphinx-build", "-b", "html", "docs", "docs/_build/html", "-W", "--keep-going"],
 ]
+
+[tool.tox.env.slow]
+description = "Run slow integration tests (package installs)"
+package = "wheel"
+runner = "uv-venv-lock-runner"
+setenv = { APPENV_BEST_PYTHON = "{envpython}" }
+dependency_groups = [ "test" ]
+depends = []
+commands = [ [ "pytest", "-m", "slow" ] ]
 
 [tool.scriv]
 format = "md"

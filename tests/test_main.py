@@ -15,7 +15,7 @@ import pytest
 import appenv
 from appenv import UvVersion
 
-from .conftest import strip_ansi_codes
+from .conftest import MockUvBin, strip_ansi_codes
 
 # main() tests
 
@@ -1175,3 +1175,81 @@ def test_ensure_gitignore_returns_early_when_all_entries_exist(tmp_path, capsys)
 
     # File content unchanged
     assert (base / ".gitignore").read_text() == ".venv\n.appenv\n.batou-lock\n"
+
+
+# python and uv subcommand dispatch tests
+
+
+def test_meta_dispatches_python_subcommand(
+    monkeypatch, tmp_path, app_env, no_ensure_python, mock_logdir
+):
+    """meta() dispatches 'python' subcommand to python() which calls run()."""
+    monkeypatch.setattr("sys.argv", ["appenv", "python", "-c", "print(1)"])
+
+    env = app_env()
+    run_called = []
+    monkeypatch.setattr(env, "run", lambda cmd, argv: run_called.append((cmd, argv)))
+
+    env.meta()
+
+    assert run_called == [("python", ["-c", "print(1)"])]
+
+
+def test_meta_dispatches_uv_subcommand(
+    monkeypatch, tmp_path, app_env, no_ensure_python, mock_logdir
+):
+    """meta() dispatches 'uv' subcommand to run_uv() which execs uv binary."""
+    monkeypatch.setattr("sys.argv", ["appenv", "uv", "pip", "list"])
+
+    env = app_env()
+    mock_uv = MockUvBin()
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: mock_uv)
+
+    execv_called = []
+    monkeypatch.setattr(
+        os, "execv", lambda path, argv: execv_called.append((path, argv))
+    )
+    monkeypatch.setattr(os, "chdir", lambda d: None)
+
+    env.meta()
+
+    assert len(execv_called) == 1
+    path, argv = execv_called[0]
+    assert "uv" in path
+    assert "pip" in argv
+    assert "list" in argv
+    assert os.environ.get("UV_PROJECT_ENVIRONMENT") == str(env.venv_real)
+
+
+def test_run_uv_sets_environment_and_execs(
+    monkeypatch, tmp_path, app_env, no_ensure_python, mock_logdir
+):
+    """run_uv() sets UV_PROJECT_ENVIRONMENT and execs the uv binary."""
+    env = app_env()
+    mock_uv = MockUvBin()
+    monkeypatch.setattr(appenv, "ensure_uv", lambda base: mock_uv)
+
+    execv_called = []
+    monkeypatch.setattr(
+        os, "execv", lambda path, argv: execv_called.append((path, argv))
+    )
+    monkeypatch.setattr(os, "chdir", lambda d: None)
+
+    env.run_uv(argparse.Namespace(), ["pip", "install", "pkg"])
+
+    assert os.environ.get("UV_PROJECT_ENVIRONMENT") == str(env.venv_real)
+    assert len(execv_called) == 1
+    path, argv = execv_called[0]
+    assert path == str(mock_uv.bin)
+    assert argv == [str(mock_uv.bin), "pip", "install", "pkg"]
+
+
+def test_python_delegates_to_run_with_remaining_args(monkeypatch, tmp_path, app_env):
+    """python() delegates to run() with command and remaining args."""
+    env = app_env()
+    run_called = []
+    monkeypatch.setattr(env, "run", lambda cmd, argv: run_called.append((cmd, argv)))
+
+    env.python(argparse.Namespace(), ["-m", "pdb", "script.py"])
+
+    assert run_called == [("python", ["-m", "pdb", "script.py"])]
