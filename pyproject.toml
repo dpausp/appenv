@@ -195,3 +195,9 @@ entry_title_template = ""
 new_fragment_template = "- New changelog entry."
 insert_marker = "- Nothing changed yet."
 categories = ""
+
+[[tool.uv.index]]
+name = "testpypi"
+url = "https://test.pypi.org/simple/"
+publish-url = "https://test.pypi.org/legacy/"
+explicit = true
