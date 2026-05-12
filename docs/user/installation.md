@@ -89,7 +89,7 @@ appenv requires uv for virtual environment management. If uv is not found, appen
 2. **Nix**: Build uv with `nix build nixpkgs#uv`
 3. **pip**: Install with `pip install uv`
 
-If none of these are available, uv will be downloaded automatically from [astral.sh](https://astral.sh) (using only Python stdlib — no curl or wget needed). See the [full discovery chain](../dev/architecture.md#uv-management) in the architecture docs for details.
+If none of these are available, uv will be downloaded automatically from [astral.sh](https://astral.sh) (using only Python stdlib — no curl or wget needed). See the [full discovery chain](../dev/index.md#uv-management) in the developer guide for details.
 
 ### Manual uv Installation
 
