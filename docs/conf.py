@@ -1,5 +1,9 @@
 """Sphinx configuration for appenv documentation."""
 
+from __future__ import annotations
+
+import ast
+import re
 import sys
 from pathlib import Path
 
@@ -92,9 +96,197 @@ def _suppress_autoapi_orphan_warnings(app, env, docnames):
     autoapi_index.write_text(content)
 
 
+# --- Stub type injection for autoapi ---
+
+_STUB_PATH = Path(__file__).parent.parent / "src" / "appenv.pyi"
+
+
+def _parse_stub_types(stub_path: Path) -> tuple[dict[str, str], dict[str, str]]:
+    """Parse .pyi stub to extract typed signatures and attribute types.
+
+    Returns (func_sigs, attr_types) where:
+    - func_sigs: qualified_name -> "(param: type, ...) -> RetType"
+    - attr_types: qualified_name -> "TypeAnnotation"
+    """
+    if not stub_path.exists():
+        return {}, {}
+
+    tree = ast.parse(stub_path.read_text())
+    func_sigs: dict[str, str] = {}
+    attr_types: dict[str, str] = {}
+
+    def _ann(node: ast.expr) -> str:
+        return ast.unparse(node)
+
+    def _is_ellipsis(node: ast.expr | None) -> bool:
+        return isinstance(node, ast.Constant) and node.value is ...
+
+    def _build_params(args: ast.arguments, strip_self: bool = False) -> str:
+        parts: list[str] = []
+        pos_args = list(args.args)
+        if strip_self and pos_args and pos_args[0].arg == "self":
+            pos_args = pos_args[1:]
+
+        defaults_offset = len(args.args) - len(args.defaults)
+
+        for i, arg in enumerate(pos_args):
+            orig_i = i + (len(args.args) - len(pos_args))
+            p = arg.arg
+            if arg.annotation:
+                p += f": {_ann(arg.annotation)}"
+            di = orig_i - defaults_offset
+            if 0 <= di < len(args.defaults) and not _is_ellipsis(args.defaults[di]):
+                p += f" = {ast.unparse(args.defaults[di])}"
+            parts.append(p)
+
+        if args.vararg:
+            p = f"*{args.vararg.arg}"
+            if args.vararg.annotation:
+                p += f": {_ann(args.vararg.annotation)}"
+            parts.append(p)
+        elif args.kwonlyargs:
+            parts.append("*")
+
+        for i, arg in enumerate(args.kwonlyargs):
+            p = arg.arg
+            if arg.annotation:
+                p += f": {_ann(arg.annotation)}"
+            kw_default = args.kw_defaults[i]
+            if kw_default is not None and not _is_ellipsis(kw_default):
+                p += f" = {ast.unparse(kw_default)}"
+            parts.append(p)
+
+        if args.kwarg:
+            p = f"**{args.kwarg.arg}"
+            if args.kwarg.annotation:
+                p += f": {_ann(args.kwarg.annotation)}"
+            parts.append(p)
+
+        return ", ".join(parts)
+
+    def _build_sig(func: ast.FunctionDef, strip_self: bool = False) -> str:
+        params = _build_params(func.args, strip_self)
+        sig = f"({params})"
+        if func.returns:
+            sig += f" -> {_ann(func.returns)}"
+        return sig
+
+    def _is_property(func: ast.FunctionDef) -> bool:
+        return any(
+            isinstance(d, ast.Name) and d.id == "property" for d in func.decorator_list
+        )
+
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, ast.FunctionDef):
+            func_sigs[node.name] = _build_sig(node)
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            attr_types[node.target.id] = _ann(node.annotation)
+        elif isinstance(node, ast.ClassDef):
+            for item in node.body:
+                if isinstance(item, ast.FunctionDef) and _is_property(item):
+                    if item.returns:
+                        attr_types[f"{node.name}.{item.name}"] = _ann(item.returns)
+                elif isinstance(item, ast.FunctionDef):
+                    func_sigs[f"{node.name}.{item.name}"] = _build_sig(
+                        item, strip_self=True
+                    )
+                elif isinstance(item, ast.AnnAssign) and isinstance(
+                    item.target, ast.Name
+                ):
+                    attr_types[f"{node.name}.{item.target.id}"] = _ann(item.annotation)
+
+    return func_sigs, attr_types
+
+
+def _inject_stub_types(app, env, docnames):
+    """Post-autoapi hook: inject type information from .pyi stubs."""
+    try:
+        func_sigs, attr_types = _parse_stub_types(_STUB_PATH)
+    except SyntaxError:
+        return
+    if not func_sigs and not attr_types:
+        return
+
+    autoapi_dir = Path(app.srcdir) / "autoapi"
+    if not autoapi_dir.exists():
+        return
+
+    for rst_file in autoapi_dir.rglob("*.rst"):
+        content = rst_file.read_text()
+        patched = _patch_rst_with_stub_types(content, func_sigs, attr_types)
+        if patched != content:
+            rst_file.write_text(patched)
+
+
+def _patch_rst_with_stub_types(
+    content: str, func_sigs: dict[str, str], attr_types: dict[str, str]
+) -> str:
+    """Patch autoapi-generated RST with type information from stubs."""
+    lines = content.split("\n")
+    result: list[str] = []
+    current_class: str | None = None
+
+    for i, line in enumerate(lines):
+        patched = line
+        next_line = lines[i + 1] if i + 1 < len(lines) else ""
+
+        # Track class/exception context and patch constructor params
+        m = re.match(r"^\.\. py:(class|exception):: (\w+)", line)
+        if m:
+            current_class = m.group(2)
+            init_key = f"{current_class}.__init__"
+            if init_key in func_sigs:
+                # Extract params only (drop return type from __init__)
+                params = func_sigs[init_key].split(" -> ", 1)[0]
+                patched = re.sub(r"\(.*\)$", params, line, count=1)
+
+        # Module-level functions
+        m = re.match(r"^(\.\. py:function:: )(\w+)\(.*\)$", line)
+        if m:
+            name = m.group(2)
+            if name in func_sigs:
+                patched = f"{m.group(1)}{name}{func_sigs[name]}"
+
+        # Module-level data/variables
+        m = re.match(r"^(\.\. py:data:: )(\w+)$", line)
+        if m:
+            name = m.group(2)
+            if name in attr_types and ":type:" not in next_line:
+                patched += f"\n   :type: {attr_types[name]}"
+
+        # Class methods (indented under class)
+        m = re.match(r"^(\s+)(\.\. py:method:: )(\w+)\(.*\)$", line)
+        if m and current_class:
+            indent, prefix, name = m.group(1), m.group(2), m.group(3)
+            key = f"{current_class}.{name}"
+            if key in func_sigs:
+                patched = f"{indent}{prefix}{name}{func_sigs[key]}"
+
+        # Class properties
+        m = re.match(r"^(\s+)(\.\. py:property:: )(\w+)$", line)
+        if m and current_class:
+            indent, prefix, name = m.group(1), m.group(2), m.group(3)
+            key = f"{current_class}.{name}"
+            if key in attr_types and ":type:" not in next_line:
+                patched += f"\n{indent}   :type: {attr_types[key]}"
+
+        # Class attributes
+        m = re.match(r"^(\s+)(\.\. py:attribute:: )(\w+)$", line)
+        if m and current_class:
+            indent, prefix, name = m.group(1), m.group(2), m.group(3)
+            key = f"{current_class}.{name}"
+            if key in attr_types and ":type:" not in next_line:
+                patched += f"\n{indent}   :type: {attr_types[key]}"
+
+        result.append(patched)
+
+    return "\n".join(result)
+
+
 def setup(app):
     app.connect("autoapi-skip-member", autoapi_skip_member)
     app.connect("env-before-read-docs", _suppress_autoapi_orphan_warnings)
+    app.connect("env-before-read-docs", _inject_stub_types)
 
 
 # MyST configuration
