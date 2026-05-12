@@ -31,14 +31,14 @@ A lockfile is "outdated" when `pyproject.toml` dependencies changed — **not** 
 
 If you run `./http` or `prepare` without a lockfile:
 
-```text
+```console
 $ ./http
 No uv.lock found. Run: ./appenv update-lockfile
 ```
 
 Generate it first:
 
-```text
+```console
 $ ./appenv update-lockfile
 $ ./http  # Now works
 ```

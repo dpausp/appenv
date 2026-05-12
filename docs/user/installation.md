@@ -18,39 +18,33 @@ All methods give you the same `./appenv` file. The only difference is how you ge
 
 The recommended way. Transparent, no magic, one file:
 
-```text
+```console
 mkdir myproject && cd myproject
 curl -sL https://raw.githubusercontent.com/flyingcircusio/appenv/master/src/appenv.py -o appenv
 chmod +x appenv
 ./appenv init
 ```
 
-### Pin to a specific version
+Pin to a specific version by using a release tag URL:
 
-```text
-# Specific release tag
+```console
 curl -sL https://github.com/flyingcircusio/appenv/raw/v1.0.0/src/appenv.py -o appenv
-
-# Specific branch
-curl -sL https://github.com/flyingcircusio/appenv/raw/branch-name/src/appenv.py -o appenv
-
-chmod +x appenv
 ```
 
 ## uvx (easiest, requires PyPI)
 
 If appenv is published on PyPI, uvx runs it directly without downloading:
 
-```text
+```console
 mkdir myproject && cd myproject
 uvx appenv init
 ```
 
 This creates `pyproject.toml` and the command symlink. After that, run `./http` as usual.
 
-Note: uvx executes appenv from a temporary environment. You still need to download appenv.py into your project for day-to-day use:
+uvx executes appenv from a temporary environment. You still need to download appenv.py into your project for day-to-day use:
 
-```text
+```console
 # After init, download for permanent use
 curl -sL https://raw.githubusercontent.com/flyingcircusio/appenv/master/src/appenv.py -o appenv
 chmod +x appenv
@@ -58,7 +52,7 @@ chmod +x appenv
 
 ## Copy without network access
 
-```text
+```console
 # On a machine with internet
 curl -sL https://raw.githubusercontent.com/flyingcircusio/appenv/master/src/appenv.py -o appenv
 
@@ -74,41 +68,19 @@ chmod +x appenv
 
 **This is for developing appenv itself, not for creating projects.**
 
-```text
+```console
 git clone https://github.com/flyingcircusio/appenv.git
 cd appenv
 ```
 
 If you cloned the repo and want to create a new appenv project, you are in the wrong directory. Create a separate project directory and download appenv there instead.
 
-## uv Installation
-
-appenv requires uv for virtual environment management. If uv is not found, appenv will attempt to install it automatically — either via nix, pip, or by downloading it directly from astral.sh. Common methods include:
-
-1. **PATH uv**: If a suitable uv (>=0.5.0) is in PATH, use it
-2. **Nix**: Build uv with `nix build nixpkgs#uv`
-3. **pip**: Install with `pip install uv`
-
-If none of these are available, uv will be downloaded automatically from [astral.sh](https://astral.sh) (using only Python stdlib — no curl or wget needed). See the [full discovery chain](../dev/index.md#uv-management) in the developer guide for details.
-
-### Manual uv Installation
-
-```text
-# Official installer
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Or with pip
-pip install uv
-
-# Or with nix
-nix profile install nixpkgs#uv
-```
 
 ## Verification
 
 Verify appenv is working:
 
-```text
+```console
 ./appenv version
 ```
 

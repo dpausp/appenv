@@ -12,7 +12,7 @@ Complete reference for all appenv commands.
 
 Update the dependency lockfile (`uv.lock`). See {doc}`locking-behavior` for details on UV's locking model.
 
-```text
+```console
 ./appenv update-lockfile           # Update lockfile
 ./appenv update-lockfile --diff    # Show changes without writing
 ```
@@ -42,7 +42,7 @@ Create a new `pyproject.toml` project interactively.
 The symlink name must match a binary installed by your dependencies.
 Create additional symlinks to expose more binaries:
 
-```text
+```console
 # After installing ruff and pytest as dependencies
 ln -s appenv ruff
 ln -s appenv pytest
@@ -54,15 +54,9 @@ ln -s appenv pytest
 
 - `path` — Create project in specified directory (default: current directory)
 
-### Non-Interactive Usage
-
-```{todo}
-Add `--defaults` flag for non-interactive init. `init --defaults --dep batou` would set dependency, symlink, and description from the dependency name and skip all prompts. Requires at least one `--dep` argument to be useful.
-```
-
 ### If pyproject.toml Already Exists
 
-```text
+```console
 $ ./appenv init
 pyproject.toml already exists
 Nothing to do - edit it manually to make changes
@@ -72,7 +66,7 @@ Nothing to do - edit it manually to make changes
 
 When the local `./appenv` script has a different version than the running appenv, `init` prints a warning:
 
-```text
+```console
 Warning: ./appenv is version 0.0.1, running appenv is 2026.3.19.
 Run './appenv migrate' to update the script.
 ```
@@ -81,7 +75,7 @@ Run './appenv migrate' to update the script.
 
 Convert an existing `requirements.txt` into `pyproject.toml`. For appenv projects that still use `requirements.txt` instead of `pyproject.toml`.
 
-```text
+```console
 ./appenv migrate
 ```
 
@@ -103,7 +97,7 @@ Convert an existing `requirements.txt` into `pyproject.toml`. For appenv project
 
 If appenv is not yet in your project, you can run migrate directly:
 
-```text
+```console
 uvx appenv migrate
 ```
 
@@ -124,7 +118,7 @@ See {doc}`workflows` for a full migration walkthrough.
 
 Update the local `./appenv` script to match the currently running version.
 
-```text
+```console
 ./appenv self-update
 ```
 
@@ -143,7 +137,7 @@ Update the local `./appenv` script to match the currently running version.
 
 ### Running via uvx
 
-```text
+```console
 uvx appenv self-update
 ```
 
@@ -153,7 +147,7 @@ This downloads the latest appenv and updates the local script.
 
 Use `--check` in CI or scripts to detect version drift:
 
-```text
+```console
 ./appenv self-update --check
 ```
 
@@ -169,7 +163,7 @@ Exit codes:
 
 Remove the virtual environment and clean up legacy artifacts.
 
-```text
+```console
 ./appenv reset
 ```
 
@@ -188,7 +182,7 @@ Remove the virtual environment and clean up legacy artifacts.
 
 ### Example Usage
 
-```text
+```console
 # After experiencing issues with the virtual environment
 $ ./appenv reset
 Removing .venv symlink ...
@@ -202,43 +196,16 @@ $ ./appenv prepare
 
 Show appenv version.
 
-```text
+```console
 ./appenv version
 ```
 
-## prepare
-
-Create the virtual environment with production dependencies only.
-
-```text
-./appenv prepare
-```
-
-### Details
-
-- Uses `uv sync --no-dev --frozen` - requires an existing `uv.lock` and will not modify it
-- Excludes dev dependencies (`[dependency-groups] dev`)
-- Creates `.venv` symlink for IDE compatibility
-- Running `./http` (symlink) auto-prepares the venv on first use — same behavior as `prepare`, production deps only
-
-### Example Workflow
-
-```text
-# First time setup
-$ ./appenv update-lockfile   # Create lockfile if needed
-
-# Just run — venv is prepared automatically
-$ ./http --help
-
-# Explicit preparation (e.g., CI or after dependency changes)
-$ ./appenv prepare
-```
 
 ## python
 
 Start a Python REPL in the virtual environment.
 
-```text
+```console
 ./appenv python                           # Start REPL
 ./appenv python -c "print('hello')"       # Execute code
 ./appenv python script.py --verbose       # Run script with args
@@ -253,7 +220,7 @@ Start a Python REPL in the virtual environment.
 
 ### Example
 
-```text
+```console
 $ ./appenv python
 Python 3.x.x ...
 Type "help", "copyright", "credits" or "license" for more information.
@@ -264,7 +231,7 @@ Type "help", "copyright", "credits" or "license" for more information.
 
 Pass-through to the uv binary with appenv's configured environment (Python interpreter, venv paths). Use this when you need uv functionality not covered by dedicated appenv commands.
 
-```text
+```console
 ./appenv uv add requests           # Add production dependency
 ./appenv uv add --group dev pytest  # Add dev dependency
 ./appenv uv sync                    # Re-sync dependencies

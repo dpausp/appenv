@@ -12,14 +12,14 @@ the project directory. Remove that folder and nothing is left behind.
 
 Someone gave you a project that already uses appenv? Just run the command:
 
-```bash
+```console
 git clone <project> && cd <project>
 ./http    # First run sets up everything automatically
 ```
 
 No `uv.lock` yet? Generate it:
 
-```bash
+```console
 ./appenv update-lockfile
 ```
 
@@ -30,7 +30,7 @@ update the lockfile automatically.
 
 Still using `requirements.txt` instead of `pyproject.toml`?
 
-```bash
+```console
 uvx appenv migrate
 ```
 
@@ -44,7 +44,7 @@ assumes that you want to run a binary called `http` from the `httpie` package.
 
 `uvx` is part of [uv](https://docs.astral.sh/uv/) — the easiest way to start:
 
-```bash
+```console
 uvx appenv init
 ```
 
@@ -52,7 +52,7 @@ uvx appenv init
 
 No uv installed? Download appenv directly:
 
-```bash
+```console
 curl -sL https://raw.githubusercontent.com/flyingcircusio/appenv/master/src/appenv.py -o appenv
 chmod +x appenv
 ./appenv init
@@ -79,7 +79,7 @@ myproject/
 
 For dev tooling, `uv run` works transparently (uses the `.venv` symlink):
 
-```bash
+```console
 uv run pytest -xvs
 ```
 
@@ -91,36 +91,9 @@ Full documentation at [Readthedocs](https://appenv.readthedocs.io):
 - [Commands Reference](docs/user/commands.md) -- all commands with options
 - [Workflows](docs/user/workflows.md) -- common usage patterns
 - [Locking Behavior](docs/user/locking-behavior.md) -- how uv.lock works
-- [Architecture](docs/dev/architecture.md) -- internals and design
-- [Contributing](docs/dev/contributing.md) -- development setup
-
-## Environment Variables
-
-| Variable | Description |
-|----------|-------------|
-| `APPENV_VERBOSE` | Show uv commands being executed |
-| `APPENV_EXTRAS` | Comma-separated dependency groups to install |
-| `APPENV_BASEDIR` | Auto-set to project root |
-| `APPENV_BEST_PYTHON` | Selected Python interpreter |
+- [Developer Guide](docs/dev/index.md) -- development setup and architecture
 
 ## Requirements
 
 - Python 3.9+ for the appenv script (environments managed by appenv require 3.10+)
 - uv 0.5.0+ (auto-installed if not found)
-
-
-## Appenv Development
-
-XXX note: applies to development of appenv itself, not projects managed by appenv!
-
-Sync dev dependencies:
-
-```commandline
-uv sync
-```
-
-Run tests and linter:
-
-```bash
-uv run tox
-```
