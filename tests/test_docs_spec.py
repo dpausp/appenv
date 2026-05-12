@@ -109,16 +109,16 @@ def test_factual_corrections_exit_code_usage_in_commands():
 
 
 def test_factual_corrections_exit_code_usage_in_architecture():
-    """factual-corrections: architecture.md must mention exit code 64 (USAGE)."""
-    content = (ROOT / "docs" / "dev" / "architecture.md").read_text()
-    assert "64" in content, "Exit code 64 must appear in architecture.md"
-    assert "USAGE" in content, "Exit code name USAGE must appear in architecture.md"
+    """factual-corrections: dev docs must mention exit code 64 (USAGE)."""
+    content = (ROOT / "docs" / "dev" / "index.md").read_text()
+    assert "64" in content, "Exit code 64 must appear in dev docs"
+    assert "USAGE" in content, "Exit code name USAGE must appear in dev docs"
 
 
 def test_factual_corrections_pyi_stub_claim_corrected():
-    """factual-corrections: architecture.md must not claim
+    """factual-corrections: dev docs must not claim
     .pyi files are 'not currently used'."""
-    content = (ROOT / "docs" / "dev" / "architecture.md").read_text()
+    content = (ROOT / "docs" / "dev" / "index.md").read_text()
     assert "not currently used" not in content
 
 
