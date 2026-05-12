@@ -675,7 +675,7 @@ class UvBin:
                     if member.name.endswith("/uv") and not member.isdir():
                         member.name = "bin/uv"
                         self.uv_dir.mkdir(parents=True, exist_ok=True)
-                        tar.extract(member, self.uv_dir)
+                        tar.extract(member, self.uv_dir, filter="data")
                         break
         except (urllib.error.URLError, OSError, tarfile.TarError) as e:
             log.debug("failed to download/extract uv: %s", e)

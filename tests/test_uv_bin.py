@@ -857,6 +857,9 @@ def test_uv_bin_pip_fallback_raises_error(tmp_path, monkeypatch):
 
     monkeypatch.setattr("subprocess.run", mock_run)
 
+    # Also mock the installer to prevent real network access
+    monkeypatch.setattr(UvBin, "_try_uv_from_installer", lambda self: None)
+
     with pytest.raises(NoValidUvError, match="uv not found"):
         ensure_uv(tmp_path)
 
