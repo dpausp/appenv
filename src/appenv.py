@@ -829,21 +829,26 @@ class AppEnv:
             formatter_class=GroupedHelpFormatter,
         )
         subparsers = parser.add_subparsers(title="Commands")
-        p = subparsers.add_parser("update-lockfile", help="Update the lock file.")
+        p = subparsers.add_parser(
+            "update-lockfile", help="Re-resolve dependencies and write uv.lock."
+        )
         p.add_argument(
             "--diff",
             action="store_true",
-            help="Show full diff without writing lockfile.",
+            help="Show what would change without writing the lockfile.",
         )
         p.add_argument(
             "-v",
             "--verbose",
             action="store_true",
-            help="Show detailed information about what is being done.",
+            help="Show what's happening under the hood.",
         )
         p.set_defaults(func=self.update_lockfile)
 
-        p = subparsers.add_parser("init", help="Create a new pyproject.toml project.")
+        p = subparsers.add_parser(
+            "init",
+            help="Set up a new project with pyproject.toml, symlink, and lockfile.",
+        )
         p.add_argument(
             "path",
             nargs="?",
@@ -853,7 +858,7 @@ class AppEnv:
         p.set_defaults(func=self.init)
 
         p = subparsers.add_parser(
-            "migrate", help="Migrate from requirements.txt to pyproject.toml."
+            "migrate", help="Convert requirements.txt to pyproject.toml."
         )
         p.add_argument(
             "path",
@@ -863,26 +868,30 @@ class AppEnv:
         )
         p.set_defaults(func=self.migrate)
 
-        p = subparsers.add_parser("self-update", help="Update the local appenv script.")
+        p = subparsers.add_parser(
+            "self-update", help="Replace the local script with the latest version."
+        )
         p.add_argument(
             "--check",
             action="store_true",
-            help="Check for version drift without updating.",
+            help="Exit 1 if the script is outdated, 0 if current.",
         )
         p.set_defaults(func=self.self_update)
 
-        p = subparsers.add_parser("reset", help="Reset the environment.")
+        p = subparsers.add_parser(
+            "reset", help="Delete the venv — next run rebuilds from scratch."
+        )
         p.set_defaults(func=self.reset)
 
         p = subparsers.add_parser("version", help="Show appenv version.")
         p.set_defaults(func=self.show_version)
 
-        p = subparsers.add_parser("prepare", help="Prepare the venv.")
+        p = subparsers.add_parser(
+            "prepare", help="Create the virtual environment with pinned versions."
+        )
         p.set_defaults(func=self.prepare)
 
-        p = subparsers.add_parser(
-            "python", help="Spawn the embedded Python interpreter REPL"
-        )
+        p = subparsers.add_parser("python", help="Run Python in the project venv.")
         p.set_defaults(func=self.python)
 
         p = subparsers.add_parser(
@@ -894,7 +903,7 @@ class AppEnv:
 
         p = subparsers.add_parser(
             "uv",
-            help="Run uv with the appenv-configured uv binary.",
+            help="Run any uv command with project paths set.",
         )
         p.set_defaults(func=self.run_uv)
 
