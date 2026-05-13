@@ -180,14 +180,19 @@ APPENV_EXTRAS=dev ./http
 ## Updating appenv Itself
 
 ```console
-# Update the local script to the latest version
+# If appenv is already in your project
 ./appenv self-update
+
+# If running via uvx, specify the target directory
+uvx appenv self-update .
 
 # Check if update is needed (useful in CI)
 ./appenv self-update --check
 ```
 
 `self-update` compares the `__version__` in the local script with the currently running version and replaces it if they differ.
+
+When running via `uvx` (or `pip install`), appenv is externally managed and cannot update itself in place. Use `uvx appenv self-update .` to update the script in your current project directory.
 
 ### Manual Download
 

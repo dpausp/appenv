@@ -140,3 +140,139 @@ def test_self_update_unknown_version(tmp_path, monkeypatch, capsys, test_setting
     # The script should now contain the current version
     new_content = old_script.read_text()
     assert appenv.__version__ in new_content
+
+
+def test_self_update_with_explicit_dot_path(
+    tmp_path, monkeypatch, capsys, test_settings
+):
+    """self-update . updates the appenv script in the specified directory."""
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
+
+    # Create an old appenv script
+    old_script = base / "appenv"
+    old_script.write_text(
+        '#!/usr/bin/env python3\n__version__ = "0.0.1"\nprint("old")\n'
+    )
+    old_script.chmod(0o755)
+
+    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+
+    # Explicitly pass path as "."
+    args = argparse.Namespace(check=False, path=".")
+    env.self_update(args)
+
+    captured = capsys.readouterr()
+    assert "Updated" in captured.out
+    assert "0.0.1" in captured.out
+    assert appenv.__version__ in captured.out
+
+    new_content = old_script.read_text()
+    assert appenv.__version__ in new_content
+    assert "0.0.1" not in new_content
+
+
+def test_self_update_with_explicit_abs_path(
+    tmp_path, monkeypatch, capsys, test_settings
+):
+    """self-update /some/path updates the appenv script in /some/path."""
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    old_script = target_dir / "appenv"
+    old_script.write_text(
+        '#!/usr/bin/env python3\n__version__ = "0.0.1"\nprint("old")\n'
+    )
+    old_script.chmod(0o755)
+
+    # Use a different basedir so it's not the same as target_dir
+    monkeypatch.chdir(tmp_path)
+    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+
+    args = argparse.Namespace(check=False, path=str(target_dir))
+    env.self_update(args)
+
+    captured = capsys.readouterr()
+    assert "Updated" in captured.out
+
+    new_content = old_script.read_text()
+    assert appenv.__version__ in new_content
+    assert "0.0.1" not in new_content
+
+
+def test_self_update_externally_managed_no_path_no_basedir(
+    tmp_path, monkeypatch, capsys
+):
+    """self-update without path and without APPENV_BASEDIR exits with USAGE."""
+    monkeypatch.chdir(tmp_path)
+    # Ensure APPENV_BASEDIR is not set
+    monkeypatch.delenv("APPENV_BASEDIR", raising=False)
+
+    # Create settings with basedir pointing to the package dir (simulating uvx)
+    package_dir = Path(appenv.__file__).parent
+    settings = appenv.AppEnvSettings(verbose=False, extras=[], basedir=package_dir)
+    env = appenv.AppEnv(Path.cwd(), settings)
+
+    with pytest.raises(SystemExit) as exc_info:
+        env.self_update()
+
+    assert exc_info.value.code == 64  # EXIT_CODE_USAGE
+    captured = capsys.readouterr()
+    assert "externally managed" in captured.out
+    assert "HINT" in captured.out
+    assert "appenv self-update ." in captured.out
+
+
+def test_self_update_with_basedir_set(tmp_path, monkeypatch, capsys, test_settings):
+    """self-update without path but WITH APPENV_BASEDIR uses existing behavior."""
+    monkeypatch.chdir(tmp_path)
+    base = tmp_path
+
+    # Set APPENV_BASEDIR
+    monkeypatch.setenv("APPENV_BASEDIR", str(base))
+
+    old_script = base / "appenv"
+    old_script.write_text(
+        '#!/usr/bin/env python3\n__version__ = "0.0.1"\nprint("old")\n'
+    )
+    old_script.chmod(0o755)
+
+    env = appenv.AppEnv(Path.cwd(), test_settings(Path.cwd()))
+    env.self_update()
+
+    captured = capsys.readouterr()
+    assert "Updated" in captured.out
+    assert "0.0.1" in captured.out
+    assert appenv.__version__ in captured.out
+
+    new_content = old_script.read_text()
+    assert appenv.__version__ in new_content
+    assert "0.0.1" not in new_content
+
+
+def test_self_update_path_overrides_externally_managed(tmp_path, monkeypatch, capsys):
+    """self-update . works even when running from externally managed env."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("APPENV_BASEDIR", raising=False)
+
+    # Simulate externally managed (basedir = package dir)
+    package_dir = Path(appenv.__file__).parent
+    settings = appenv.AppEnvSettings(verbose=False, extras=[], basedir=package_dir)
+    env = appenv.AppEnv(Path.cwd(), settings)
+
+    # Create appenv script in cwd
+    old_script = tmp_path / "appenv"
+    old_script.write_text(
+        '#!/usr/bin/env python3\n__version__ = "0.0.1"\nprint("old")\n'
+    )
+    old_script.chmod(0o755)
+
+    # Explicit path overrides the externally-managed detection
+    args = argparse.Namespace(check=False, path=".")
+    env.self_update(args)
+
+    captured = capsys.readouterr()
+    assert "Updated" in captured.out
+
+    new_content = old_script.read_text()
+    assert appenv.__version__ in new_content

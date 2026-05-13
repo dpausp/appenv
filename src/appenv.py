@@ -876,6 +876,15 @@ class AppEnv:
             action="store_true",
             help="Exit 1 if the script is outdated, 0 if current.",
         )
+        p.add_argument(
+            "path",
+            nargs="?",
+            default=None,
+            help=(
+                "Target directory containing the appenv script"
+                " (default: project directory)."
+            ),
+        )
         p.set_defaults(func=self.self_update)
 
         p = subparsers.add_parser(
@@ -1067,35 +1076,53 @@ class AppEnv:
         self, args: Namespace | None = None, remaining: list[str] | None = None
     ) -> None:
         """Update the local ./appenv script to match the running version."""
-        if not self.appenv_script.exists():
-            print(f"Error: No appenv script found at {self.appenv_script}")
+
+        # Determine target script path
+        if args and getattr(args, "path", None) is not None:
+            target_script = Path(args.path).resolve() / "appenv"
+        elif (
+            os.environ.get("APPENV_BASEDIR")
+            or self.base != Path(__file__).parent.resolve()
+        ):
+            target_script = self.appenv_script
+        else:
+            # Externally managed (uvx, pip install, etc.)
+            print(
+                "Error: appenv is running from an externally managed"
+                " environment and cannot update itself in place."
+            )
+            print(
+                "HINT: To update the appenv script in your current directory,"
+                " use: appenv self-update ."
+            )
+            sys.exit(EXIT_CODE_USAGE)
+
+        if not target_script.exists():
+            print(f"Error: No appenv script found at {target_script}")
             sys.exit(EXIT_CODE_NOINPUT)
 
-        local_version = self._extract_version(self.appenv_script)
+        local_version = self._extract_version(target_script)
         running_version = __version__
         local_label = local_version if local_version else "unknown"
 
         if local_version == running_version:
-            print(
-                f"{self.appenv_script} is already up-to-date "
-                f"(version {running_version})."
-            )
+            print(f"{target_script} is already up-to-date (version {running_version}).")
             if args and args.check:
                 sys.exit(0)
             return
 
         if args and args.check:
             print(
-                f"Version drift detected: {self.appenv_script} is {local_label}, "
+                f"Version drift detected: {target_script} is {local_label}, "
                 f"running appenv is {running_version}."
             )
             sys.exit(1)
 
         # Perform the update
         bootstrap_data = Path(__file__).read_bytes()
-        self.appenv_script.write_bytes(bootstrap_data)
-        self.appenv_script.chmod(0o755)
-        print(f"Updated {self.appenv_script} ({local_label} -> {running_version})")
+        target_script.write_bytes(bootstrap_data)
+        target_script.chmod(0o755)
+        print(f"Updated {target_script} ({local_label} -> {running_version})")
 
     def python(self, args: Namespace, remaining: list[str]) -> None:
         self.run("python", remaining)

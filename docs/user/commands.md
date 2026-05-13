@@ -127,6 +127,7 @@ Update the local `./appenv` script to match the currently running version.
 | Option | Description |
 |--------|-------------|
 | `--check` | Check for version drift without updating (exit 0 if up-to-date, exit 1 if drift detected) |
+| `path` | Target directory containing the appenv script (default: project directory) |
 
 ### What It Does
 
@@ -137,11 +138,14 @@ Update the local `./appenv` script to match the currently running version.
 
 ### Running via uvx
 
+When running via `uvx`, appenv runs from an externally managed environment and cannot update itself in place. Specify the target directory:
+
 ```console
-uvx appenv self-update
+uvx appenv self-update .
+uvx appenv self-update /path/to/project
 ```
 
-This downloads the latest appenv and updates the local script.
+This updates the `appenv` script in the specified directory.
 
 ### --check Mode
 
@@ -158,7 +162,6 @@ Exit codes:
 ### Failure Cases
 
 - No `./appenv` script found — prints error, exits with code 67 (NOINPUT)
-
 ## reset
 
 Remove the virtual environment and clean up legacy artifacts.
