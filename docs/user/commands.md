@@ -242,6 +242,16 @@ Run a command in the project virtual environment. Equivalent to `uv run` with ap
 
 All arguments are passed through to `uv run` unchanged. This is useful for CI or deployment scripts that need to run arbitrary commands in the venv.
 
+**Tip:** For commands you use frequently, create a symlink instead of typing `appenv run` every time:
+
+```console
+ln -s appenv pytest
+ln -s appenv ruff
+./pytest -xvs          # equivalent to: appenv run pytest -xvs
+```
+
+See the `init` command for details on symlink setup.
+
 
 ## uv
 
