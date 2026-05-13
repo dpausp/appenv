@@ -324,7 +324,7 @@ graphviz_output_format = "svg"
 
 # Theme configuration
 html_theme = "furo"
-html_title = "appenv Documentation"
+html_title = f"appenv {release}"
 html_theme_options = {
     "source_repository": "https://github.com/flyingcircusio/appenv/",
     "source_branch": "main",
