@@ -230,6 +230,19 @@ Type "help", "copyright", "credits" or "license" for more information.
 >>>
 ```
 
+## run
+
+Run a command in the project virtual environment. Equivalent to `uv run` with appenv's configured paths.
+
+```console
+./appenv run pytest -xvs
+./appenv run ruff check .
+./appenv run python -c "print('hello')"
+```
+
+All arguments are passed through to `uv run` unchanged. This is useful for CI or deployment scripts that need to run arbitrary commands in the venv.
+
+
 ## uv
 
 Pass-through to the uv binary with appenv's configured environment (Python interpreter, venv paths). Use this when you need uv functionality not covered by dedicated appenv commands.
@@ -260,7 +273,7 @@ appenv uses BSD sysexits.h exit codes:
 
 | Code | Name | Description |
 |------|------|-------------|
-| 64 | USAGE | Incorrect command usage (e.g., deprecated run subcommand) |
+| 64 | USAGE | Incorrect command usage (e.g., running self-update from externally managed environment) |
 | 65 | DATAERR | Input data issue (e.g., invalid pyproject.toml) |
 | 67 | NOINPUT | Missing input file (e.g., no pyproject.toml found) |
 | 68 | UNAVAILABLE | Resource unavailable (e.g., required tool not found) |

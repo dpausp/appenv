@@ -905,9 +905,8 @@ class AppEnv:
 
         p = subparsers.add_parser(
             "run",
-            help="Run a script from the bin/ directory of the virtual env.",
+            help="Run a command in the project venv (delegates to uv run).",
         )
-        p.add_argument("script", help="Name of the script to run.")
         p.set_defaults(func=self.run_script)
 
         p = subparsers.add_parser(
@@ -1128,12 +1127,8 @@ class AppEnv:
         self.run("python", remaining)
 
     def run_script(self, args: Namespace, remaining: list[str]) -> None:
-        print("'run' has been removed. Use one of these instead:\n")
-        print("  uv run <command>        — run any binary (includes dev dependencies)")
-        print("  ./appenv python         — start Python REPL in the venv")
-        print(f"  ln -s appenv {args.script}    — create a symlink for regular use")
-        print(f"  ./{args.script}              — then run the {args.script} binary")
-        sys.exit(EXIT_CODE_USAGE)
+        """Run a command in the project venv via uv run."""
+        self.run_uv(args, ["run", *remaining])
 
     def run_uv(self, args: Namespace, remaining: list[str]) -> None:
         """Run uv with the appenv-configured uv binary."""

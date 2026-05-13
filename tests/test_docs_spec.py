@@ -6,8 +6,6 @@ These tests define the contract that Phase 2 implementation must fulfill.
 
 from pathlib import Path
 
-import pytest
-
 ROOT = Path(__file__).parent.parent
 
 
@@ -122,15 +120,12 @@ def test_factual_corrections_pyi_stub_claim_corrected():
     assert "not currently used" not in content
 
 
-def test_run_command_removal_no_run_command_in_commands_doc():
-    """run-command-removal: commands.md must not have a ## run section heading."""
+def test_run_command_exists_in_commands_doc():
+    """run-command-restored: commands.md must have a ## run section heading."""
     content = (ROOT / "docs" / "user" / "commands.md").read_text()
-    # Check for run as a command section header (## run or ## `run`)
     lines = content.splitlines()
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("## run") or stripped.startswith("## `run`"):
-            pytest.fail(f"Found run command section header: {stripped}")
+    found = any(line.strip().startswith("## run") for line in lines)
+    assert found, "commands.md must contain a ## run section (run command was restored)"
 
 
 def test_python_version_statement_nuance_in_index():

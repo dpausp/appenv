@@ -273,12 +273,13 @@ def test_meta_calls_run_script(monkeypatch, tmp_path, app_env):
     monkeypatch.setattr(
         env,
         "run_script",
-        lambda args, remaining: run_called.append((args.script, remaining)),
+        lambda args, remaining: run_called.append((args, remaining)),
     )
 
     env.meta()
 
-    assert run_called == [("myscript", [])]
+    assert len(run_called) == 1
+    assert run_called[0][1] == ["myscript"]
 
 
 # run() tests
@@ -632,17 +633,16 @@ def test_version_satisfies_constraints_edge_cases():
     )  # [3,10] < [3,10,0]
 
 
-def test_run_script_delegates(capsys, tmp_path, app_env):
-    """run_script() shows deprecation message with alternatives."""
+def test_run_script_delegates(monkeypatch, tmp_path, app_env):
+    """run_script() delegates to run_uv with 'run' prepended to remaining."""
     env = app_env()
 
-    with pytest.raises(SystemExit) as exc_info:
-        env.run_script(argparse.Namespace(script="pytest"), ["-v", "test.py"])
+    called = []
+    monkeypatch.setattr(env, "run_uv", lambda args, remaining: called.append(remaining))
 
-    assert exc_info.value.code == 64
-    captured = capsys.readouterr()
-    assert "uv run" in captured.out
-    assert "ln -s appenv pytest" in captured.out
+    env.run_script(argparse.Namespace(), ["script_name", "--flag"])
+
+    assert called == [["run", "script_name", "--flag"]]
 
 
 def test_show_version(tmp_path, capsys, patterns, app_env):

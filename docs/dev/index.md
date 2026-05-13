@@ -98,7 +98,8 @@ The venv lives at `.appenv/venv` — a real virtual environment managed by uv. `
 
 #### Sync Modes
 
-- **Production** (`run`, `prepare`, symlink dispatch): `uv sync --no-dev --frozen` — only production dependencies, lockfile must exist and be unchanged. The symlink dispatch (`./http`) is equivalent to `prepare` followed by `os.execv`.
+- **Production** (`prepare`, symlink dispatch): `uv sync --no-dev --frozen` — only production dependencies, lockfile must exist and be unchanged. The symlink dispatch (`./http`) is equivalent to `prepare` followed by `os.execv`.
+- **Run** (`run`): Delegates directly to `uv run` with appenv's configured environment. Does not enforce frozen — uv run handles its own sync.
 
 ### Project Layout Conventions
 
@@ -108,7 +109,7 @@ appenv expects specific files relative to the project root. Paths are convention
 : Project definition with `[project]` section and `requires-python`. Required for all operations.
 
 `uv.lock`
-: Dependency lockfile created by `./appenv update-lockfile`. Required before `run` or `prepare`.
+: Dependency lockfile created by `./appenv update-lockfile`. Required before `prepare`.
 
 `appenv`
 : The bootstrap script — a copy of `src/appenv.py`. `migrate` updates this file when the running appenv version differs from the one on disk. `init` warns when a version mismatch is detected.
