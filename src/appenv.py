@@ -825,6 +825,7 @@ class AppEnv:
         parser = argparse.ArgumentParser(
             prog=prog,
             usage="%(prog)s <COMMAND>",
+            description=f"appenv {__version__}",
             formatter_class=GroupedHelpFormatter,
         )
         subparsers = parser.add_subparsers(title="Commands")
