@@ -55,7 +55,7 @@ class GroupedHelpFormatter(argparse.HelpFormatter):
         groups = (
             ("Project", ["init", "migrate", "self-update", "update-lockfile"]),
             ("Venv", ["prepare", "reset"]),
-            ("Tools", ["python", "uv"]),
+            ("Tools", ["python", "run", "uv"]),
             ("Debug", ["version"]),
         )
 
@@ -836,12 +836,6 @@ class AppEnv:
             "--diff",
             action="store_true",
             help="Show what would change without writing the lockfile.",
-        )
-        p.add_argument(
-            "-v",
-            "--verbose",
-            action="store_true",
-            help="Show what's happening under the hood.",
         )
         p.set_defaults(func=self.update_lockfile)
 

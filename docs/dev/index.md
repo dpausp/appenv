@@ -2,6 +2,10 @@
 
 How appenv works internally and how to contribute.
 
+```{toctree}
+:hidden:
+```
+
 ## Architecture
 
 How appenv's components fit together and why.

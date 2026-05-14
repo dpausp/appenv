@@ -43,7 +43,7 @@ uvx appenv init
 ./http --help
 ```
 
-The symlink `http -> appenv` runs the `http` binary from your installed dependencies. Expose more binaries by adding symlinks:
+The symlink `http -> appenv` runs the `http` binary from your installed dependencies. See {doc}`commands` for details on symlink dispatch.
 
 ```console
 ln -s appenv pytest

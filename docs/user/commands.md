@@ -25,6 +25,12 @@ Update the dependency lockfile (`uv.lock`). See {doc}`locking-behavior` for deta
 
 Use `APPENV_VERBOSE=1` for verbose output.
 
+### When to Use
+
+- After changing dependencies in `pyproject.toml` (add, remove, or update version constraints)
+- Before deploying — ensures the lockfile reflects current requirements
+- When onboarding — run once after cloning to generate `uv.lock`
+
 See {doc}`workflows` for detailed examples.
 
 ## init
@@ -58,7 +64,7 @@ ln -s appenv pytest
 
 ```console
 $ ./appenv init
-pyproject.toml already exists
+pyproject.toml already has a [project] section
 Nothing to do - edit it manually to make changes
 ```
 
@@ -68,7 +74,7 @@ When the local `./appenv` script has a different version than the running appenv
 
 ```console
 Warning: ./appenv is version 0.0.1, running appenv is 2026.3.19.
-Run './appenv migrate' to update the script.
+Run './appenv self-update' to update the script.
 ```
 
 ## migrate
@@ -162,6 +168,32 @@ Exit codes:
 ### Failure Cases
 
 - No `./appenv` script found — prints error, exits with code 67 (NOINPUT)
+
+## prepare
+
+Create the virtual environment with production dependencies. Requires an existing `uv.lock` — run {doc}`update-lockfile <commands>` first.
+
+```console
+./appenv prepare
+```
+
+### What It Does
+
+- Validates that `pyproject.toml` and `uv.lock` exist
+- Creates `.appenv/venv` with `uv sync --no-dev --frozen`
+- Updates `.venv` symlink to point to `.appenv/venv`
+- Recreates the venv if corrupted (missing `bin/python`) or stale (wrong Python version)
+
+### When to Use
+
+- CI/CD pipelines that need the venv before running commands
+- Debugging: recreate the venv without removing and rebuilding from scratch
+- Deployment scripts that prepare the environment explicitly
+
+### Symlink Dispatch Alternative
+
+Running `./http` (symlink to appenv) auto-prepares on first use. Explicit `prepare` is only needed when you want to control the timing.
+
 ## reset
 
 Remove the virtual environment and clean up legacy artifacts.
@@ -175,11 +207,13 @@ Remove the virtual environment and clean up legacy artifacts.
 - `.venv` symlink
 - `.appenv/venv` directory
 - Old hash-based venvs in `.appenv/`
-- Old `.venv` directory (if not a symlink)
 
 ### What It Preserves
 
-- Logs in `.appenv/`
+- Logs in `.appenv/logs/`
+- Cached uv binary in `.appenv/.uv/`
+- Profiling data in `.appenv/profiling/`
+- Version tracking in `.appenv/current/`
 - `pyproject.toml` and `uv.lock`
 - Source code and other project files
 
@@ -251,6 +285,8 @@ ln -s appenv ruff
 ```
 
 See the `init` command for details on symlink setup.
+
+**Note:** `run` is not listed in `./appenv --help` output. It is a convenience wrapper — for frequent commands, use symlink dispatch instead.
 
 
 ## uv

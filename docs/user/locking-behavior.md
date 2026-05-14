@@ -21,6 +21,8 @@ A lockfile is "outdated" when `pyproject.toml` dependencies changed — **not** 
 | `./http` (symlink dispatch) | Frozen | `uv sync --no-dev --frozen` | Production run, exact versions from lockfile |
 | `prepare` | Frozen | `uv sync --no-dev --frozen` | Production deps only, requires existing lockfile |
 | `update-lockfile` | Updates | `uv lock` | Regenerates lockfile from pyproject.toml |
+| `run` | Unfrozen | `uv run` | Delegates to uv run, no frozen enforcement |
+| `uv` | Unfrozen | (pass-through) | Delegates to uv directly, no lockfile enforcement |
 
 ### Key Rules
 
