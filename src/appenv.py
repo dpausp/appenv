@@ -675,7 +675,11 @@ class UvBin:
                     if member.name.endswith("/uv") and not member.isdir():
                         member.name = "bin/uv"
                         self.uv_dir.mkdir(parents=True, exist_ok=True)
-                        tar.extract(member, self.uv_dir, filter="data")
+                        try:
+                            tar.extract(member, self.uv_dir, filter="data")
+                        except TypeError:
+                            # filter= not available before Python 3.12
+                            tar.extract(member, self.uv_dir)
                         break
         except (urllib.error.URLError, OSError, tarfile.TarError) as e:
             log.debug("failed to download/extract uv: %s", e)
