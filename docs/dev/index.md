@@ -97,7 +97,7 @@ The venv lives at `.appenv/venv` — a real virtual environment managed by uv. `
 3. **Corruption recovery**: if `.appenv/venv` exists but `bin/python` is missing (NixOS garbage collection), the venv is removed and recreated
 4. **Stale version recovery**: if the venv's Python version doesn't satisfy `requires-python` (e.g., after a constraint change), the venv is removed and recreated with a one-line message to stdout
 5. Create venv with `uv venv --python <current_python>` — explicitly uses the current Python to prevent uv from downloading its own (which breaks on NixOS)
-6. Sync dependencies via `uv sync`
+6. Sync production dependencies via `uv sync --no-dev --frozen`
 7. Update `.venv` symlink (removed and recreated if stale)
 
 #### Sync Modes
@@ -132,7 +132,7 @@ appenv expects specific files relative to the project root. Paths are convention
 appenv uses BSD sysexits.h exit codes to communicate specific failure modes:
 
 **64 (USAGE)**
-: Incorrect command usage — deprecated subcommand invoked or invalid arguments.
+: Incorrect command usage — unrecognized arguments or self-update from externally managed environment.
 
 **65 (DATAERR)**
 : Input data is malformed — missing `[project]` section in `pyproject.toml`, no compatible Python found.
@@ -143,7 +143,7 @@ appenv uses BSD sysexits.h exit codes to communicate specific failure modes:
 **68 (UNAVAILABLE)**
 : Required tool unavailable — uv not found or too old.
 
-The `cmd()` subprocess wrapper converts `CalledProcessError` to `ValueError` with captured output, giving calling code both the exit code and full stderr/stdout for error reporting.
+The `cmd()` subprocess wrapper prints the exit code and converts `CalledProcessError` to `ValueError` with captured stdout/stderr for error reporting.
 
 ### Logging Architecture
 
@@ -194,7 +194,7 @@ Test files follow the same stub-only policy — every `.py` in `tests/` has a ma
 
 #### Exit Codes
 
-Use BSD sysexits.h constants (`EXIT_CODE_DATAERR`, `EXIT_CODE_NOINPUT`, `EXIT_CODE_UNAVAILABLE`) defined at module level. See [](#error-handling-strategy) for the full error handling strategy.
+Use BSD sysexits.h constants (`EXIT_CODE_USAGE`, `EXIT_CODE_DATAERR`, `EXIT_CODE_NOINPUT`, `EXIT_CODE_UNAVAILABLE`) defined at module level. See [](#error-handling-strategy) for the full error handling strategy.
 
 #### Spec Comments
 

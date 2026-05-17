@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- **Python**: 3.9 or later (managed environments require 3.10+)
+- **Python**: 3.10 or later
 - **uv**: 0.5.0 or later (auto-installed if not found)
 
 ## Which method is right for you?

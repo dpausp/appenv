@@ -180,7 +180,8 @@ Create the virtual environment with production dependencies. Requires an existin
 ### What It Does
 
 - Validates that `pyproject.toml` and `uv.lock` exist
-- Creates `.appenv/venv` with `uv sync --no-dev --frozen`
+- Creates `.appenv/venv` with `uv venv`
+- Installs production dependencies with `uv sync --no-dev --frozen`
 - Updates `.venv` symlink to point to `.appenv/venv`
 - Recreates the venv if corrupted (missing `bin/python`) or stale (wrong Python version)
 
@@ -286,8 +287,6 @@ ln -s appenv ruff
 
 See the `init` command for details on symlink setup.
 
-**Note:** `run` is not listed in `./appenv --help` output. It is a convenience wrapper — for frequent commands, use symlink dispatch instead.
-
 
 ## uv
 
@@ -319,7 +318,7 @@ appenv uses BSD sysexits.h exit codes:
 
 | Code | Name | Description |
 |------|------|-------------|
-| 64 | USAGE | Incorrect command usage (e.g., running self-update from externally managed environment) |
+| 64 | USAGE | Incorrect command usage — unrecognized arguments or self-update from externally managed environment |
 | 65 | DATAERR | Input data issue (e.g., invalid pyproject.toml) |
 | 67 | NOINPUT | Missing input file (e.g., no pyproject.toml found) |
 | 68 | UNAVAILABLE | Resource unavailable (e.g., required tool not found) |

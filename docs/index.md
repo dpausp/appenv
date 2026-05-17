@@ -29,7 +29,7 @@ checkout gets the same tools at the same versions — locally and on remote mach
 
 ## Conventions
 
-- appenv runs on Python 3.9+. Managed environments require Python 3.10+.
+- appenv requires Python 3.10 or later.
 - [uv](https://docs.astral.sh/uv/) must be available on the system (see {doc}`user/installation`)
 - The appenv filename becomes the CLI command via symlink dispatch — `./http` where `http → appenv`
 - `pyproject.toml` must be present next to the appenv file

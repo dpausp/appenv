@@ -61,13 +61,14 @@ appenv is a single-file module: `src/appenv.py`
 
 ### Key Functions
 
-- `ensure_uv(base)`: Ensure uv is available and meets minimum version
+- `ensure_uv(appenv_dir)`: Ensure uv is available and meets minimum version
 - `ensure_pyproject(base)`: Ensure pyproject.toml exists with [project] section
 - `ensure_lock_file(base)`: Ensure lockfile exists
 - `ensure_best_python(base)`: Select best Python for pyproject.toml workflow
 - `find_available_pythons()`: Find all available Python versions in PATH
 
 ### Exit Codes (BSD sysexits.h)
+- `EXIT_CODE_USAGE = 64` - Incorrect command usage
 - `EXIT_CODE_DATAERR = 65` - Input data issue
 - `EXIT_CODE_NOINPUT = 67` - Missing input file
 - `EXIT_CODE_UNAVAILABLE = 68` - Resource unavailable
