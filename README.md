@@ -3,7 +3,7 @@
 appenv pins Python packages to exact versions and exposes their binaries
 via symlinks — one file, no installation step. Drop it into a repository,
 commit it, and every checkout (local or remote) gets the same tools at the
-same versions by running `./http`, `./mkdocs`, `./batou`, or whatever you need.
+same versions by running `./http`, `./pytest`, `./batou`, or whatever you need.
 
 **appenv never modifies your system** — all state lives in `.appenv/` inside
 the project directory. Remove that folder and nothing is left behind.
@@ -14,21 +14,25 @@ Someone gave you a project that already uses appenv? Just run the command:
 
 ```console
 git clone <project> && cd <project>
-./http    # First run sets up everything automatically
+./http  # First run sets up everything automatically
 ```
 
-No `uv.lock` yet? Generate it:
+Running the command will get an appenv-managed [uv](https://docs.astral.sh/uv/) if it's not globally available on your system.
+
+No `uv.lock` (should be committed) or dependencies changed?
 
 ```console
 ./appenv update-lockfile
 ```
 
-Only needed again after manually editing `pyproject.toml` — `uv add`/`uv remove`
-update the lockfile automatically.
+(Only needed again after manually editing `pyproject.toml`)
+
+Use `./appenv uv add/remove` to manage your dependencies or just use `uv` as you are used to it.
+
 
 ### Upgrading from requirements.txt
 
-Still using `requirements.txt` instead of `pyproject.toml`?
+Already an appenv user and still using `requirements.txt` instead of `pyproject.toml`?
 
 ```console
 uvx appenv migrate
@@ -36,7 +40,8 @@ uvx appenv migrate
 
 ## New Project
 
-appenv is distributed as a standalone script. Just use uvx or download it yourself.
+appenv is distributed as a package or standalone script. 
+Use `uvx` or download it yourself.
 `appenv init` will ask you some questions and set up the project. The example
 assumes that you want to run a binary called `http` from the `httpie` package.
 
@@ -44,30 +49,35 @@ assumes that you want to run a binary called `http` from the `httpie` package.
 
 `uvx` is part of [uv](https://docs.astral.sh/uv/) — the easiest way to start:
 
-```console
+```shell
+# appenv init is interactive
+# Say that you want httpie as dependency and http as binary
 uvx appenv init
+./http
 ```
 
 ### Manual Download
 
 No uv installed? Download appenv directly:
 
-```console
+```shell
 curl -sL https://raw.githubusercontent.com/flyingcircusio/appenv/master/src/appenv.py -o appenv
 chmod +x appenv
-./appenv init
+# appenv init is interactive
+# Say that you want httpie as dependency and http as binary
+./appenv init 
+./http
 ```
 
 **What just happened?**
 
 - appenv installed itself inplace by adding the `./appenv` script.
 - `init` created `pyproject.toml` and a symlink `http → appenv`.
-- `./http` set up the venv with pinned versions from `uv.lock`, then ran the `http` binary (from the httpie package)
-
+- `./http` set up the venv with pinned versions from `uv.lock`, then ran the `http` binary (from the [httpie](https://github.com/httpie/httpie) package)
 
 The repository now contains:
 
-```
+```shell
 myproject/
 ├── appenv          # The appenv script (single file, committed to git)
 ├── http -> appenv  # Runs the `http` binary from installed deps
@@ -77,10 +87,11 @@ myproject/
 
 ### Development
 
-For dev tooling, `uv run` works transparently (uses the `.venv` symlink):
+For dev tooling, `uv run` and other `uv` commands work transparently.
+`appenv` automatically creates a `.venv` symlink to make this work:
 
-```console
-uv run pytest -xvs
+```shell
+uv run pytest -xvs # includes dev dependencies automatically
 ```
 
 ## Documentation
@@ -95,5 +106,5 @@ Full documentation at [Readthedocs](https://appenv.readthedocs.io):
 
 ## Requirements
 
-- Python 3.9+ for the appenv script (environments managed by appenv require 3.10+)
-- uv 0.5.0+ (auto-installed if not found)
+- Python 3.9+ for the `./appenv` script (environments managed by appenv require 3.10+)
+- [uv](https://astral.sh/uv) 0.5.0+ (auto-installed if not found)
