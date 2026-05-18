@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- **Python**: 3.10 or later
+- **Python**: 3.9+ for the bootstrap script, 3.10+ for managed environments
 - **uv**: 0.5.0 or later (auto-installed if not found)
 
 ## Which method is right for you?
@@ -16,7 +16,7 @@ All methods give you the same `./appenv` file. The only difference is how you ge
 
 ## Download appenv directly
 
-The recommended way. Transparent, no magic, one file:
+Transparent, no magic, one file:
 
 ```console
 mkdir myproject && cd myproject
@@ -40,15 +40,7 @@ mkdir myproject && cd myproject
 uvx appenv init
 ```
 
-This creates `pyproject.toml` and the command symlink. After that, run `./http` as usual.
-
-uvx executes appenv from a temporary environment. You still need to download appenv.py into your project for day-to-day use:
-
-```console
-# After init, download for permanent use
-curl -sL https://raw.githubusercontent.com/flyingcircusio/appenv/master/src/appenv.py -o appenv
-chmod +x appenv
-```
+`init` installs the appenv script inplace — no separate download needed. After that, run `./http` as usual.
 
 ## Copy without network access
 
