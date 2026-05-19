@@ -52,7 +52,9 @@ assumes that you want to run a binary called `http` from the `httpie` package.
 
 ```shell
 # appenv init is interactive
-# Say that you want httpie as dependency and http as binary
+# Answer: 
+# httpie as dependency
+# http as binary
 uvx appenv init
 ./http
 ```
@@ -65,7 +67,9 @@ No uv installed? Download appenv directly:
 curl -sL https://raw.githubusercontent.com/flyingcircusio/appenv/master/src/appenv.py -o appenv
 chmod +x appenv
 # appenv init is interactive
-# Say that you want httpie as dependency and http as binary
+# Answer: 
+# httpie as dependency
+# http as binary
 ./appenv init 
 ./http
 ```
@@ -92,12 +96,13 @@ For dev tooling, `uv run` and other `uv` commands work transparently.
 `appenv` automatically creates a `.venv` symlink to make this work:
 
 ```shell
-uv run pytest -xvs # includes dev dependencies automatically
+# includes dev dependencies automatically
+uv run pytest -xvs 
 ```
 
 ## Documentation
 
-Full documentation at [Readthedocs](https://appenv.readthedocs.io):
+Full documentation at [Readthedocs](https://appenv-test.readthedocs.io):
 
 - [Installation](docs/user/installation.md) -- how to get appenv
 - [Commands Reference](docs/user/commands.md) -- all commands with options
