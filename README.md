@@ -40,8 +40,9 @@ uvx appenv migrate
 
 ## New Project
 
-appenv is distributed as a package or standalone script. 
-Use `uvx` or download it yourself.
+Requires Python 3.9+ (managed environments need 3.10+). [uv](https://docs.astral.sh/uv/) 0.5.0+ is auto-installed if not found.
+Get appenv via `uvx` or download the single-file script.
+
 `appenv init` will ask you some questions and set up the project. The example
 assumes that you want to run a binary called `http` from the `httpie` package.
 
@@ -103,8 +104,3 @@ Full documentation at [Readthedocs](https://appenv.readthedocs.io):
 - [Workflows](docs/user/workflows.md) -- common usage patterns
 - [Locking Behavior](docs/user/locking-behavior.md) -- how uv.lock works
 - [Developer Guide](docs/dev/index.md) -- development setup and architecture
-
-## Requirements
-
-- Python 3.9+ for the `./appenv` script (environments managed by appenv require 3.10+)
-- [uv](https://astral.sh/uv) 0.5.0+ (auto-installed if not found)
